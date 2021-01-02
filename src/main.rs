@@ -12,13 +12,17 @@ use crate::node::prim::*;
 fn main() {
 	let mut host = NodeHost::new(44100, 16, 1);
 	let freq = constant(&mut host, 440_f32);
+	// let osc =
+	// 		sin_osc(
+	// 				add(
+	// 						freq,
+	// 						mul(
+	// 								sin_osc(constant(&mut host, 1320_f32)),
+	// 								constant(&mut host, 660_f32))));
+
 	let osc =
-			sin_osc(
-					add(
-							freq,
-							mul(
-									sin_osc(constant(&mut host, 1320_f32)),
-									constant(&mut host, 660_f32))));
+			pulse_osc(constant(&mut host, 440_f32), constant(&mut host, 0.25_f32));
+			
 
 
 									let host_shared = std::rc::Rc::new(std::cell::RefCell::new(host));
