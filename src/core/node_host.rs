@@ -8,16 +8,31 @@ extern crate portaudio;
 use portaudio as pa;
 
 pub struct NodeHost {
-	nodes: Vec<Node>,
+	sample_rate: i32,
+	quant_rate: i32,
+	channels: i32,
+
+	/// Node は常に参照で見られているため、Vec の引っ越しでアドレスが変わらないよう Box に入れる
+	/// （コンパイラのチェックを回避しているので、参照が存在する状態で要素が追加されることもある）
+	nodes: Vec<Box<Node>>,
 }
 
 impl NodeHost {
-	pub fn new() -> Self {
-		Self { nodes: vec![] }
+	pub fn new(sample_rate: i32, quant_rate: i32, channels: i32) -> Self {
+		Self {
+			sample_rate,
+			quant_rate,
+			channels,
+			nodes: vec![],
+		}
 	}
 
+	pub fn sample_rate(&self) -> i32 { self.sample_rate }
+	pub fn quant_rate(&self) -> i32 { self.quant_rate }
+	pub fn channels(&self) -> i32 { self.channels }
+
 	pub fn add_node(&mut self, node: Node) -> NodeHandle {
-		self.nodes.push(node);
+		self.nodes.push(Box::new(node));
 
 		NodeHandle {
 			host: self as *mut Self,
@@ -40,27 +55,26 @@ impl NodeHost {
 
 	// TODO オーディオと密結合させない
 	pub fn play(this: Rc<RefCell<Self>>) {
+		// コールバックの中から Self のメソッドを呼ぶ関係で、
+		// インスタンスメソッドにはせず、外部で寿命管理されたインスタンスを引数でもらう
 		let node_exists = this.borrow().nodes.len() > 0;
 		if ! node_exists {
 			panic!("no nodes to play");
 		}
 
-		// コールバックの中から Self のメソッドを呼ぶ関係で、
-		// 
 		let pa = pa::PortAudio::new().expect("failed to initialise PortAudio");
 
 		let play_sample = |value: f32| {
 			println!("{}", value);
 		};
 
-		const SMP_RATE: i32 = 44100;
-		const QUANT_RATE: i32 = 16;
-		const CHANNELS: i32 = 1;
 		const FRAMES_PER_BUFFER: u32 = 64;
 
-		let mut settings =
-				pa.default_output_stream_settings(CHANNELS, SMP_RATE as f64, FRAMES_PER_BUFFER)
-				.expect("failed to initialise settings");
+		let mut settings = {
+			let host = this.borrow();
+			pa.default_output_stream_settings(host.channels(), host.sample_rate() as f64, FRAMES_PER_BUFFER)
+					.expect("failed to initialise settings")
+		};
 		// we won't output out of range samples so don't bother clipping them.
 		settings.flags = pa::stream_flags::CLIP_OFF;
 
@@ -94,5 +108,15 @@ impl NodeHost {
 
 		stream.stop();
 		stream.close();
+
+		// loop {
+		// 	//_ ここ（self.update() より前）に書くとエラーになる。
+		// 	// 厳しすぎないか？　毎回正直に last().unwrap() すると
+		// 	// パフォーマンスに悪そうなんだけど…
+		// 	// let master = self.nodes.last().unwrap();
+		// 	this.borrow_mut().update();
+		// 	let value = this.borrow().nodes.last().unwrap().current();
+		// 	println!("------- out: {}", value);
+		// }
 	}
 }

@@ -1,40 +1,27 @@
 //use core::node_host;
 mod core;
+mod node;
 
 use crate::core::node::*;
 use crate::core::node_handle::*;
 use crate::core::node_host::*;
+use crate::node::arith::*;
+use crate::node::osc::*;
+use crate::node::prim::*;
 
 fn main() {
-	let mut host = NodeHost::new();
-	// let mut var = 0f32;
-	// let gen = host.add_node(Node::from_closure(Box::new(move || {
-	// 	let result = var;
-	// 	var += 0.01f32;
-	// 	Some(result)
-	// })));
+	let mut host = NodeHost::new(44100, 16, 1);
+	let freq = constant(&mut host, 440_f32);
+	let osc =
+			sin_osc(
+					add(
+							freq,
+							mul(
+									sin_osc(constant(&mut host, 1320_f32)),
+									constant(&mut host, 660_f32))));
 
-	// let neg = gen.negate();
-	// let konst = NodeHandle::constant(&mut host, 100f32);
 
-	// // 100 から減っていく
-	// let sum = neg.add(&konst);
-
-	const SMP_RATE: i32 = 44100;
-	const QUANT_RATE: i32 = 16;
-	const CHANNELS: i32 = 1;
-	let freq = 440_f32;
-
-	let mut phase = 0_f32;
-
-	let osc = host.add_node(Node::from_closure(Box::new(move || {
-		let value = phase.sin();
-		phase += (2_f32 * std::f32::consts::PI) * freq / (SMP_RATE as f32);
-		phase %= 2_f32 * std::f32::consts::PI;
-		Some(value)
-	})));
-
-	let host_shared = std::rc::Rc::new(std::cell::RefCell::new(host));
+									let host_shared = std::rc::Rc::new(std::cell::RefCell::new(host));
 	NodeHost::play(host_shared);
 }
 
