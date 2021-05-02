@@ -116,7 +116,6 @@ where
 	I::Error: ParseError<I::Token, I::Range, I::Position>,
 {
 	// 他から参照されないパーザはとりあえずここにローカルで書く
-	// TODO 空白を飛ばす
 	// TODO データ定義は別ファイルで
 
 	let skip_spaces = || spaces().silent();
