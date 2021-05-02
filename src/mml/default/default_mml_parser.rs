@@ -57,12 +57,12 @@ where
 	token.map(|v: &'a str| v.parse::<f32>().unwrap())
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CompilationUnit {
 	commands: Vec<Command>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Command {
 	// コマンドの名前が値の名前そのものである場合はパラメータ名を省略
 	Octave(i32),
@@ -82,12 +82,12 @@ pub enum Command {
 	ExpandMacro { name: String },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Length {
 	elements: Vec<LengthElement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LengthElement {
 	/// 音長を示す数値。省略の場合は None。音長 4. に対して 4、.. に対して None となる
 	number: Option<i32>,
@@ -96,13 +96,13 @@ pub struct LengthElement {
 	dots: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ToneName {
 	base_name: ToneBaseName,
 	accidental: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ToneBaseName {
 	C, D, E, F, G, A, B,
 }
@@ -154,3 +154,14 @@ where
 	many(command).map(|commands| CompilationUnit { commands })
 }
 
+#[test]
+fn test_compilation_unit() {
+	assert_eq!(
+			compilation_unit().parse("o4l8v15").unwrap().0,
+			CompilationUnit {
+				commands: vec![
+					Command::Octave(4),
+					Command::Length(8),
+					Command::Velocity(15.0),
+				]});
+}
