@@ -20,7 +20,10 @@ use combine::{
 	many1,
 	Parser,
 	parser::{
-		char::string,
+		char::{
+			spaces,
+			string,
+		},
 		regex::find,
 	},
 	stream::RangeStream,
@@ -116,17 +119,25 @@ where
 	// TODO 空白を飛ばす
 	// TODO データ定義は別ファイルで
 
-	let integer_command = |tok, ctor : fn (i32) -> Command| string(tok)
-			.and(integer())
+	let skip_spaces = || spaces().silent();
+
+	// 後続の空白を食うパーザたち
+	let integer_ss = || integer().skip(skip_spaces());
+	let real_ss = || real().skip(skip_spaces());
+	let string_ss = |tok| string(tok).skip(skip_spaces());
+	let token_ss = |tok| token(tok).skip(skip_spaces());
+
+	let integer_command = |tok, ctor : fn (i32) -> Command| string_ss(tok)
+			.and(integer_ss())
 			.map(move |(_, val)| ctor(val));
 
-	let real_command = |tok, ctor: fn (f32) -> Command| string(tok)
-			.and(real())
+	let real_command = |tok, ctor: fn (f32) -> Command| string(tok).skip(skip_spaces())
+			.and(real_ss())
 			.map(move |(_, val)| ctor(val));
 
 	let octave_command = integer_command("o", Command::Octave);
-	let octave_incr_command = token('>').map(|_| Command::OctaveIncr);
-	let octave_decr_command = token('<').map(|_| Command::OctaveDecr);
+	let octave_incr_command = token_ss('>').map(|_| Command::OctaveIncr);
+	let octave_decr_command = token_ss('<').map(|_| Command::OctaveDecr);
 
 	let length_command = integer_command("l", Command::Length);
 	let gate_rate_command = real_command("q", Command::GateRate);
@@ -151,7 +162,9 @@ where
 			.or(velocity_command)
 			.or(detune_command);
 
-	many(command).map(|commands| CompilationUnit { commands })
+	// 最先頭の空白だけここで食う
+	spaces()
+			.with(many(command).map(move |commands| CompilationUnit { commands }))
 }
 
 #[test]
@@ -164,4 +177,50 @@ fn test_compilation_unit() {
 					Command::Length(8),
 					Command::Velocity(15.0),
 				]});
+}
+
+#[test]
+fn test_compilation_unit_spaces() {
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::Octave(4)],
+		};
+		assert_eq!(compilation_unit().parse("o4").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("  o4").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("o  4").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("o4  ").unwrap().0, expected);
+	}
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::GateRate(7.5)],
+		};
+		assert_eq!(compilation_unit().parse("q7.5").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("  q7.5").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("q  7.5").unwrap().0, expected);
+		assert_eq!(compilation_unit().parse("q7.5  ").unwrap().0, expected);
+	}
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::Octave(4), Command::GateRate(7.5)],
+		};
+		assert_eq!(compilation_unit().parse("o4 q7.5").unwrap().0, expected);
+	}
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::GateRate(7.5), Command::Octave(4)],
+		};
+		assert_eq!(compilation_unit().parse("q7.5 o4").unwrap().0, expected);
+	}
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::OctaveIncr, Command::OctaveDecr],
+		};
+		assert_eq!(compilation_unit().parse("> <").unwrap().0, expected);
+	}
+	{
+		let expected = CompilationUnit {
+			commands: vec![Command::OctaveDecr, Command::OctaveIncr],
+		};
+		assert_eq!(compilation_unit().parse("< >").unwrap().0, expected);
+	}
 }
