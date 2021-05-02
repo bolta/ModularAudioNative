@@ -8,5 +8,7 @@ edition = "2018"
 
 [dependencies]
 # typed-arena = "*"
+combine = { version = "^4.5.1", features = ["regex"] }
+combine-proc-macro = "*"
 portaudio = "*"
-combine = "4.5.1"
+regex = "^1"
