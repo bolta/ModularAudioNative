@@ -28,6 +28,7 @@ use combine::{
 		},
 		regex::find,
 	},
+	sep_by1,
 	stream::RangeStream,
 	token,
 };
@@ -49,7 +50,7 @@ where
 	I: RangeStream<Token = char, Range = &'a str> + 'a,
 	I::Error: ParseError<I::Token, I::Range, I::Position>,
 {
-	let token = find(re(r"^[0-9]+"));
+	let token = find(re(r"^-?[0-9]+"));
 	token.map(|v: &'a str| v.parse::<i32>().unwrap())
 }
 
@@ -78,7 +79,7 @@ pub enum Command {
 	Volume(f32),
 	Velocity(f32),
 	Detune(f32),
-	Tone { tone_name: ToneName, length: Option<Length>, slur: bool },
+	Tone { tone_name: ToneName, length: Length, slur: bool },
 	Rest(Length),
 	Parameter { name: String, value: f32 },
 	Loop { times: Option<i32>, Content: Vec<Command> },
@@ -151,9 +152,18 @@ where
 	// https://docs.rs/combine/4.5.2/combine/fn.many1.html
 	let accidentals = many1::<Vec<_>, _, _>(token_ss('+')).map(|sharps| sharps.len() as i32)
 			.or(many1::<Vec<_>, _, _>(token_ss('-')).map(|flats| - (flats.len() as i32)));
+
+	let length_element = optional(integer_ss())
+			.and(many::<Vec<_>, _, _>(token_ss('.')).map(|dots| dots.len() as i32))
+			.map(|(number, dots)| LengthElement { number, dots });
+	let length = sep_by1(length_element, token_ss('^'))
+			.map(|elements| Length { elements });
+
 	let tone_command = one_of_ss("cdefgab".chars())
 			.and(optional(accidentals))
-			.map(|(b, a)| {
+			.and(length)
+			.and(optional(token_ss('&')))
+			.map(|(((b, a), l), s)| {
 		let base_name = match b {
 			'c' => ToneBaseName::C,
 			'd' => ToneBaseName::D,
@@ -170,8 +180,8 @@ where
 				base_name,
 				accidental: a.unwrap_or(0),
 			},
-			length: None,//Length { elements: vec![LengthElement] }
-			slur: false,
+			length: l,
+			slur: s.is_some(),
 		}
 	});
 	// let rest_command = 
@@ -269,10 +279,27 @@ fn test_compilation_unit_tones() {
 			},
 		]
 	};
+	let length_default = || Length { elements: vec![LengthElement { number: None, dots: 0 }] };
 
-	assert_eq!(compilation_unit().parse("c ").unwrap().0, expected(ToneBaseName::C, 0, None, false));
-	assert_eq!(compilation_unit().parse("d+ ").unwrap().0, expected(ToneBaseName::D, 1, None, false));
-	assert_eq!(compilation_unit().parse("e ++ + ").unwrap().0, expected(ToneBaseName::E, 3, None, false));
-	assert_eq!(compilation_unit().parse("f -").unwrap().0, expected(ToneBaseName::F, -1, None, false));
-	assert_eq!(compilation_unit().parse("g -- - ").unwrap().0, expected(ToneBaseName::G, -3, None, false));
-}
+	assert_eq!(compilation_unit().parse("c ").unwrap().0, expected(ToneBaseName::C, 0, length_default(), false));
+	assert_eq!(compilation_unit().parse("d+ ").unwrap().0, expected(ToneBaseName::D, 1, length_default(), false));
+	assert_eq!(compilation_unit().parse("e ++ + ").unwrap().0, expected(ToneBaseName::E, 3, length_default(), false));
+	assert_eq!(compilation_unit().parse("f -").unwrap().0, expected(ToneBaseName::F, -1, length_default(), false));
+	assert_eq!(compilation_unit().parse("g -- - ").unwrap().0, expected(ToneBaseName::G, -3, length_default(), false));
+
+	assert_eq!(compilation_unit().parse("a8 ").unwrap().0, expected(ToneBaseName::A, 0,
+			Length {
+				elements: vec![
+					LengthElement { number: Some(8), dots: 0 },
+				]
+			}, false));
+	assert_eq!(compilation_unit().parse("b-^4. ^ 2...^-32& ").unwrap().0, expected(ToneBaseName::B, -1,
+				Length {
+					elements: vec![
+						LengthElement { number: None, dots: 0 },
+						LengthElement { number: Some(4), dots: 1 },
+						LengthElement { number: Some(2), dots: 3 },
+						LengthElement { number: Some(-32), dots: 0 },
+					]
+				}, true));
+	}
