@@ -127,12 +127,12 @@ where
 	let token_ss = |tok| token(tok).skip(skip_spaces());
 
 	let integer_command = |tok, ctor : fn (i32) -> Command| string_ss(tok)
-			.and(integer_ss())
-			.map(move |(_, val)| ctor(val));
+			.with(integer_ss())
+			.map(move |val| ctor(val));
 
 	let real_command = |tok, ctor: fn (f32) -> Command| string(tok).skip(skip_spaces())
-			.and(real_ss())
-			.map(move |(_, val)| ctor(val));
+			.with(real_ss())
+			.map(move |val| ctor(val));
 
 	let octave_command = integer_command("o", Command::Octave);
 	let octave_incr_command = token_ss('>').map(|_| Command::OctaveIncr);
