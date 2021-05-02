@@ -7,7 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-combine = "4.5.1"
+combine = { version = "^4.5.1", features = ["regex"] }
+combine-proc-macro = "*"
 mopa = "*"
 portaudio = "*"
+regex = "^1"
 ringbuf = "*"
