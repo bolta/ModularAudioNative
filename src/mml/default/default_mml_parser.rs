@@ -153,15 +153,15 @@ where
 	let accidentals = many1::<Vec<_>, _, _>(token_ss('+')).map(|sharps| sharps.len() as i32)
 			.or(many1::<Vec<_>, _, _>(token_ss('-')).map(|flats| - (flats.len() as i32)));
 
-	let length_element = optional(integer_ss())
+	let length_element = || optional(integer_ss())
 			.and(many::<Vec<_>, _, _>(token_ss('.')).map(|dots| dots.len() as i32))
 			.map(|(number, dots)| LengthElement { number, dots });
-	let length = sep_by1(length_element, token_ss('^'))
+	let length = || sep_by1(length_element(), token_ss('^'))
 			.map(|elements| Length { elements });
 
 	let tone_command = one_of_ss("cdefgab".chars())
 			.and(optional(accidentals))
-			.and(length)
+			.and(length())
 			.and(optional(token_ss('&')))
 			.map(|(((b, a), l), s)| {
 		let base_name = match b {
@@ -184,7 +184,10 @@ where
 			slur: s.is_some(),
 		}
 	});
-	// let rest_command = 
+	let rest_command = token_ss('r')
+			.with(length())
+			.map(|l| Command::Rest(l));
+
 	// let parameter_command = 
 	// let loop_command = 
 	// let loop_break_command = 
@@ -200,7 +203,8 @@ where
 			.or(volume_command)
 			.or(velocity_command)
 			.or(detune_command)
-			.or(tone_command);
+			.or(tone_command)
+			.or(rest_command);
 
 	// 最先頭の空白だけここで食う
 	spaces()
@@ -302,4 +306,20 @@ fn test_compilation_unit_tones() {
 						LengthElement { number: Some(-32), dots: 0 },
 					]
 				}, true));
-	}
+}
+
+#[test]
+fn test_compilation_unit_rest() {
+	let expected = |command| CompilationUnit { commands: vec![command] };
+	let length_default = || Length { elements: vec![LengthElement { number: None, dots: 0 }] };
+
+	assert_eq!(compilation_unit().parse("r").unwrap().0, expected(Command::Rest(length_default())));
+	assert_eq!(compilation_unit().parse("r 4^-96 . ").unwrap().0, expected(Command::Rest(
+		Length {
+			elements: vec![
+				LengthElement { number: Some(4), dots: 0 },
+				LengthElement { number: Some(-96), dots: 1 },
+			],
+		}
+	)));
+}
