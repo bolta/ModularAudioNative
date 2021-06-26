@@ -8,9 +8,10 @@ use std::cell::RefCell;
  * まともなやり方があれば今後がんばりたい
  */
 
-pub struct NodeHandle {
+ #[derive(Clone)]
+pub struct NodeHandle/* <'a> */ {
 	// TODO 限定公開がうまくいかない
-	pub/* (in crate::core::node_host) */ host: *mut NodeHost,
+	pub/* (in crate::core::node_host) */ host: */* 'a */ mut NodeHost,
 	pub/* (in crate::core::node_host) */ id: usize,
 }
 
@@ -18,7 +19,7 @@ impl NodeHandle {
 	pub fn host(&self) -> &NodeHost {
 		unsafe { &* self.host }
 	}
-	pub fn host_mut(&self) -> &mut NodeHost {
+	pub fn host_mut(&self) -> &/* 'a */ mut NodeHost {
 		unsafe { &mut * self.host }
 	}
 
