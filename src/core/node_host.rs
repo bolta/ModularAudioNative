@@ -1,5 +1,6 @@
 use super::node::*;
 use super::node_handle::*;
+use super::sample_user::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -15,6 +16,8 @@ pub struct NodeHost {
 	/// Node は常に参照で見られているため、Vec の引っ越しでアドレスが変わらないよう Box に入れる
 	/// （コンパイラのチェックを回避しているので、参照が存在する状態で要素が追加されることもある）
 	nodes: Vec<Box<Node>>,
+
+	sample_users: Vec<&'a mut dyn SampleUser>, //Vec<Rc<RefCell<dyn SampleUser>>>,
 }
 
 impl NodeHost {
@@ -24,6 +27,7 @@ impl NodeHost {
 			quant_rate,
 			channels,
 			nodes: vec![],
+			sample_users: vec![],
 		}
 	}
 
@@ -47,7 +51,15 @@ impl NodeHost {
 		&mut self.nodes[id]
 	}
 
+	pub fn add_sample_user(&mut self, user: &'a mut dyn SampleUser/* Rc<RefCell<dyn SampleUser>> */) {
+		self.sample_users.push(user);
+	}
+
 	pub fn update(&mut self) {
+		for s in &mut self.sample_users {
+	//            s.borrow_mut().sample();
+			s.sample();
+		}
 		for n in &mut self.nodes {
 			n.update();
 		}
