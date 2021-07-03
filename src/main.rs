@@ -1,16 +1,23 @@
 mod core;
 use crate::core::node::*;
 
-fn main() {
-//    println!("Hello, world!");
+#[derive(Clone, Copy)]
+pub struct InputIndex(pub usize);
 
+pub enum Instruction {
+	Load { to: InputIndex, from: NodeIndex },
+	Store { to: NodeIndex },
+	Execute(NodeIndex),
+	Update(NodeIndex),
+}
+
+fn main() {
 	let mut nodes = vec![];
 	{
 		let mut add_node = |node: Box<dyn Node>| -> NodeIndex {
 			nodes.push(node);
-			nodes.len() - 1
+			NodeIndex(nodes.len() - 1)
 		};
-		// 普通に構築すれば topologically sorted なはず
 		let const_441 = add_node(Box::new(Constant::new(441f32)));
 		let sin = add_node(Box::new(SineOsc::new(const_441)));
 		let const_1 = add_node(Box::new(Constant::new(1f32)));
@@ -34,18 +41,43 @@ fn main() {
 			.collect();
 	let mut inputs = vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap());
 
+	let mut output = 0f32;
+	// nodes が topologically sorted であることを期待している。
+	// 普通に構築すればそうなるはず…
+	let instructions: Vec<Instruction> = (0usize .. num_nodes).flat_map(|i| {
+		let loads = upstreams[i].iter().enumerate().map(|(input_idx, upstream_idx)| {
+			Instruction::Load { to: InputIndex(input_idx), from: *upstream_idx }
+		});
+
+		let node_idx = NodeIndex(i);
+		loads.chain(vec![
+			Instruction::Execute(node_idx),
+			Instruction::Store { to: node_idx },
+			Instruction::Update(node_idx),
+		])
+	}).collect();
+
+	 ////
+	//// PLAY
+
 	for node in &mut nodes { node.initialize(); }
 	/* loop */ for _ in 0 .. 101 {
-		for i in 0usize .. num_nodes {
-			let node = &mut nodes[i];
-
-			for (input_idx, upstream_idx) in upstreams[i].iter().enumerate() {
-				inputs[input_idx] = values[*upstream_idx];
+		for instrc in &instructions {
+			match instrc {
+				Instruction::Load { to, from } => {
+					inputs[to.0] = values[from.0];
+				}
+				Instruction::Store { to } => {
+					values[to.0] = output;
+				}
+				Instruction::Execute(node_idx) => {
+					output = nodes[node_idx.0].execute(&inputs);
+				}
+				Instruction::Update(node_idx) => {
+					nodes[node_idx.0].update(&inputs);
+				}
 			}
-			values[i] = node.execute(&inputs);
-			node.update(&inputs);
 		}
 	}
 	for node in nodes.iter_mut().rev() { node.finalize(); }
 }
-

@@ -1,5 +1,7 @@
 pub type Sample = f32;
-pub type NodeIndex = usize;
+
+#[derive(Clone, Copy)]
+pub struct NodeIndex(pub usize);
 
 const TWO_PI: f32 = 2_f32 * std::f32::consts::PI;
 
