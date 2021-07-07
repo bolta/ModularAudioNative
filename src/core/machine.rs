@@ -1,4 +1,5 @@
 use super::node::*;
+use super::common::*;
 
 pub struct Machine {
 	nodes: Vec<Box<dyn Node>>,
@@ -25,13 +26,16 @@ impl Machine {
 			output: 0f32,
 		};
 	
+		println!("initializing...");
 		for node in &mut self.nodes { node.initialize(); }
-		/* loop */ for _ in 0 .. 101 {
+		println!("playing...");
+		/* loop */ for _ in 0 .. /* 101 */10 * 44100 {
 			for instrc in &instructions {
 				self.do_instruction(&instrc, &mut state);
 			}
 			// TODO ここでイベント処理などを行う
 		}
+		println!("finalizing...");
 		for node in self.nodes.iter_mut().rev() { node.finalize(); }
 	}
 
