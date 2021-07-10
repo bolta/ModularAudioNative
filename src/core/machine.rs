@@ -1,11 +1,20 @@
-use super::node::*;
 use super::common::*;
+use super::event::*;
+use super::node::*;
+
+use std::collections::VecDeque;
 
 pub struct Machine {
 	nodes: Vec<Box<dyn Node>>,
+	events: VecDeque<Box<dyn Event>>,
 }
 impl Machine {
-	pub fn new() -> Self { Self { nodes: vec![] } }
+	pub fn new() -> Self {
+		Self {
+			nodes: vec![],
+			events: VecDeque::new(),
+		}
+	}
 
 	pub fn add_node(&mut self, node: Box<dyn Node>) -> NodeIndex {
 		self.nodes.push(node);
@@ -24,19 +33,38 @@ impl Machine {
 			values: vec_with_length(num_nodes),
 			inputs: vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap()),
 			output: 0f32,
+			elapsed_samples: 0u32,
 		};
 	
 		println!("initializing...");
 		for node in &mut self.nodes { node.initialize(); }
+
 		println!("playing...");
-		/* loop */ for _ in 0 .. /* 101 */10 * 44100 {
+		'play: loop {
+			while ! self.events.is_empty() {
+				let event = self.events.pop_back().unwrap();
+				let terminate = self.consume_event(event);
+				if terminate { break 'play; }
+			}
+
 			for instrc in &instructions {
 				self.do_instruction(&instrc, &mut state);
 			}
-			// TODO ここでイベント処理などを行う
+
+			// TODO 仮…本当は Sequencer とか EventScheduler が投げる
+			if state.elapsed_samples == 44100u32 {
+				self.post_event(Box::new(TerminateEvent { }));
+			}
+
+			state.elapsed_samples += 1;
 		}
+
 		println!("finalizing...");
 		for node in self.nodes.iter_mut().rev() { node.finalize(); }
+	}
+
+	pub fn post_event(&mut self, event: Box<dyn Event>) {
+		self.events.push_back(event);
 	}
 
 	fn compile(&self, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
@@ -54,6 +82,20 @@ impl Machine {
 				Instruction::Update(node_idx),
 			])
 		}).collect()
+	}
+
+	/// terminate する場合 true
+	fn consume_event(&mut self, event: Box<dyn Event>) -> bool {
+		let typ = event.event_type();
+		if typ == EVENT_TYPE_TERMINATE { return true; }
+
+		match typ {
+			// TODO 各種イベントの処理
+
+			_ => { println!("unknown event type: {}", typ); }
+		}
+
+		false
 	}
 
 	fn do_instruction(&mut self, instrc: &Instruction, state: &mut State) {
@@ -88,6 +130,14 @@ struct State {
 	values: Vec<Sample>,
 	inputs: Vec<Sample>,
 	output: Sample,
+	elapsed_samples: u32,
+}
+
+// TODO ちゃんと名前空間を規定する
+const EVENT_TYPE_TERMINATE: &str = "Machine::Terminate";
+pub struct TerminateEvent { }
+impl Event for TerminateEvent {
+	fn event_type(&self) -> &str { EVENT_TYPE_TERMINATE }
 }
 
 fn vec_with_length(len: usize) -> Vec<Sample> {
