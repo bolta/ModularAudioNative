@@ -102,9 +102,8 @@ impl Machine {
 				state.values[to.0] = state.output;
 			}
 			Instruction::Execute(node_idx) => {
-                let node = &mut nodes[node_idx.0];
-				// let _self = unsafe { &mut * (self as *mut Self) };
-                state.output = node.execute(&state.inputs, self);
+				let node = &mut nodes[node_idx.0];
+				state.output = node.execute(&state.inputs, self);
 			}
 			Instruction::Update(node_idx) => {
 				nodes[node_idx.0].update(&state.inputs);
