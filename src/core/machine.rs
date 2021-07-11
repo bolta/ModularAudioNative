@@ -5,39 +5,34 @@ use super::node::*;
 use std::collections::VecDeque;
 
 pub struct Machine {
-	nodes: Vec<Box<dyn Node>>,
+	// nodes: Vec<Box<dyn Node>>,
 	events: VecDeque<Box<dyn Event>>,
 }
 impl Machine {
 	pub fn new() -> Self {
 		Self {
-			nodes: vec![],
+			// nodes: vec![],
 			events: VecDeque::new(),
 		}
 	}
 
-	pub fn add_node(&mut self, node: Box<dyn Node>) -> NodeIndex {
-		self.nodes.push(node);
-		NodeIndex(self.nodes.len() - 1)
-	}
-
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
-	pub fn play(&mut self) {
-		let num_nodes = self.nodes.len();
-		let upstreams: Vec<Vec<NodeIndex>> = self.nodes.iter()
+	pub fn play(&mut self, nodes: &mut NodeHost) {
+		let num_nodes = nodes.len();
+		let upstreams: Vec<Vec<NodeIndex>> = nodes.iter()
 				.map(|node| node.upstreams())
 				.collect();
-		let instructions = self.compile(&upstreams);
+		let instructions = self.compile(nodes, &upstreams);
 
 		let mut state = State {
 			values: vec_with_length(num_nodes),
 			inputs: vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap()),
 			output: 0f32,
-			elapsed_samples: 0u32,
+			elapsed_samples: 0,
 		};
 	
 		println!("initializing...");
-		for node in &mut self.nodes { node.initialize(); }
+		for node in /*&mut self.*/nodes.iter_mut() { node.initialize(); }
 
 		println!("playing...");
 		'play: loop {
@@ -48,11 +43,11 @@ impl Machine {
 			}
 
 			for instrc in &instructions {
-				self.do_instruction(&instrc, &mut state);
+				self.do_instruction(nodes, &instrc, &mut state);
 			}
 
 			// TODO 仮…本当は Sequencer とか EventScheduler が投げる
-			if state.elapsed_samples == 44100u32 {
+			if state.elapsed_samples == 5 * 44100 {
 				self.post_event(Box::new(TerminateEvent { }));
 			}
 
@@ -60,17 +55,17 @@ impl Machine {
 		}
 
 		println!("finalizing...");
-		for node in self.nodes.iter_mut().rev() { node.finalize(); }
+		for node in nodes.iter_mut().rev() { node.finalize(); }
 	}
 
 	pub fn post_event(&mut self, event: Box<dyn Event>) {
 		self.events.push_back(event);
 	}
 
-	fn compile(&self, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
+	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
 		// nodes が topologically sorted であることを期待している。
 		// 普通に構築すればそうなるはず…
-		(0usize .. self.nodes.len()).flat_map(|i| {
+		(0usize .. nodes.len()).flat_map(|i| {
 			let loads = upstreams[i].iter().enumerate().map(|(input_idx, upstream_idx)| {
 				Instruction::Load { to: InputIndex(input_idx), from: *upstream_idx }
 			});
@@ -98,7 +93,7 @@ impl Machine {
 		false
 	}
 
-	fn do_instruction(&mut self, instrc: &Instruction, state: &mut State) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, state: &mut State) {
 		match instrc {
 			Instruction::Load { to, from } => {
 				state.inputs[to.0] = state.values[from.0];
@@ -107,12 +102,25 @@ impl Machine {
 				state.values[to.0] = state.output;
 			}
 			Instruction::Execute(node_idx) => {
-				state.output = self.nodes[node_idx.0].execute(&state.inputs);
+                let node = &mut nodes[node_idx.0];
+				// let _self = unsafe { &mut * (self as *mut Self) };
+                state.output = node.execute(&state.inputs, self);
 			}
 			Instruction::Update(node_idx) => {
-				self.nodes[node_idx.0].update(&state.inputs);
+				nodes[node_idx.0].update(&state.inputs);
 			}
 		}
+	}
+}
+
+pub type NodeHost = Vec<Box<dyn Node>>;
+pub trait NodeHostExt {
+	fn add(&mut self, node: Box<dyn Node>) -> NodeIndex;
+}
+impl NodeHostExt for NodeHost {
+	fn add(&mut self, node: Box<dyn Node>) -> NodeIndex {
+		self.push(node);
+		NodeIndex(self.len() - 1)
 	}
 }
 
@@ -130,7 +138,7 @@ struct State {
 	values: Vec<Sample>,
 	inputs: Vec<Sample>,
 	output: Sample,
-	elapsed_samples: u32,
+	elapsed_samples: SampleCount,
 }
 
 // TODO ちゃんと名前空間を規定する

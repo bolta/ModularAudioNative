@@ -1,5 +1,6 @@
 use crate::core::{
 	common::*,
+	machine::*,
 	node::*,
 };
 
@@ -60,7 +61,7 @@ impl Node for PortAudioOut {
 
 	fn upstreams(&self) -> Vec<NodeIndex> { vec![self.input] }
 
-	fn execute(&mut self, _inputs: &Vec<Sample>) -> Sample {
+	fn execute(&mut self, _inputs: &Vec<Sample>, machine: &mut Machine) -> Sample {
 		if self.buffer.len() < WRITE_COUNT { return NO_OUTPUT; }
 
 		let b = &mut self.buffer;

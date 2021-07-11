@@ -1,5 +1,6 @@
 use crate::core::{
 	common::*,
+	machine::*,
 	node::*,
 };
 
@@ -11,5 +12,5 @@ impl Constant {
 }
 impl Node for Constant {
 	fn upstreams(&self) -> Vec<NodeIndex> { vec![] }
-	fn execute(&mut self, _inputs: &Vec<Sample>) -> Sample { self.value }
+	fn execute(&mut self, _inputs: &Vec<Sample>, machine: &mut Machine) -> Sample { self.value }
 }

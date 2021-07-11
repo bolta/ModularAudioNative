@@ -1,4 +1,5 @@
 pub type Sample = f32;
+pub type SampleCount = i32;
 
 #[derive(Clone, Copy)]
 pub struct NodeIndex(pub usize);
