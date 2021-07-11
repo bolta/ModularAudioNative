@@ -47,6 +47,7 @@ impl EventScheduler {
 				prod.push(e);
 			}
 		}
+		self.next_key = self.events.keys().next().map(|k| *k);
 	}
 }
 impl Node for EventScheduler {
