@@ -1,23 +1,29 @@
-use super::common::*;
-use super::event::*;
-use super::node::*;
+use super::{
+	common::*,
+	context::*,
+	event::*,
+	node::*,
+};
 
 use std::collections::VecDeque;
+use ringbuf::{
+	Consumer,
+	Producer,
+	RingBuffer,
+};
+
+const EVENT_QUEUE_CAPACITY: usize = 1000;
 
 pub struct Machine {
-	// nodes: Vec<Box<dyn Node>>,
-	events: VecDeque<Box<dyn Event>>,
 }
 impl Machine {
 	pub fn new() -> Self {
 		Self {
-			// nodes: vec![],
-			events: VecDeque::new(),
 		}
 	}
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
-	pub fn play(&mut self, nodes: &mut NodeHost) {
+	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost) {
 		let num_nodes = nodes.len();
 		let upstreams: Vec<Vec<NodeIndex>> = nodes.iter()
 				.map(|node| node.upstreams())
@@ -28,38 +34,37 @@ impl Machine {
 			values: vec_with_length(num_nodes),
 			inputs: vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap()),
 			output: 0f32,
-			elapsed_samples: 0,
 		};
+
+		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
+		let (mut events_prod, mut events_cons) = events.split();
+
+		let mut env = Environment::new(&mut events_prod);
 	
 		println!("initializing...");
-		for node in /*&mut self.*/nodes.iter_mut() { node.initialize(); }
+		for node in nodes.iter_mut() { node.initialize(context, &mut env); }
 
 		println!("playing...");
 		'play: loop {
-			while ! self.events.is_empty() {
-				let event = self.events.pop_back().unwrap();
-				let terminate = self.consume_event(event);
-				if terminate { break 'play; }
+			'do_events: loop {
+				match events_cons.pop() {
+					None => { break 'do_events; }
+					Some(event) => {
+						let terminate = self.consume_event(event);
+						if terminate { break 'play; }
+					}
+				}
 			}
 
 			for instrc in &instructions {
-				self.do_instruction(nodes, &instrc, &mut state);
+				self.do_instruction(nodes, &instrc, &mut state, context, &mut env);
 			}
 
-			// TODO 仮…本当は Sequencer とか EventScheduler が投げる
-			if state.elapsed_samples == 5 * 44100 {
-				self.post_event(Box::new(TerminateEvent { }));
-			}
-
-			state.elapsed_samples += 1;
+			context.sample_elapsed();
 		}
 
 		println!("finalizing...");
-		for node in nodes.iter_mut().rev() { node.finalize(); }
-	}
-
-	pub fn post_event(&mut self, event: Box<dyn Event>) {
-		self.events.push_back(event);
+		for node in nodes.iter_mut().rev() { node.finalize(context, &mut env); }
 	}
 
 	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
@@ -93,7 +98,7 @@ impl Machine {
 		false
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, state: &mut State) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, state: &mut State, context: &Context, env: &mut Environment) {
 		match instrc {
 			Instruction::Load { to, from } => {
 				state.inputs[to.0] = state.values[from.0];
@@ -103,10 +108,10 @@ impl Machine {
 			}
 			Instruction::Execute(node_idx) => {
 				let node = &mut nodes[node_idx.0];
-				state.output = node.execute(&state.inputs, self);
+				state.output = node.execute(&state.inputs, context, env);
 			}
 			Instruction::Update(node_idx) => {
-				nodes[node_idx.0].update(&state.inputs);
+				nodes[node_idx.0].update(&state.inputs, context, env);
 			}
 		}
 	}
@@ -123,6 +128,17 @@ impl NodeHostExt for NodeHost {
 	}
 }
 
+pub type EventProducer = Producer<Box<dyn Event>>;
+pub type EventConsumer = Consumer<Box<dyn Event>>;
+pub struct Environment<'a> {
+	events: &'a mut EventProducer,
+}
+impl <'a> Environment<'a> {
+	fn new(events: &'a mut EventProducer) -> Self { Self { events } }
+	pub fn events_mut(&mut self) -> &mut EventProducer { self.events }
+}
+
+
 #[derive(Clone, Copy)]
 struct InputIndex(pub usize);
 
@@ -137,7 +153,7 @@ struct State {
 	values: Vec<Sample>,
 	inputs: Vec<Sample>,
 	output: Sample,
-	elapsed_samples: SampleCount,
+	// elapsed_samples: SampleCount,
 }
 
 // TODO ちゃんと名前空間を規定する

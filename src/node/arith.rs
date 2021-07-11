@@ -1,5 +1,6 @@
 use crate::core::{
 	common::*,
+	context::*,
 	machine::*,
 	node::*,
 };
@@ -12,7 +13,7 @@ impl Add {
 }
 impl Node for Add {
 	fn upstreams(&self) -> Vec<NodeIndex> { self.args.clone() }
-	fn execute(&mut self, inputs: &Vec<Sample>, machine: &mut Machine) -> Sample {
+	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
 		inputs.iter().take(self.args.len()).sum()
 	}
 }
@@ -25,7 +26,7 @@ impl Mul {
 }
 impl Node for Mul {
 	fn upstreams(&self) -> Vec<NodeIndex> { self.args.clone() }
-	fn execute(&mut self, inputs: &Vec<Sample>, machine: &mut Machine) -> Sample {
+	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
 		inputs.iter().take(self.args.len()).product()
 	}
 }

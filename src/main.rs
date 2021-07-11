@@ -1,16 +1,21 @@
 mod core;
 mod node;
 
-use crate::core::machine::*;
+use crate::core::{
+	context::*,
+	machine::*,
+};
 use crate::node::{
 	arith::*,
 	audio::*,
+	event_scheduler::*,
 	osc::*,
 	prim::*,
 };
 
 fn main() {
 	let mut machine = Machine::new();
+	let mut context = Context::new(44100, 1);
 	let mut nodes = NodeHost::new();
 
 	let a4 = nodes.add(Box::new(Constant::new(440f32)));
@@ -24,7 +29,11 @@ fn main() {
 	let sum = nodes.add(Box::new(Add::new(vec![sinA4, sinE5])));
 	let vol = nodes.add(Box::new(Constant::new(0.5f32)));
 	let master = nodes.add(Box::new(Mul::new(vec![sum, vol])));
-	nodes.add(Box::new(PortAudioOut::new(master)));
+	nodes.add(Box::new(PortAudioOut::new(master, &context)));
 
-	machine.play(&mut nodes);
+	let mut sched = Box::new(EventScheduler::new());
+	sched.add_event(3 * 44100, Box::new(TerminateEvent { }));
+	nodes.add(sched);
+
+	machine.play(&mut context, &mut nodes);
 }

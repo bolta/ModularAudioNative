@@ -1,5 +1,6 @@
 use crate::core::{
 	common::*,
+	context::*,
 	event::*,
 	machine::*,
 	node::*,
@@ -31,13 +32,32 @@ impl EventScheduler {
 		};
 		self.next_key = Some(next);
 	}
+	fn process_events(&mut self, elapsed_samples: SampleCount, prod: &mut EventProducer) {
+		if self.next_key.is_none() { return; }
+		let next_key = self.next_key.unwrap();
+		if elapsed_samples < next_key { return; }
+
+		let keys_to_remove: Vec<SampleCount> = self.events.keys().take_while(|k| **k <= elapsed_samples)
+				.map(|k| *k)
+				.collect();
+		for key in keys_to_remove {
+			let events_at_key = self.events.remove(&key).unwrap();
+			for e in events_at_key {
+				// TODO キューが一杯だったときの処理
+				prod.push(e);
+			}
+		}
+	}
 }
 impl Node for EventScheduler {
 	fn upstreams(&self) -> Vec<NodeIndex> { vec![] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, machine: &mut Machine) -> Sample {
-		// TODO machine に対して次のことができる必要：
-		// * 経過サンプル数をもらう
-		// * post_event を呼ぶ
+	fn initialize(&mut self, context: &Context, env: &mut Environment) {
+		self.process_events(0, env.events_mut());
+	}
+	fn execute(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
 		NO_OUTPUT
+	}
+	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
+		self.process_events(context.elapsed_samples() + 1, env.events_mut());
 	}
 }
