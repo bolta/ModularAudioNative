@@ -2,10 +2,9 @@ use super::{
 	common::*,
 	context::*,
 	event::*,
-	node::*,
+	node_host::*,
 };
 
-use std::collections::VecDeque;
 use ringbuf::{
 	Consumer,
 	Producer,
@@ -24,8 +23,8 @@ impl Machine {
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
 	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost) {
-		let num_nodes = nodes.len();
-		let upstreams: Vec<Vec<NodeIndex>> = nodes.iter()
+		let num_nodes = nodes.count();
+		let upstreams: Vec<Vec<NodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
 		let instructions = self.compile(nodes, &upstreams);
@@ -42,7 +41,7 @@ impl Machine {
 		let mut env = Environment::new(&mut events_prod);
 	
 		println!("initializing...");
-		for node in nodes.iter_mut() { node.initialize(context, &mut env); }
+		for node in nodes.nodes_mut().iter_mut() { node.initialize(context, &mut env); }
 
 		println!("playing...");
 		'play: loop {
@@ -50,7 +49,7 @@ impl Machine {
 				match events_cons.pop() {
 					None => { break 'do_events; }
 					Some(event) => {
-						let terminate = self.consume_event(event);
+						let terminate = self.consume_event(event, nodes);
 						if terminate { break 'play; }
 					}
 				}
@@ -64,13 +63,13 @@ impl Machine {
 		}
 
 		println!("finalizing...");
-		for node in nodes.iter_mut().rev() { node.finalize(context, &mut env); }
+		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
 	}
 
 	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
 		// nodes が topologically sorted であることを期待している。
 		// 普通に構築すればそうなるはず…
-		(0usize .. nodes.len()).flat_map(|i| {
+		(0usize .. nodes.count()).flat_map(|i| {
 			let loads = upstreams[i].iter().enumerate().map(|(input_idx, upstream_idx)| {
 				Instruction::Load { to: InputIndex(input_idx), from: *upstream_idx }
 			});
@@ -85,7 +84,23 @@ impl Machine {
 	}
 
 	/// terminate する場合 true
-	fn consume_event(&mut self, event: Box<dyn Event>) -> bool {
+	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost) -> bool {
+		// 宛先があるものはそこへ送る
+		if event.target_id().is_some() {
+			let id = event.target_id().unwrap();
+			let idx = nodes.resolve_id(&id);
+			match idx {
+				Some(idx) => {
+					nodes[idx].process_event(&*event);
+				}
+				None => {
+					println!("unknown node id: {}", &id);
+				}
+			}
+
+			return false;
+		}
+
 		let typ = event.event_type();
 		if typ == EVENT_TYPE_TERMINATE { return true; }
 
@@ -107,24 +122,13 @@ impl Machine {
 				state.values[to.0] = state.output;
 			}
 			Instruction::Execute(node_idx) => {
-				let node = &mut nodes[node_idx.0];
+				let node = &mut nodes[*node_idx];
 				state.output = node.execute(&state.inputs, context, env);
 			}
 			Instruction::Update(node_idx) => {
-				nodes[node_idx.0].update(&state.inputs, context, env);
+				nodes[*node_idx].update(&state.inputs, context, env);
 			}
 		}
-	}
-}
-
-pub type NodeHost = Vec<Box<dyn Node>>;
-pub trait NodeHostExt {
-	fn add(&mut self, node: Box<dyn Node>) -> NodeIndex;
-}
-impl NodeHostExt for NodeHost {
-	fn add(&mut self, node: Box<dyn Node>) -> NodeIndex {
-		self.push(node);
-		NodeIndex(self.len() - 1)
 	}
 }
 

@@ -1,21 +1,15 @@
-use super::common::*;
+use mopa::mopafy;
 
-pub trait Event {
+pub trait Event: mopa::Any {
 	// TODO 名前空間を規定する
 	fn event_type(&self) -> &str;
+	fn target_id(&self) -> Option<&String> { None }
 }
+mopafy!(Event);
 
-pub struct SetVar {
-	name: String,
-	value: Sample,
+pub struct TargetedEventBase {
+	pub target_id: String,
 }
-impl SetVar {
-	pub fn new(name: String, value: Sample) -> Self {
-		Self { name, value }
-	}
-	pub fn name(&self) -> &String { &self.name }
-	pub fn value(&self) -> Sample { self.value }
-}
-impl Event for SetVar {
-	fn event_type(&self) -> &str { "SetVar" }
+impl TargetedEventBase {
+	pub fn new(target_id: String) -> Self { Self { target_id } }
 }
