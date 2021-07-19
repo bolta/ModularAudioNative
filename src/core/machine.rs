@@ -85,32 +85,31 @@ impl Machine {
 
 	/// terminate する場合 true
 	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost) -> bool {
-		// 宛先があるものはそこへ送る
-		if event.target_id().is_some() {
-			let id = event.target_id().unwrap();
-			let idx = nodes.resolve_id(&id);
-			match idx {
-				Some(idx) => {
-					nodes[idx].process_event(&*event);
-				}
-				None => {
-					println!("unknown node id: {}", &id);
+		match event.target() {
+			EventTarget::Machine => {
+				let typ = event.event_type();
+				match typ {
+					// TODO 各種イベントの処理
+					EVENT_TYPE_TERMINATE => true,
+		
+					_ => {
+						println!("unknown event type: {}", typ);
+						false
+					}
 				}
 			}
+			EventTarget::Tag(tag) => {
+				let idxs = nodes.resolve_tag(&tag);
+				for idx in idxs {
+					nodes[idx].process_event(&*event);
+						// None => {
+						// 	println!("unknown node id: {}", &id);
+						// }
+				}
 
-			return false;
+				false
+			}
 		}
-
-		let typ = event.event_type();
-		if typ == EVENT_TYPE_TERMINATE { return true; }
-
-		match typ {
-			// TODO 各種イベントの処理
-
-			_ => { println!("unknown event type: {}", typ); }
-		}
-
-		false
 	}
 
 	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, state: &mut State, context: &Context, env: &mut Environment) {
@@ -165,6 +164,7 @@ const EVENT_TYPE_TERMINATE: &str = "Machine::Terminate";
 pub struct TerminateEvent { }
 impl Event for TerminateEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_TERMINATE }
+	fn target(&self) -> &EventTarget { &EventTarget::Machine }
 }
 
 fn vec_with_length(len: usize) -> Vec<Sample> {

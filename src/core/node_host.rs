@@ -13,36 +13,46 @@ use std::{
 
 pub struct NodeHost {
 	nodes: Vec<Box<dyn Node>>,
-	ids: HashMap<String, NodeIndex>,
+	tags: HashMap<String, Vec<NodeIndex>>,
 }
 impl NodeHost {
 	pub fn new() -> Self {
 		Self {
 			nodes: vec![],
-			ids: HashMap::new(),
+			tags: HashMap::new(),
 		}
 	}
 	pub fn add(&mut self, node: Box<dyn Node>) -> NodeIndex {
 		self.nodes.push(node);
 		NodeIndex(self.count() - 1)
 	}
-	pub fn add_with_id(&mut self, id: &str, node: Box<dyn Node>) -> NodeIndex {
-		let key = String::from(id);
-		if self.ids.contains_key(&key) {
-			println!("NodeHost::add_with_id: id {} already exists.", id);
+
+	pub fn add_with_tags(&mut self, tags: Vec<String>, node: Box<dyn Node>) -> NodeIndex {
+		let idx = self.add(node);
+
+		for tag in tags {
+			if self.tags.contains_key(&tag) {
+				self.tags.get_mut(&tag).unwrap().push(idx);
+			} else {
+				self.tags.insert(tag, vec![idx]);
+			}
 		}
 
-		let idx = self.add(node);
-		self.ids.insert(key, idx);
-
 		idx
+	}
+
+	pub fn add_with_tag(&mut self, tag: String, node: Box<dyn Node>) -> NodeIndex {
+		self.add_with_tags(vec![tag], node)
 	}
 
 	pub fn count(&self) -> usize { self.nodes.len() }
 	pub fn nodes(&self) -> &Vec<Box<dyn Node>> { &self.nodes }
 	pub fn nodes_mut(&mut self) -> &mut Vec<Box<dyn Node>> { &mut self.nodes }
 
-	pub fn resolve_id(&self, id: &String) -> Option<NodeIndex> { self.ids.get(id).map(|id| *id) }
+	// TODO Vec を作らずに参照で返した方がよさそう
+	pub fn resolve_tag(&self, tag: &String) -> Vec<NodeIndex> {
+		self.tags.get(tag).map_or_else(|| vec![], |idxs| idxs.clone())
+	}
 }
 impl Index<NodeIndex> for NodeHost {
 	type Output = Box<dyn Node>;

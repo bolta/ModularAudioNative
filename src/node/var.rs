@@ -26,20 +26,21 @@ impl Node for Var {
 }
 
 pub struct SetEvent {
-	base: TargetedEventBase,
+	// base: TargetedEventBase,
+	target: EventTarget,
 	value: Sample,
 }
 impl SetEvent {
-	pub fn new(target_id: String, value: Sample) -> Self {
+	pub fn new(target: EventTarget, value: Sample) -> Self {
 		SetEvent {
-			base: TargetedEventBase::new(target_id),
+			target,
 			value
 		}
 	}
 	pub fn value(&self) -> Sample { self.value }
 }
 impl Event for SetEvent {
-	fn target_id(&self) -> Option<&String> { Some(&self.base.target_id) }
+	fn target(&self) -> &EventTarget { &self.target }
 	fn event_type(&self) -> &str { EVENT_TYPE_SET }
 }
 

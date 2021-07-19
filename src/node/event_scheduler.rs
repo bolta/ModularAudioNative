@@ -17,7 +17,7 @@ impl EventScheduler {
 	pub fn new() -> Self {
 		Self {
 			events: BTreeMap::new(),
-			next_key: None,
+			next_key: None, // TODO None の代わりにとても大きい値でもいいかも（Option が不要になる）
 		}
 	}
 	pub fn add_event(&mut self, elapsed_samples: SampleCount, event: Box<dyn Event>) {
