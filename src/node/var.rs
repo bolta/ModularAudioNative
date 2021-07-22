@@ -32,7 +32,7 @@ pub struct SetEvent {
 }
 impl SetEvent {
 	pub fn new(target: EventTarget, value: Sample) -> Self {
-		SetEvent {
+		Self {
 			target,
 			value
 		}

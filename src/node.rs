@@ -1,5 +1,6 @@
 pub mod arith;
 pub mod audio;
+pub mod env;
 pub mod event_scheduler;
 pub mod osc;
 pub mod prim;

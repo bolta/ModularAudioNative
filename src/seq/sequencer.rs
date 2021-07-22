@@ -5,6 +5,7 @@ use crate::core::{
 	context::Context as CoreContext,
 };
 use crate::node::{
+	env::NoteEvent,
 	var::*,
 };
 use super::{
@@ -62,7 +63,7 @@ impl Context {
 		while self.wait == 0 && self.instrc_idx.0 < sequence.len() {
 			match &sequence[self.instrc_idx.0] {
 				Instruction::Note { tag, note_on } => {
-					unimplemented!();
+					env.events_mut().push(Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
 				}
 				Instruction::Value { tag, value } => {
 					// TODO キューが一杯だったときの処理
