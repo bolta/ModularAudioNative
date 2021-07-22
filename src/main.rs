@@ -1,5 +1,6 @@
 mod core;
 mod node;
+mod seq;
 
 use crate::core::{
 	context::*,
@@ -14,6 +15,10 @@ use crate::node::{
 	osc::*,
 	prim::*,
 	var::*,
+};
+use crate::seq::{
+	sequencer::*,
+	tick::*,
 };
 
 fn main() {
@@ -38,16 +43,23 @@ fn main() {
 	// sched.add_event(3 * 44100, Box::new(TerminateEvent { }));
 	// nodes.add(sched);
 
-	let var = nodes.add_with_tag(String::from("freq"), Box::new(Var::new(440f32)));
-	let sin = nodes.add(Box::new(SineOsc::new(var)));
-	let vol = nodes.add(Box::new(Constant::new(0.5f32)));
-	let master = nodes.add(Box::new(Mul::new(vec![sin, vol])));
-	nodes.add(Box::new(PortAudioOut::new(master, &context)));
+	// let var = nodes.add_with_tag(String::from("freq"), Box::new(Var::new(440f32)));
+	// let sin = nodes.add(Box::new(SineOsc::new(var)));
+	// let vol = nodes.add(Box::new(Constant::new(0.5f32)));
+	// let master = nodes.add(Box::new(Mul::new(vec![sin, vol])));
+	// nodes.add(Box::new(PortAudioOut::new(master, &context)));
+
+	// let mut sched = Box::new(EventScheduler::new());
+	// sched.add_event(0, Box::new(SetEvent::new(EventTarget::Tag(String::from("freq")), 660f32)));
+	// sched.add_event(44100, Box::new(SetEvent::new(EventTarget::Tag(String::from("freq")), 880f32)));
+	// sched.add_event(2 * 44100, Box::new(TerminateEvent { }));
+	// nodes.add(sched);
+
+	let tick = nodes.add(Box::new(Tick::new(120f32, 96, "seq".to_string())));
+	let seq = nodes.add_with_tag("seq".to_string(), Box::new(Sequencer::new(vec![])));
 
 	let mut sched = Box::new(EventScheduler::new());
-	sched.add_event(0, Box::new(SetEvent::new(EventTarget::Tag(String::from("freq")), 660f32)));
-	sched.add_event(44100, Box::new(SetEvent::new(EventTarget::Tag(String::from("freq")), 880f32)));
-	sched.add_event(2 * 44100, Box::new(TerminateEvent { }));
+	sched.add_event(44100, Box::new(TerminateEvent { }));
 	nodes.add(sched);
 
 	machine.play(&mut context, &mut nodes);

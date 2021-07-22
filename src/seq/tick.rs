@@ -65,4 +65,4 @@ impl Event for TickEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_TICK }
 }
 
-const EVENT_TYPE_TICK: &str = "Tick::Tick";
+pub const EVENT_TYPE_TICK: &str = "Tick::Tick";

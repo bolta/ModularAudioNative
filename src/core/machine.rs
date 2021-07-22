@@ -49,7 +49,7 @@ impl Machine {
 				match events_cons.pop() {
 					None => { break 'do_events; }
 					Some(event) => {
-						let terminate = self.consume_event(event, nodes);
+						let terminate = self.consume_event(event, nodes, context, &mut env);
 						if terminate { break 'play; }
 					}
 				}
@@ -84,7 +84,7 @@ impl Machine {
 	}
 
 	/// terminate する場合 true
-	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost) -> bool {
+	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost, context: &Context, env: &mut Environment) -> bool {
 		match event.target() {
 			EventTarget::Machine => {
 				let typ = event.event_type();
@@ -101,7 +101,7 @@ impl Machine {
 			EventTarget::Tag(tag) => {
 				let idxs = nodes.resolve_tag(&tag);
 				for idx in idxs {
-					nodes[idx].process_event(&*event);
+					nodes[idx].process_event(&*event, context, env);
 						// None => {
 						// 	println!("unknown node id: {}", &id);
 						// }

@@ -17,7 +17,7 @@ impl Node for Var {
 	fn upstreams(&self) -> Vec<NodeIndex> { vec![] }
 	fn execute(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample { self.value }
 
-	fn process_event(&mut self, event: &dyn Event) {
+	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
 		if event.event_type() != EVENT_TYPE_SET { return; }
 
 		let event = event.downcast_ref::<SetEvent>().unwrap();
