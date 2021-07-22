@@ -22,10 +22,9 @@ pub struct Sequencer {
 	context: Context,
 }
 impl Sequencer {
-	// TODO 今後 sequence は任意個になる予定
-	pub fn new(sequence: Sequence) -> Self {
+	pub fn new(sequences: Vec<Sequence>) -> Self {
 		Self {
-			sequences: vec![sequence],
+			sequences,
 			context: Context {
 				// ↓上の sequence と同時に初期化する方法がわからないのでとりあえず index で持つ
 				// sequence: self.sequence,

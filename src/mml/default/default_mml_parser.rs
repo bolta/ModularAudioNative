@@ -65,7 +65,7 @@ where
 
 #[derive(Debug, PartialEq)]
 pub struct CompilationUnit {
-	commands: Vec<Command>,
+	pub commands: Vec<Command>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -90,22 +90,22 @@ pub enum Command {
 
 #[derive(Debug, PartialEq)]
 pub struct Length {
-	elements: Vec<LengthElement>,
+	pub elements: Vec<LengthElement>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct LengthElement {
 	/// 音長を示す数値。省略の場合は None。音長 4. に対して 4、.. に対して None となる
-	number: Option<i32>,
+	pub number: Option<i32>,
 
 	/// 付点の数
-	dots: i32,
+	pub dots: i32,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ToneName {
-	base_name: ToneBaseName,
-	accidental: i32,
+	pub base_name: ToneBaseName,
+	pub accidental: i32,
 }
 
 #[derive(Debug, PartialEq)]
