@@ -1,6 +1,7 @@
 use super::ast::*;
 
 use combine::{
+	chainl1,
 	error::ParseError,
 	many,
 	many1,
@@ -130,73 +131,149 @@ where
 	let track_set_literal = || token_ss('^')
 			.with(track_set())
 			.map(|tracks: Vec<String>| Box::new(Expr::TrackSetLiteral(tracks)));
-	let identifier_expr = || find_ss(r"[a-zA-Z0-9_]+")
-			.map(|id| Expr::Identifier(id.to_string()));
+	let identifier_expr = || find_ss(re(r"[a-zA-Z0-9_]+"))
+			.map(|id: &str| Box::new(Expr::Identifier(id.to_string())));
 
 	let primary_expr = || float_literal()
-			.or(track_set_literal())
-			.or(identifier_expr());
+			// .or(track_set_literal())
+			// .or(identifier_expr())
+			;
 
-	let module_param_expr = primary_expr;
+	let module_param_expr = || primary_expr();
+
+	// // let connective_expr = binary_expr!(module_param_expr, r"\|",
+	// // 		|_op| |accum, rhs| Expr::Connect { lhs: accum, rhs });
+	// // let power_expr = binary_expr!(connective_expr, r"\^",
+	// // 		|_op| |accum, rhs| Expr::Power { lhs: accum, rhs });
+	// let mul_div_mod_expr = binary_expr!(float_literal/* power_expr */, r"[*/%]", |op| match op {
+	// 	"*" => |accum, rhs| Expr::Multiply { lhs: accum, rhs },
+	// 	"/" => |accum, rhs| Expr::Divide { lhs: accum, rhs },
+	// 	"%" => |accum, rhs| Expr::Remainder { lhs: accum, rhs },
+	// 	_ => unreachable!(),
+	// });
+	// let add_sub_expr = binary_expr!(mul_div_mod_expr, r"[+-]", |op| match op {
+	// 	"+" => |accum, rhs| Expr::Add { lhs: accum, rhs },
+	// 	"-" => |accum, rhs| Expr::Subtract { lhs: accum, rhs },
+	// 	_ => unreachable!(),
+	// });
 
 	// 関数でも書けるはずだが型を書くのが無理だったので…
+	// macro_rules! binary_expr {
+	// 	($constituent_expr: expr, $oper_regexp: expr, $make_expr: expr) => {
+	// 		||
+	// 		$constituent_expr().skip(skip_spaces())
+	// 		.and(many(
+	// 			find_ss(re($oper_regexp))
+	// 			.and($constituent_expr().skip(skip_spaces()))
+	// 		))
+	// 		.map(|(lhs, mut rhss): (Box<Expr>, Vec<(&str, Box<Expr>)>)| {
+	// 			rhss.drain(..).fold(lhs, |accum, (op, rhs)| {
+	// 				Box::new($make_expr(op)(accum, rhs))
+	// 			})
+	// 		})
+	// 	}
+	// }
 	macro_rules! binary_expr {
 		($constituent_expr: expr, $oper_regexp: expr, $make_expr: expr) => {
 			||
-			$constituent_expr().skip(skip_spaces())
-			.and(many(
-				find_ss(re($oper_regexp))
-				.and($constituent_expr().skip(skip_spaces()))
-			))
-			.map(|(lhs, mut rhss): (Box<Expr>, Vec<(&str, Box<Expr>)>)| {
-				rhss.drain(..).fold(lhs, |accum, (op, rhs)| {
-					Box::new($make_expr(op)(accum, rhs))
-				})
-			})
+			// $constituent_expr().skip(skip_spaces())
+			// .and(many(
+			// 	find_ss(re($oper_regexp))
+			// 	.and($constituent_expr().skip(skip_spaces()))
+			// ))
+			// .map(|(lhs, mut rhss): (Box<Expr>, Vec<(&str, Box<Expr>)>)| {
+			// 	rhss.drain(..).fold(lhs, |accum, (op, rhs)| {
+			// 		Box::new($make_expr(op)(accum, rhs))
+			// 	})
+			// })
+			chainl1($constituent_expr().skip(skip_spaces()),
+					find_ss(re($oper_regexp)).map(|op| move |lhs, rhs| Box::new($make_expr(lhs, op, rhs))))
 		}
 	}
-	let connective_expr = binary_expr!(module_param_expr, r"|",
-			|_op| |accum, rhs| Expr::Connect { lhs: accum, rhs });
-	let power_expr = binary_expr!(connective_expr, r"^",
-			|_op| |accum, rhs| Expr::Power { lhs: accum, rhs });
-	let mul_div_mod_expr = binary_expr!(power_expr, r"[*/%]", |op| match op {
-		"*" => |accum, rhs| Expr::Multiply { lhs: accum, rhs },
-		"/" => |accum, rhs| Expr::Divide { lhs: accum, rhs },
-		"%" => |accum, rhs| Expr::Remainder { lhs: accum, rhs },
+	// let mul_div_mod_expr = binary_expr!(module_param_expr/* power_expr */, r"[*/%]", |op| match op {
+	// 	"*" => |accum, rhs| Expr::Multiply { lhs: accum, rhs },
+	// 	"/" => |accum, rhs| Expr::Divide { lhs: accum, rhs },
+	// 	"%" => |accum, rhs| Expr::Remainder { lhs: accum, rhs },
+	// 	_ => unreachable!(),
+	// });
+	// let add_sub_expr = binary_expr!(module_param_expr/* mul_div_mod_expr */, r"[+-]", |op| match op {
+	// 	"+" => |accum, rhs| Expr::Add { lhs: accum, rhs },
+	// 	"-" => |accum, rhs| Expr::Subtract { lhs: accum, rhs },
+	// 	_ => unreachable!(),
+	// });
+	let connective_expr = binary_expr!(module_param_expr, r"\|",
+			|lhs, _op, rhs| Expr::Connect { lhs, rhs });
+	let power_expr = binary_expr!(connective_expr, r"\^",
+			|lhs, _op, rhs| Expr::Power { lhs, rhs });
+	let mul_div_mod_expr = binary_expr!(power_expr/* mul_div_mod_expr */, r"[*/%]", |lhs, op, rhs| match op {
+		"*" => Expr::Multiply { lhs, rhs },
+		"/" => Expr::Divide { lhs, rhs },
+		"%" => Expr::Remainder { lhs, rhs },
 		_ => unreachable!(),
 	});
-	let add_sub_expr = binary_expr!(mul_div_mod_expr, r"[+-]", |op| match op {
-		"+" => |accum, rhs| Expr::Add { lhs: accum, rhs },
-		"-" => |accum, rhs| Expr::Subtract { lhs: accum, rhs },
+	let add_sub_expr = binary_expr!(mul_div_mod_expr/* mul_div_mod_expr */, r"[+-]", |lhs, op, rhs| match op {
+		"+" => Expr::Add { lhs, rhs },
+		"-" => Expr::Subtract { lhs, rhs },
 		_ => unreachable!(),
 	});
-
-	// let add_sub_expr = ||
-	// 		mul_div_mod_expr().skip(skip_spaces())
-	// 		.and(many(
-	// 			find_ss(re(r"[+-]"))
-	// 			.and(mul_div_mod_expr().skip(skip_spaces()))
-	// 		))
+	// let mul_div_mod_expr = ||
+	// 		module_param_expr/* mul_div_mod_expr */().skip(skip_spaces())
+	// 		.and(many (
+	// 			find_ss(re(r"[*/%]"))
+	// 			.and(module_param_expr/* mul_div_mod_expr */().skip(skip_spaces()))
+	// 		) )
 	// 		.map(|(lhs, mut rhss): (Box<Expr>, Vec<(&str, Box<Expr>)>)| {
+	// 			// .map(|(lhs, (op, rhs)): (Box<Expr>, (&str, Box<Expr>))| {
+	// 			rhss.drain(..).fold(lhs, |accum, (op, rhs)| {
+	// 				Box::new(match op {
+	// 					"*" => Expr::Multiply { lhs: accum, rhs },
+	// 					"/" => Expr::Divide { lhs: accum, rhs },
+	// 					"%" => Expr::Remainder { lhs: accum, rhs },
+	// 					_ => unreachable!()
+	// 				})
+	// 				// Box::new(if op.eq("+") {
+	// 				// 	Expr::Add { lhs/* : accum */, rhs }
+	// 				// } else if op.eq("-") {
+	// 				// 	Expr::Subtract { lhs/* : accum */, rhs }
+	// 				// } else {
+	// 				// 	unreachable!()
+	// 				// })
+	// 			})
+	// 		});
+	// let add_sub_expr = ||
+	// 		/* module_param_expr */mul_div_mod_expr().skip(skip_spaces())
+	// 		.and(many (
+	// 			find_ss(re(r"[+-]"))
+	// 			.and(/* module_param_expr */mul_div_mod_expr().skip(skip_spaces()))
+	// 		) )
+	// 		.map(|(lhs, mut rhss): (Box<Expr>, Vec<(&str, Box<Expr>)>)| {
+	// 			// .map(|(lhs, (op, rhs)): (Box<Expr>, (&str, Box<Expr>))| {
 	// 			rhss.drain(..).fold(lhs, |accum, (op, rhs)| {
 	// 				Box::new(match op {
 	// 					"+" => Expr::Add { lhs: accum, rhs },
 	// 					"-" => Expr::Subtract { lhs: accum, rhs },
 	// 					_ => unreachable!()
 	// 				})
+	// 				// Box::new(if op.eq("+") {
+	// 				// 	Expr::Add { lhs/* : accum */, rhs }
+	// 				// } else if op.eq("-") {
+	// 				// 	Expr::Subtract { lhs/* : accum */, rhs }
+	// 				// } else {
+	// 				// 	unreachable!()
+	// 				// })
 	// 			})
 	// 		});
 
 	// let expr = || float_literal()
 	// 		.or(track_set_literal())
-	// 		// .or()
-	// 		// .or()
-	// 		// .or()
-	// 		// .or()
-	// 		// .or()
-	// 		// .or()
-	// 		; // TODO 以下続く
-	let expr = add_sub_expr();
+	// 		.or(add_sub_expr())
+			// .or()
+			// .or()
+			// .or()
+			// .or()
+			// .or()
+			// ; // TODO 以下続く
+	let expr = || add_sub_expr();
 
 	let expr_si = || expr().skip(skip_inline_spaces());
 	let expr_ss = || expr().skip(skip_spaces());
