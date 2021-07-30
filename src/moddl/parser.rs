@@ -157,8 +157,85 @@ parser![primary_expr, Box<Expr>, {
 	))
 }];
 
+// parser![connective_expr, Box<Expr>, {
+// 	map_res(separated_list1(si!(re_find(re(r"\|"))), si!(primary_expr())),
+// 			|mut args: Vec<Box<Expr>>| {
+// 				let head = args.remove(0);
+// 				let tail = args.drain(..);
+// 				ok(tail.fold(head, |l, r| Box::new(Expr::Connect { lhs: l, rhs: r })))
+// 			})
+// }];
+
+macro_rules! binary_expr {
+	($name: ident, $constituent_expr: expr, $oper_regexp: expr, $make_expr: expr) => {
+		parser![$name, Box<Expr>, {
+			// map_res(
+			// 	tuple((
+			// 		si!($constituent_expr()),
+			// 		opt(many1(tuple((
+			// 			si!(re_find(re($oper_regexp))),
+			// 			si!($constituent_expr()),
+			// 		))))
+			// 	)),
+			// 	move |(head, tail)| {
+			// 		ok(match tail {
+			// 			None => head,
+			// 			Some(mut tail) => {
+			// 				tail.drain(..).fold(head, |l, (op, r)| Box::new($make_expr(l, op, r)))
+			// 			}
+			// 		})
+			// 	}
+			// )
+
+			// ここもポイントフリーで書くととんでもない型が生成されるらしくコンパイルできなくなる
+			// 	error: reached the type-length limit while instantiating `std::intrinsics::drop_in_place::..., nom::error::Error<&str>>}]]]
+			// ))`
+			// --> C:\Users\fresh_000\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\src\libcore\ptr\mod.rs:184:
+			// 1
+			// 	|
+			// 184 | / pub unsafe fn drop_in_place<T: ?Sized>(to_drop: *mut T) {
+			// 185 | |     // Code here does not matter - this is replaced by the
+			// 186 | |     // real drop glue by the compiler.
+			// 187 | |     drop_in_place(to_drop)
+			// 188 | | }
+			// 	| |_^
+			// 	|
+			// 	= note: consider adding a `#![type_length_limit="1024860143"]` attribute to your crate
+
+			|input| {
+				let (input, head) = si!($constituent_expr())(input) ?;
+				let (input, tail) = opt(many1(tuple((
+					si!(re_find(re($oper_regexp))),
+					si!($constituent_expr()),
+				))))(input) ?;
+				let result = match tail {
+					None => head,
+					Some(mut tail) => {
+						tail.drain(..).fold(head, |l, (op, r)| Box::new($make_expr(l, op, r)))
+					}
+				};
+				Ok((input, result))
+			}
+		}];
+	}
+}
+binary_expr![connective_expr, primary_expr, r"[\|]", |lhs, _op, rhs| Expr::Connect { lhs, rhs }];
+// TODO ↓これだと左結合になってしまう
+binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| Expr::Power { lhs, rhs }];
+binary_expr![mul_div_mod_expr, power_expr, r"[*/%]", |lhs, op, rhs| match op {
+	"*" => Expr::Multiply { lhs, rhs },
+	"/" => Expr::Divide { lhs, rhs },
+	"%" => Expr::Remainder { lhs, rhs },
+	_ => unreachable!(),
+}];
+binary_expr![add_sub_expr, mul_div_mod_expr, r"[+-]", |lhs, op, rhs| match op {
+	"+" => Expr::Add { lhs, rhs },
+	"-" => Expr::Subtract { lhs, rhs },
+	_ => unreachable!(),
+}];
+
 parser![expr, Box<Expr>, {
-	primary_expr()
+	add_sub_expr()
 }];
 
 // TODO いちいち Ok::<_, ()>(...) を書きたくないので吸収するユーティリティを書きたい↑
@@ -192,6 +269,8 @@ fn test_directive_statement() {
 	assert!(directive_statement()("@tempo 120,240\n").is_ok());
 	assert!(directive_statement()("@ tempo\t120 , 240   \n").is_ok());
 	assert!(directive_statement()("@tempo 120, (240)\n").is_ok());
+	assert!(directive_statement()("@tempo 2 | 3 | 4\n").is_ok());
+	assert!(directive_statement()("@tempo 2 + 3 - 4\n").is_ok());
 
 	assert!(directive_statement()("@tempo,120\n").is_err());
 	assert!(directive_statement()("@tempo 120 240\n").is_err());
