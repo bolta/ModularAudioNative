@@ -1,5 +1,5 @@
 extern crate combine;
-extern crate combine_proc_macro;
+// extern crate combine_proc_macro;
 
 // use combine::Parser;
 // use combine::parser::char::char;

@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 combine = { version = "^4.5.1", features = ["regex"] }
-combine-proc-macro = "*"
+nom = { version = "*", features = ["regexp"] }
 mopa = "*"
 portaudio = "*"
 regex = "^1"

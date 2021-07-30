@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod core;
 mod mml;
 mod moddl;
@@ -26,11 +28,14 @@ use crate::seq::{
 };
 
 use crate::mml::default::{
-	default_mml_parser::*,
+	// default_mml_parser::*,
 	sequence_generator::*,
 };
 
-use combine::Parser;
+// use combine::Parser;
+
+extern crate nom;
+
 
 // fn main() {
 // 	let mut machine = Machine::new();
@@ -58,19 +63,29 @@ use combine::Parser;
 // }
 
 
+// fn main() {
+// 	let result = moddl::parser::compilation_unit().parse(
+// r"@tempo 120 * 2, 222
+
+// ");
+
+// 	match result {
+// 		Ok((moddl::ast::CompilationUnit { statements }, s)) => {
+// 			println!("{:?}", statements);
+// 			println!("{:?}", s);
+// 		}
+// 		Err(e) => {
+// 			println!("error: {:?}", e);
+// 		}
+// 	}
+// }
+
+use crate::moddl::parser::*;
 fn main() {
-	let result = moddl::parser::compilation_unit().parse(
-r"@tempo 120 * 2, 222
-
-");
-
-	match result {
-		Ok((moddl::ast::CompilationUnit { statements }, s)) => {
-			println!("{:?}", statements);
-			println!("{:?}", s);
-		}
-		Err(e) => {
-			println!("error: {:?}", e);
-		}
-	}
+	// println!("{:?}", hello_parser("hello"));
+	// println!("{:?}", hello_parser("hello world"));
+	// println!("{:?}", hello_parser("goodbye hello again"));
+// 	println!("{:?}", real()("3.14"));
+// 	println!("{:?}", real()("3.14cm"));
+// 	println!("{:?}", real()("***3.14"));
 }
