@@ -109,7 +109,11 @@ fn test_float() {
 fn ok<T>(value: T) -> Result<T, ()> { Ok::<_, ()>(value) }
 
 parser![statement_ending, (), {
-	map_res(alt((line_ending, eof)), |_| Ok::<_, ()>(()))
+	map_res(
+			// 空行を無視するよう ss! をかます。
+			// 先頭の空行は compilation_unit で対応
+			ss!(alt((line_ending, eof))),
+			|_| Ok::<_, ()>(()))
 }];
 parser![identifier, &str, {
 	re_find(re(r"[a-zA-Z0-9_][a-zA-Z0-9_]*"))
@@ -220,13 +224,44 @@ parser![directive_statement, Statement, {
 				opt(separated_list0(si!(char(',')), si!(expr()))),
 				statement_ending(),
 			)),
-			|(_, name, args, _)| Ok::<_, ()>(Statement::Directive {
+			|(_, name, args, _)| ok(Statement::Directive {
 				name: name.to_string(),
 				args: vec![],
 			}))
 }];
+parser![mml_statement, Statement, {
+	map_res(
+			tuple((
+				si!(track_set()),
+				terminated(
+					si!(re_find(re(r"[^\r\n]*"))),
+					statement_ending(),
+				),
+			)),
+			|(tracks, mml)| ok(Statement::Mml {
+				tracks,
+				mml: mml.to_string(),
+			}))
+}];
+parser![statement, Statement, {
+	alt((
+		directive_statement(),
+		mml_statement(),
+	))
+}];
 
+// TODO コメントに対応
+parser![compilation_unit, CompilationUnit, {
+	map_res(
+			all_consuming(
+					preceded(
+						multispace0,
+						many0(statement()),
+					)),
+			|statements| ok(CompilationUnit { statements }))
+}];
 
+// TODO ちゃんとテストする
 #[cfg(test)]
 #[test]
 fn test_directive_statement() {
@@ -248,6 +283,33 @@ fn test_directive_statement() {
 	assert!(directive_statement()("@tempo,120\n").is_err());
 	assert!(directive_statement()("@tempo 120 240\n").is_err());
 }
+// TODO ちゃんとテストする
+#[cfg(test)]
+#[test]
+fn test_mml_statement() {
+	assert!(mml_statement()("abc o4l8v15 cde").is_ok());
+	assert!(mml_statement()("abc").is_ok());
+	assert!(mml_statement()("abc cde\r\n").is_ok());
+}
+
+// TODO ちゃんとテストする
+#[cfg(test)]
+#[test]
+fn test_compilation_unit() {
+	let moddl = r"
+
+@tempo 80
+
+@instrument ^ab, exponentialDecayPulseWave
+		@instrument ^c, nesTriangle
+
+abc o4l8v15 cde
+
+";
+	assert!(compilation_unit()(moddl).is_ok());
+	
+}
+
 // parser![statement, Statement, {
 // 	alt(
 // 			directive_statement(),
