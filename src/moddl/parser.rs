@@ -157,36 +157,9 @@ parser![primary_expr, Box<Expr>, {
 	))
 }];
 
-// parser![connective_expr, Box<Expr>, {
-// 	map_res(separated_list1(si!(re_find(re(r"\|"))), si!(primary_expr())),
-// 			|mut args: Vec<Box<Expr>>| {
-// 				let head = args.remove(0);
-// 				let tail = args.drain(..);
-// 				ok(tail.fold(head, |l, r| Box::new(Expr::Connect { lhs: l, rhs: r })))
-// 			})
-// }];
-
 macro_rules! binary_expr {
 	($name: ident, $constituent_expr: expr, $oper_regexp: expr, $make_expr: expr) => {
 		parser![$name, Box<Expr>, {
-			// map_res(
-			// 	tuple((
-			// 		si!($constituent_expr()),
-			// 		opt(many1(tuple((
-			// 			si!(re_find(re($oper_regexp))),
-			// 			si!($constituent_expr()),
-			// 		))))
-			// 	)),
-			// 	move |(head, tail)| {
-			// 		ok(match tail {
-			// 			None => head,
-			// 			Some(mut tail) => {
-			// 				tail.drain(..).fold(head, |l, (op, r)| Box::new($make_expr(l, op, r)))
-			// 			}
-			// 		})
-			// 	}
-			// )
-
 			// ここもポイントフリーで書くととんでもない型が生成されるらしくコンパイルできなくなる
 			// 	error: reached the type-length limit while instantiating `std::intrinsics::drop_in_place::..., nom::error::Error<&str>>}]]]
 			// ))`
