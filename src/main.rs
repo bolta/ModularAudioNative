@@ -32,6 +32,7 @@ use crate::mml::default::{
 	sequence_generator::*,
 };
 
+use crate::moddl::player::*;
 // use combine::Parser;
 
 extern crate nom;
@@ -80,7 +81,7 @@ extern crate nom;
 // 	}
 // }
 
-use crate::moddl::parser::*;
+// use crate::moddl::parser::*;
 fn main() {
 	// println!("{:?}", hello_parser("hello"));
 	// println!("{:?}", hello_parser("hello world"));
@@ -88,4 +89,13 @@ fn main() {
 // 	println!("{:?}", real()("3.14"));
 // 	println!("{:?}", real()("3.14cm"));
 // 	println!("{:?}", real()("***3.14"));
+	play(
+r"
+@tempo 104
+
+a o5l16 eerercergr8.<gr8.
+b o4l16 f+f+rf+rf+f+rbr8.<gr8.
+c o3l16 ddrdrddrgr8.r4
+");
+
 }

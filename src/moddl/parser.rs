@@ -226,7 +226,7 @@ parser![directive_statement, Statement, {
 			)),
 			|(_, name, args, _)| ok(Statement::Directive {
 				name: name.to_string(),
-				args: vec![],
+				args: args.unwrap_or_else(|| vec![]).drain(..).map(|x| *x).collect(),
 			}))
 }];
 parser![mml_statement, Statement, {
@@ -251,7 +251,7 @@ parser![statement, Statement, {
 }];
 
 // TODO コメントに対応
-parser![compilation_unit, CompilationUnit, {
+pub_parser![compilation_unit, CompilationUnit, {
 	map_res(
 			all_consuming(
 					preceded(

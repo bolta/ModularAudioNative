@@ -14,7 +14,12 @@ use crate::{
 	},
 };
 
-pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_per_beat: i32) -> Vec<Sequence> {
+pub struct TagSet {
+	pub freq: String,
+	pub note: String,
+}
+
+pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_per_beat: i32, tag_set: &TagSet) -> Vec<Sequence> {
 	let ticks_per_bar = 4 * ticks_per_beat;
 
 	let mut state = MmlState::init();
@@ -35,11 +40,11 @@ pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_
 				// TODO 本当は temperament を挟む
 				let freq = calc_freq_from_tone(state.octave, tone_name);
 				
-				// TODO タグは外から与えたいかも
-				result.push(Instruction::Value { tag: "freq".to_string(), value: freq });
-				result.push(Instruction::Note { tag: "note".to_string(), note_on: true });
+				// TODO タグは intern したい
+				result.push(Instruction::Value { tag: tag_set.freq.clone(), value: freq });
+				result.push(Instruction::Note { tag: tag_set.note.clone(), note_on: true });
 				result.push(Instruction::Wait(gate_ticks));
-				result.push(Instruction::Note { tag: "note".to_string(), note_on: false });
+				result.push(Instruction::Note { tag: tag_set.note.clone(), note_on: false });
 				if step_ticks - gate_ticks > 0 {
 					result.push(Instruction::Wait(step_ticks - gate_ticks));
 				}
