@@ -9,7 +9,7 @@ use crate::core::{
 
 use portaudio as pa;
 
-const FRAMES: u32 = 256;
+const FRAMES: u32 = 1000;
 const INTERLEAVED: bool = true;
 
 pub struct PortAudioOut {
