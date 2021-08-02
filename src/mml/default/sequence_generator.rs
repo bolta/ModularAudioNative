@@ -19,6 +19,9 @@ pub struct TagSet {
 	pub note: String,
 }
 
+// TODO 将来はディレクティブで設定できるように
+const MAX_GATE_RATE: f32 = 8f32;
+
 pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_per_beat: i32, tag_set: &TagSet) -> Vec<Sequence> {
 	let ticks_per_bar = 4 * ticks_per_beat;
 
@@ -31,10 +34,10 @@ pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_
 			Command::OctaveIncr => { state.octave += 1; }
 			Command::OctaveDecr => { state.octave -= 1; }
 			Command::Length(val) => { state.length = *val; }
-			Command::GateRate(val) => { state.gate_rate = *val; }
+			Command::GateRate(val) => { state.gate_rate = val.max(0f32).min(MAX_GATE_RATE); }
 			Command::Tone { tone_name, length, slur } => {
 				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, state.length);
-				let gate_ticks = (step_ticks as f32 * state.gate_rate) as i32;
+				let gate_ticks = (step_ticks as f32 * state.gate_rate / MAX_GATE_RATE) as i32;
 
 
 				// TODO 本当は temperament を挟む
@@ -119,7 +122,7 @@ impl MmlState {
 			octave: 4,
 			length: 4,
 			slur: false,
-			gate_rate: 1f32,
+			gate_rate: MAX_GATE_RATE,
 		}
 	}
 }

@@ -93,9 +93,14 @@ fn main() {
 r"
 @tempo 104
 
-a o5l16 eerercergr8.<gr8.
-b o4l16 f+f+rf+rf+f+rbr8.<gr8.
-c o3l16 ddrdrddrgr8.r4
+a o5l16q7 r96
+b o4l16q7 r96
+c o3l16q7 
+
+a eerercergr8.<gr8.
+b f+f+rf+rf+f+rbr8.<gr8.
+c ddrdrddrgr8.r4
+
 ");
 
 }
