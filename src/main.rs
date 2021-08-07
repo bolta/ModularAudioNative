@@ -92,6 +92,9 @@ fn main() {
 	play(
 r"
 @tempo 144
+@instrument ^ab, sineOsc * env1
+@instrument ^c, sineOsc
+
 
 a	o4l4q8
 b	o3l4q8

@@ -12,6 +12,7 @@ node::*,
 // TODO 別の場所に移す
 use crate::node::{
 	arith::*,
+	env::*,
 	osc::*,
 };
 
@@ -52,6 +53,10 @@ pub fn create_limit(args: &NamedArgs, piped_upstreams: &Vec<NodeIndex>) -> Box<d
 	let max = args.get("max").unwrap().as_node().unwrap();
 
 	Box::new(Limit::new(signal, min, max))
+}
+
+pub fn create_env1(_args: &NamedArgs, _piped_upstreams: &Vec<NodeIndex>) -> Box<dyn Node> {
+	Box::new(ExpEnv::new(0.125f32))
 }
 
 // pub fn foo() {

@@ -131,9 +131,9 @@ parser![track_set_literal, Box<Expr>, {
 	map_res(preceded(si!(char('^')), track_set()),
 			|tracks| { ok(Box::new(Expr::TrackSetLiteral(tracks))) })
 }];
-parser![identifier_literal, Box<Expr>, {
+parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
-			|id| { ok(Box::new(Expr::IdentifierLiteral(id.to_string()))) })
+			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
 }];
 parser![parenthesized_expr, Box<Expr>, {
 	// preceded(si!(char('(')),
@@ -156,7 +156,7 @@ parser![primary_expr, Box<Expr>, {
 	alt((
 		float_literal(),
 		track_set_literal(),
-		identifier_literal(),
+		identifier_expr(),
 		parenthesized_expr(),
 	))
 }];

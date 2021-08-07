@@ -43,23 +43,33 @@ use combine::Parser;
 
 const TAG_SEQUENCER: &str = "seq";
 
+// struct Track<'a> {
+// 	instrument: &'a Expr,
+// 	mml: String,
+// };
+
 pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 	// TODO パーズエラーをちゃんと処理
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl).unwrap();
 
 	let mut tempo = 120f32;
 	let ticks_per_beat = 96; // TODO 外から渡せるように
+	// トラックごとの instrument を保持
+	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
+	let mut instruments = HashMap::<String, &Expr>::new();
 	// トラックごとの MML を蓄積
 	let mut mmls = BTreeMap::<String, String>::new();
 
-	for stmt in statements { process_statement(&stmt, &mut tempo, &mut mmls)}
+	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) }
 	
 	let mut nodes = NodeHost::new();
 	let tick = nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = Vec::<NodeIndex>::new();
-	for (track, mml) in mmls {
-		build_nodes_by_mml(track.as_str(), mml.as_str(), &mut nodes, &mut output_nodes);
+	for (track, mml) in &mmls {
+		// TODO instrument 未定義はエラー
+		let instrm = instruments.get(track).unwrap();
+		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), &mut nodes, &mut output_nodes);
 	}
 
 	let mut context = Context::new(44100, 1); // TODO 値を外から渡せるように
@@ -73,7 +83,12 @@ pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 	Machine::new().play(&mut context, &mut nodes);
 }
 
-fn process_statement(stmt: &Statement, tempo: &mut f32, mmls: &mut BTreeMap<String, String>) {
+fn process_statement<'a>(
+	stmt: &'a Statement,
+	tempo: &mut f32,
+	instruments: &mut HashMap<String, &'a Expr>,
+	mmls: &mut BTreeMap<String, String>,
+) {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
@@ -81,6 +96,15 @@ fn process_statement(stmt: &Statement, tempo: &mut f32, mmls: &mut BTreeMap<Stri
 					// TODO ちゃんとエラー処理
 					*tempo = evaluate_arg(&args, 0).as_float().unwrap();
 				},
+				"instrument" => {
+					// TODO ちゃんとエラー処理
+					let tracks = evaluate_arg(&args, 0).as_track_set().unwrap();
+					let instrm = & args[1];
+					for track in tracks {
+						// TODO すでに入っていたらエラー
+						instruments.insert(track, instrm);
+					}
+				}
 				other => {
 					println!("unknown directive: {}", other);
 				}
@@ -103,7 +127,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize) -> Value {
 	evaluate(&args[index])
 }
 
-fn build_nodes_by_mml(track: &str, mml: &str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>) {
+fn build_nodes_by_mml(track: &str, instrm_def: &Expr, mml: &str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>) {
 	// TODO ちゃんとエラー処理
 	let ast = default_mml_parser::compilation_unit().parse(mml).unwrap().0;
 
@@ -116,22 +140,60 @@ fn build_nodes_by_mml(track: &str, mml: &str, nodes: &mut NodeHost, output_nodes
 
 	let freq = nodes.add_with_tag(track.to_string(), Box::new(Var::new(0f32)));
 
-	// TODO instrument ディレクティブから生成
-	let instrm = {
-		// トラックに属する node は全てトラック名のタグをつける
-		let sin = create_sine_osc(& HashMap::<String, Value>::new(), & vec![freq]);
-		let osc = nodes.add_with_tag(track.to_string(), sin);
-		let min = nodes.add_with_tag(track.to_string(), Box::new(Constant::new(0f32)));
-		let max = nodes.add_with_tag(track.to_string(), Box::new(Constant::new(1f32)));
-		let limited = {
-			let mut args = HashMap::<String, Value>::new();
-			args.insert("min".to_string(), Value::Node(min));
-			args.insert("max".to_string(), Value::Node(max));
-			nodes.add_with_tag(track.to_string(), create_limit(&args, &vec![osc]))
-		};
-		let env = nodes.add_with_tag(track.to_string(), Box::new(ExpEnv::new(0.125f32)));
-		nodes.add_with_tag(track.to_string(), Box::new(Mul::new(vec![/* osc */limited, env])))
-	};
-
+	let instrm = build_instrument(track, instrm_def, nodes, freq);
 	output_nodes.push(instrm);
 }
+
+fn build_instrument(track: &str, instrm_def: &Expr, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
+
+	// let mut instrm: Option<NodeIndex> = None;
+	fn visit_expr(track: &str, expr: &Expr, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
+		let mut recurse = |x| visit_expr(track, x, nodes, freq);
+		let factories = node_factories();
+		let new_node = match expr {
+			Expr::Connect { lhs, rhs } => {
+				let l_res = recurse(lhs);
+				
+				let r_val = evaluate(rhs);
+				// TODO 右辺がただの識別子であることのみ想定している。引数つきも要対応
+				let fact_name = r_val.as_identifier().unwrap();
+				// TODO エラー処理
+				let fact = factories.get(fact_name.as_str()).unwrap();
+				let args = HashMap::<String, Value>::new();
+				fact(&args, &vec![l_res])
+			},
+			Expr::Add { lhs, rhs } => Box::new(Add::new(vec![recurse(lhs), recurse(rhs)])),
+			Expr::Multiply { lhs, rhs } => Box::new(Mul::new(vec![recurse(lhs), recurse(rhs)])),
+			// TODO and more binary opers
+			Expr::Identifier(id) => {
+				// 現在、名前は全て factory の名前だが、一般的な変数定義も実装するとこの辺は変わる
+				// TODO エラー処理
+				let fact = factories.get(id.as_str()).unwrap();
+				let args = HashMap::<String, Value>::new();
+				// Connect の rhs である場合は Connect の中で対応済み。
+				// それ以外のケースでは freq の供給が必要
+				fact(&args, &vec![freq])
+			},
+			_ => unimplemented!(),
+		};
+
+		// トラックに属する node は全てトラック名のタグをつける
+		nodes.add_with_tag(track.to_string(), new_node)
+	};
+	visit_expr(track, instrm_def, nodes, freq)
+}
+
+fn node_factories() -> HashMap<String, Box<NodeFactory>> {
+	let mut result = HashMap::<String, Box<NodeFactory>>::new();
+	macro_rules! add {
+		($name: expr, $fact: expr) => {
+			result.insert($name.to_string(), Box::new($fact));
+		}
+	};
+	add!("sineOsc", create_sine_osc);
+	add!("limit", create_limit);
+	add!("env1", create_env1);
+
+	result
+}
+
