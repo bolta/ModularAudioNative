@@ -1,6 +1,7 @@
 use super::{
 	ast::*,
 	evaluator::*,
+	node_factory::*,
 	parser::*,
 	value::*,
 };
@@ -33,6 +34,7 @@ use crate::{
 
 use std::{
 	collections::btree_map::BTreeMap,
+	collections::hash_map::HashMap,
 };
 
 use combine::Parser;
@@ -117,9 +119,18 @@ fn build_nodes_by_mml(track: &str, mml: &str, nodes: &mut NodeHost, output_nodes
 	// TODO instrument ディレクティブから生成
 	let instrm = {
 		// トラックに属する node は全てトラック名のタグをつける
-		let osc = nodes.add_with_tag(track.to_string(), Box::new(SineOsc::new(freq)));
+		let sin = create_sine_osc(& HashMap::<String, Value>::new(), & vec![freq]);
+		let osc = nodes.add_with_tag(track.to_string(), sin);
+		let min = nodes.add_with_tag(track.to_string(), Box::new(Constant::new(0f32)));
+		let max = nodes.add_with_tag(track.to_string(), Box::new(Constant::new(1f32)));
+		let limited = {
+			let mut args = HashMap::<String, Value>::new();
+			args.insert("min".to_string(), Value::Node(min));
+			args.insert("max".to_string(), Value::Node(max));
+			nodes.add_with_tag(track.to_string(), create_limit(&args, &vec![osc]))
+		};
 		let env = nodes.add_with_tag(track.to_string(), Box::new(ExpEnv::new(0.125f32)));
-		nodes.add_with_tag(track.to_string(), Box::new(Mul::new(vec![osc, env])))
+		nodes.add_with_tag(track.to_string(), Box::new(Mul::new(vec![/* osc */limited, env])))
 	};
 
 	output_nodes.push(instrm);

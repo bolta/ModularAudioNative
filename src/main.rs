@@ -91,15 +91,15 @@ fn main() {
 // 	println!("{:?}", real()("***3.14"));
 	play(
 r"
-@tempo 104
+@tempo 144
 
-a o5l16q7 r96
-b o4l16q7 r96
-c o3l16q7 
+a	o4l4q8
+b	o3l4q8
+c	o3l2q8
 
-a eerercergr8.<gr8.
-b f+f+rf+rf+f+rbr8.<gr8.
-c ddrdrddrgr8.r4
+a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ g+2f+2<
+b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2<
+c	ed+ c+<b aa+ b1> ag+ f+f f+e d+<b>
 
 ");
 
