@@ -196,7 +196,60 @@ macro_rules! binary_expr {
 		}];
 	}
 }
-binary_expr![connective_expr, primary_expr, r"[\|]", |lhs, _op, rhs| Expr::Connect { lhs, rhs }];
+
+parser![named_entry, (String, Box<Expr>), {
+	map_res(
+		tuple((
+			terminated(
+				ss!(identifier()),
+				ss!(char(':')),
+			),
+			ss!(expr()),
+		)),
+		|(id, expr)| ok((id.to_string(), expr))
+	)
+}];
+
+parser![assoc_array_literal, Box<Expr>, {
+	map_res(
+			// 連想配列の中は改行を許す（これだけだと式の中で改行できないので不完全だが…）
+			preceded(
+				ss!(char('{')),
+				terminated(
+					separated_list0(ss!(char(',')), ss!(named_entry())),
+					tuple((
+						opt(ss!(char(','))),
+						si!(char('}')),
+					))
+				)
+			),
+			|entries| ok(Box::new(Expr::AssocArrayLiteral(entries)))
+	)
+}];
+
+parser![node_with_args_expr, Box<Expr>, {
+	map_res(
+			tuple((
+				si!(primary_expr()),
+				opt(si!(assoc_array_literal())),
+			)),
+			|(x, assoc)| ok(match assoc {
+				None => x,
+				Some(assoc) => {
+					let args = match *assoc {
+						Expr::AssocArrayLiteral(args) => args,
+						_ => unreachable!(),
+					};
+					Box::new(Expr::NodeWithArgs {
+						node_def: x,
+						label: "".to_string(), // 未使用
+						args
+					})
+				},
+			}))
+}];
+
+binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| Expr::Connect { lhs, rhs }];
 // TODO ↓これだと左結合になってしまう
 binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| Expr::Power { lhs, rhs }];
 binary_expr![mul_div_mod_expr, power_expr, r"[*/%]", |lhs, op, rhs| match op {
@@ -212,7 +265,12 @@ binary_expr![add_sub_expr, mul_div_mod_expr, r"[+-]", |lhs, op, rhs| match op {
 }];
 
 parser![expr, Box<Expr>, {
-	add_sub_expr()
+	// 効果ない？
+	|input| {
+		let (input, result) = add_sub_expr()(input)?;
+
+		Ok((input, result))
+	}
 }];
 
 // TODO いちいち Ok::<_, ()>(...) を書きたくないので吸収するユーティリティを書きたい↑

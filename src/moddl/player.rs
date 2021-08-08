@@ -10,6 +10,7 @@ use crate::{
 		common::*,
 		context::*,
 		machine::*,
+		node::*,
 		node_host::*,
 		event::*
 	},
@@ -56,7 +57,8 @@ pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 	let ticks_per_beat = 96; // TODO 外から渡せるように
 	// トラックごとの instrument を保持
 	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
-	let mut instruments = HashMap::<String, &Expr>::new();
+	// let mut instruments = HashMap::<String, &Expr>::new();
+	let mut instruments = HashMap::<String, NodeStructure>::new();
 	// トラックごとの MML を蓄積
 	let mut mmls = BTreeMap::<String, String>::new();
 
@@ -86,7 +88,8 @@ pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 fn process_statement<'a>(
 	stmt: &'a Statement,
 	tempo: &mut f32,
-	instruments: &mut HashMap<String, &'a Expr>,
+	// instruments: &mut HashMap<String, &'a Expr>,
+	instruments: &mut HashMap<String, NodeStructure>,
 	mmls: &mut BTreeMap<String, String>,
 ) {
 	match stmt {
@@ -99,8 +102,9 @@ fn process_statement<'a>(
 				"instrument" => {
 					// TODO ちゃんとエラー処理
 					let tracks = evaluate_arg(&args, 0).as_track_set().unwrap();
-					let instrm = & args[1];
+					// let instrm = & args[1];
 					for track in tracks {
+						let instrm = evaluate_arg(&args, 1).as_node_structure().unwrap();
 						// TODO すでに入っていたらエラー
 						instruments.insert(track, instrm);
 					}
@@ -127,8 +131,8 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize) -> Value {
 	evaluate(&args[index])
 }
 
-fn build_nodes_by_mml(track: &str, instrm_def: &Expr, mml: &str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>) {
-	// TODO ちゃんとエラー処理
+fn build_nodes_by_mml(track: &str, instrm_def: &NodeStructure, mml: &str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>) {
+		// TODO ちゃんとエラー処理
 	let ast = default_mml_parser::compilation_unit().parse(mml).unwrap().0;
 
 	let tag_set = TagSet {
@@ -144,43 +148,76 @@ fn build_nodes_by_mml(track: &str, instrm_def: &Expr, mml: &str, nodes: &mut Nod
 	output_nodes.push(instrm);
 }
 
-fn build_instrument(track: &str, instrm_def: &Expr, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
-
-	// let mut instrm: Option<NodeIndex> = None;
-	fn visit_expr(track: &str, expr: &Expr, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
-		let mut recurse = |x| visit_expr(track, x, nodes, freq);
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: NodeIndex) -> NodeIndex {
+		// 関数にするとライフタイム関係？のエラーが取れなかったので…
+		macro_rules! recurse {
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input) }
+		}
+		// 関数にすると（同上）
+		macro_rules! add_node {
+			// トラックに属する node は全てトラック名のタグをつける
+			($new_node: expr) => { nodes.add_with_tag(track.to_string(), $new_node); }
+		}
 		let factories = node_factories();
-		let new_node = match expr {
-			Expr::Connect { lhs, rhs } => {
-				let l_res = recurse(lhs);
-				
-				let r_val = evaluate(rhs);
-				// TODO 右辺がただの識別子であることのみ想定している。引数つきも要対応
-				let fact_name = r_val.as_identifier().unwrap();
-				// TODO エラー処理
-				let fact = factories.get(fact_name.as_str()).unwrap();
-				let args = HashMap::<String, Value>::new();
-				fact(&args, &vec![l_res])
-			},
-			Expr::Add { lhs, rhs } => Box::new(Add::new(vec![recurse(lhs), recurse(rhs)])),
-			Expr::Multiply { lhs, rhs } => Box::new(Mul::new(vec![recurse(lhs), recurse(rhs)])),
-			// TODO and more binary opers
-			Expr::Identifier(id) => {
-				// 現在、名前は全て factory の名前だが、一般的な変数定義も実装するとこの辺は変わる
-				// TODO エラー処理
-				let fact = factories.get(id.as_str()).unwrap();
-				let args = HashMap::<String, Value>::new();
-				// Connect の rhs である場合は Connect の中で対応済み。
-				// それ以外のケースでは freq の供給が必要
-				fact(&args, &vec![freq])
-			},
-			_ => unimplemented!(),
-		};
 
-		// トラックに属する node は全てトラック名のタグをつける
-		nodes.add_with_tag(track.to_string(), new_node)
-	};
-	visit_expr(track, instrm_def, nodes, freq)
+		match strukt {
+			NodeStructure::Connect(lhs, rhs) => {
+				let l_node = recurse!(lhs, input);
+				recurse!(rhs, l_node)
+			},
+			// NodeStructure::Power(lhs, rhs) => {
+			// 	let l_node = recurse(lhs, input);
+			// 	let r_node = recurse(rhs, input);
+			// 	Box::new(Power::new()
+			// },
+			NodeStructure::Multiply(lhs, rhs) => {
+				let l_node = recurse!(lhs, input);
+				let r_node = recurse!(rhs, input);
+				add_node!(Box::new(Mul::new(vec![l_node, r_node])))
+			},
+			// NodeStructure::Divide(lhs, rhs) => ,
+			// NodeStructure::Remainder(lhs, rhs) => ,
+			// NodeStructure::Add(lhs, rhs) => ,
+			// NodeStructure::Subtract(lhs, rhs) => ,
+			NodeStructure::Identifier(id) => {
+				// id は今のところ引数なしのノード生成しかない
+				// TODO エラー処理
+				let fact = factories.get(id).unwrap();
+				add_node!(fact.create_node(&ValueArgs::new(), &NodeArgs::new(), &vec![input]))
+			},
+			// NodeStructure::Lambda => ,
+			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
+				// 引数ありのノード生成
+				// 今のところ factory は id で直に指定するしかなく、id は factory の名前しかない
+				let fact_id = match &**factory {
+					NodeStructure::Identifier(id) => id,
+					_ => unreachable!(),
+				};
+				// TODO エラー処理
+				let fact = factories.get(fact_id).unwrap();
+				let node_names = fact.node_args();
+				let node_args: NodeArgs = node_names.iter().map(|name| {
+					let arg_node = {
+						// TODO エラー処理
+						let arg_val = & args.iter().find(|(n, _)| *n == *name ).unwrap().1;
+						let st = arg_val.as_node_structure().unwrap();
+						recurse!(&st, input)
+					};
+
+					(name.clone(), arg_node)
+				}).collect();
+				let value_args: ValueArgs = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+
+				add_node!(fact.create_node(&value_args, &node_args, &vec![input]))
+			},
+			NodeStructure::Constant(value) => add_node!(Box::new(Constant::new(*value))),
+
+			_ => unimplemented!(),
+		}
+	}
+
+	visit_struct(track, instrm_def, nodes, freq)
 }
 
 fn node_factories() -> HashMap<String, Box<NodeFactory>> {
@@ -190,9 +227,10 @@ fn node_factories() -> HashMap<String, Box<NodeFactory>> {
 			result.insert($name.to_string(), Box::new($fact));
 		}
 	};
-	add!("sineOsc", create_sine_osc);
-	add!("limit", create_limit);
-	add!("env1", create_env1);
+	add!("sineOsc", SineOscFactory { });
+	add!("limit", LimitFactory { });
+	add!("env1", Env1Factory { });
+	// add!("expEnv", create_exp_env);
 
 	result
 }

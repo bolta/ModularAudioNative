@@ -22,7 +22,7 @@ pub enum Expr {
 	Subtract { lhs: Box<Expr>, rhs: Box<Expr> },
 	Identifier(String),
 	Lambda { input_param: String, body: Box<Expr> },
-	ModuleParamExpr { module_def: Box<Expr>, label: String, ctor_params: AssocArray, signal_params: AssocArray },
+	NodeWithArgs { node_def: Box<Expr>, label: String, args: AssocArray /* ctor_params: AssocArray, signal_params: AssocArray */ },
 
 	FloatLiteral(f32),
 	TrackSetLiteral(Vec<String>),

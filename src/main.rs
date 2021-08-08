@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![type_length_limit="106079600"]
 
 mod core;
 mod mml;

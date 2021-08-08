@@ -1,13 +1,39 @@
+use super::node_factory::*;
+
 use crate::{
-	core::common::*,
+	core::{common::*, node::*, node_host::*},
+	node::prim::*,
 };
 
+/// 生成すべき Node の構造を表現する型。
+/// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
+#[derive(Clone)]
+pub enum NodeStructure {
+	Connect(Box<NodeStructure>, Box<NodeStructure>),
+	Power(Box<NodeStructure>, Box<NodeStructure>),
+	Multiply(Box<NodeStructure>, Box<NodeStructure>),
+	Divide(Box<NodeStructure>, Box<NodeStructure>),
+	Remainder(Box<NodeStructure>, Box<NodeStructure>),
+	Add(Box<NodeStructure>, Box<NodeStructure>),
+	Subtract(Box<NodeStructure>, Box<NodeStructure>),
+	Identifier(String),
+	// Lambda,
+	NodeWithArgs {
+		factory: Box<NodeStructure>,
+		label: String,
+		args: Vec<(String, Value)>,
+	},
+	Constant(f32),
+}
+
+#[derive(Clone)]
 pub enum Value {
 	Float(f32),
 	TrackSet(Vec<String>),
-	/// IdentifierLiteral（`foo`）の評価結果としての値
+	/// Identifier（foo）の評価結果としての値（IdentifierLiteral は `foo` の結果）
 	Identifier(String),
-	Node(NodeIndex),
+	// Node(NodeIndex),
+	NodeStructure(NodeStructure),
 }
 
 impl Value {
@@ -29,10 +55,18 @@ impl Value {
 			_ => None,
 		}
 	}
-	pub fn as_node(&self) -> Option<NodeIndex> {
+
+	pub fn as_node_structure(&self) -> Option<NodeStructure> {
+		// Value から直接 Node に変換しようとすると NodeHost が必要になったり、
+		// Node をタグ付きで生成したいときに困ったりとよろしくないことが多いので、
+		// Node への変換は提供しない。
+		// 代わりに、Node の一歩手前というか、Node の生成における仕様となる NodeStructure を提供し、
+		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
+		// 数値や変数参照から Node への暗黙の変換もここで提供する
 		match self {
-			Self::Node(index) => Some(*index),
-			// TODO Float や NodeDef から Node に暗黙に変換するのはどこでやったらいいのだろう（Node 生成、NodeHost への追加が必要）
+			Self::NodeStructure(str) => Some(str.clone()),
+			Self::Float(value) => Some(NodeStructure::Constant(*value)),
+			Self::Identifier(id) => Some(NodeStructure::Identifier(id.clone())),
 			_ => None,
 		}
 	}
