@@ -33,7 +33,10 @@ use crate::mml::default::{
 	sequence_generator::*,
 };
 
-use crate::moddl::player::*;
+use crate::moddl::{
+	error::*,
+	player,
+};
 // use combine::Parser;
 
 extern crate nom;
@@ -84,16 +87,15 @@ extern crate nom;
 
 // use crate::moddl::parser::*;
 fn main() {
-	// println!("{:?}", hello_parser("hello"));
-	// println!("{:?}", hello_parser("hello world"));
-	// println!("{:?}", hello_parser("goodbye hello again"));
-// 	println!("{:?}", real()("3.14"));
-// 	println!("{:?}", real()("3.14cm"));
-// 	println!("{:?}", real()("***3.14"));
-	play(
-r"
+	if let Err(e) = play() {
+		format!("error: {:?}", e);
+	}
+}
+
+fn play() -> ModdlResult<()> {
+	player::play(r"
 @tempo 144
-@instrument ^ab, sineOsc | limit { min: 0.75 * 20 | sineOsc, max: 1 } * 2 * env1
+@instrument ^ab, sineOsc | limit { min: 0.75 * 5 | sineOsc, max: 1 } * 2 * env1
 @instrument ^c, sineOsc
 
 
@@ -116,6 +118,5 @@ c	l8 ar<ab>c+d+ef+ g+rg+f+g+rer f+4d4c+4bg+ f+4e4d4c+4<
 a	d2^8r8d c+2^8r8<a bb8>c8<bb8>c8< bag+f+<
 b	g2^gab a2^agf+ e4edcde4 d+2e4f+4<
 c	br>babrgr f+r>c+r<ar<ab> cr>cr<ef+g4 f+4d+4<b4a4>
-");
-
+")
 }

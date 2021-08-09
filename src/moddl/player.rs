@@ -1,5 +1,6 @@
 use super::{
 	ast::*,
+	error::*,
 	evaluator::*,
 	node_factory::*,
 	parser::*,
@@ -49,9 +50,9 @@ const TAG_SEQUENCER: &str = "seq";
 // 	mml: String,
 // };
 
-pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
+pub fn play(moddl: &str) -> ModdlResult<()> {
 	// TODO パーズエラーをちゃんと処理
-	let (_, CompilationUnit { statements }) = compilation_unit()(moddl).unwrap();
+	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
 	let mut tempo = 120f32;
 	let ticks_per_beat = 96; // TODO 外から渡せるように
@@ -62,16 +63,17 @@ pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 	// トラックごとの MML を蓄積
 	let mut mmls = BTreeMap::<String, String>::new();
 
-	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) }
+	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) ?; }
 	
 	let mut nodes = NodeHost::new();
-	let tick = nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
+	nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = Vec::<NodeIndex>::new();
 	for (track, mml) in &mmls {
-		// TODO instrument 未定義はエラー
-		let instrm = instruments.get(track).unwrap();
-		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), &mut nodes, &mut output_nodes);
+		let instrm = instruments.get(track)
+				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
+
+		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), &mut nodes, &mut output_nodes) ?;
 	}
 
 	let mut context = Context::new(44100, 1); // TODO 値を外から渡せるように
@@ -83,6 +85,8 @@ pub fn play(moddl: &str) /* -> Result<(), (&str, nom::error::ErrorKind)> */ {
 	// nodes.add(Box::new(Print::new(master)));
 
 	Machine::new().play(&mut context, &mut nodes);
+
+	Ok(())
 }
 
 fn process_statement<'a>(
@@ -91,21 +95,24 @@ fn process_statement<'a>(
 	// instruments: &mut HashMap<String, &'a Expr>,
 	instruments: &mut HashMap<String, NodeStructure>,
 	mmls: &mut BTreeMap<String, String>,
-) {
+) -> ModdlResult</* 'a, */ ()> { // TODO 寿命指定これでいいのか
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					// TODO ちゃんとエラー処理
-					*tempo = evaluate_arg(&args, 0).as_float().unwrap();
+					*tempo = evaluate_arg(&args, 0)?.as_float()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 				},
 				"instrument" => {
-					// TODO ちゃんとエラー処理
-					let tracks = evaluate_arg(&args, 0).as_track_set().unwrap();
+					let tracks = evaluate_arg(&args, 0)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1).as_node_structure().unwrap();
-						// TODO すでに入っていたらエラー
+						let instrm = evaluate_arg(&args, 1)?.as_node_structure()
+								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+						if instruments.get(&track).is_some() {
+							return Err(Error::DirectiveDuplicate { msg: format!("@instrument ^{}", &track) });
+						}
 						instruments.insert(track, instrm);
 					}
 				}
@@ -124,16 +131,22 @@ fn process_statement<'a>(
 			}
 		}
 	}
+
+	Ok(())
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize) -> Value {
-	// TODO 範囲チェック
-	evaluate(&args[index])
+fn evaluate_arg(args: &Vec<Expr>, index: usize) -> ModdlResult<Value> {
+	if index < args.len() {
+		Ok(evaluate(&args[index]))
+	} else {
+		Err(Error::DirectiveArgNotFound)
+	}
 }
 
-fn build_nodes_by_mml(track: &str, instrm_def: &NodeStructure, mml: &str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>) {
-		// TODO ちゃんとエラー処理
-	let ast = default_mml_parser::compilation_unit().parse(mml).unwrap().0;
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>)
+		-> ModdlResult</* 'a, */ ()> {
+	let ast = default_mml_parser::compilation_unit().parse(mml)
+			.map_err(|_e| Error::MmlSyntax )?.0; // TODO パーズエラーをちゃんとラップする
 
 	let tag_set = TagSet {
 		freq: track.to_string(),
@@ -144,12 +157,14 @@ fn build_nodes_by_mml(track: &str, instrm_def: &NodeStructure, mml: &str, nodes:
 
 	let freq = nodes.add_with_tag(track.to_string(), Box::new(Var::new(0f32)));
 
-	let instrm = build_instrument(track, instrm_def, nodes, freq);
+	let instrm = build_instrument(track, instrm_def, nodes, freq) ?;
 	output_nodes.push(instrm);
+
+	Ok(())
 }
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: NodeIndex) -> NodeIndex {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: NodeIndex) -> NodeIndex {
+fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: NodeIndex) -> ModdlResult</* 'a, */ NodeIndex> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: NodeIndex) -> ModdlResult<NodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input) }
@@ -157,13 +172,13 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 		// 関数にすると（同上）
 		macro_rules! add_node {
 			// トラックに属する node は全てトラック名のタグをつける
-			($new_node: expr) => { nodes.add_with_tag(track.to_string(), $new_node); }
+			($new_node: expr) => { Ok(nodes.add_with_tag(track.to_string(), $new_node)) }
 		}
 		let factories = node_factories();
 
 		match strukt {
 			NodeStructure::Connect(lhs, rhs) => {
-				let l_node = recurse!(lhs, input);
+				let l_node = recurse!(lhs, input) ?;
 				recurse!(rhs, l_node)
 			},
 			// NodeStructure::Power(lhs, rhs) => {
@@ -172,8 +187,8 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 			// 	Box::new(Power::new()
 			// },
 			NodeStructure::Multiply(lhs, rhs) => {
-				let l_node = recurse!(lhs, input);
-				let r_node = recurse!(rhs, input);
+				let l_node = recurse!(lhs, input) ?;
+				let r_node = recurse!(rhs, input) ?;
 				add_node!(Box::new(Mul::new(vec![l_node, r_node])))
 			},
 			// NodeStructure::Divide(lhs, rhs) => ,
@@ -182,8 +197,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 			// NodeStructure::Subtract(lhs, rhs) => ,
 			NodeStructure::Identifier(id) => {
 				// id は今のところ引数なしのノード生成しかない
-				// TODO エラー処理
-				let fact = factories.get(id).unwrap();
+				let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
 				add_node!(fact.create_node(&ValueArgs::new(), &NodeArgs::new(), &vec![input]))
 			},
 			// NodeStructure::Lambda => ,
@@ -194,19 +208,20 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 					NodeStructure::Identifier(id) => id,
 					_ => unreachable!(),
 				};
-				// TODO エラー処理
-				let fact = factories.get(fact_id).unwrap();
+				let fact = factories.get(fact_id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
 				let node_names = fact.node_args();
-				let node_args: NodeArgs = node_names.iter().map(|name| {
-					let arg_node = {
-						// TODO エラー処理
-						let arg_val = & args.iter().find(|(n, _)| *n == *name ).unwrap().1;
-						let st = arg_val.as_node_structure().unwrap();
-						recurse!(&st, input)
-					};
+				let mut node_args = NodeArgs::new();
+				for name in node_names {
+					let arg_val = & args.iter().find(|(n, _)| *n == *name )
+							// 必要な引数が与えられていない
+							.ok_or_else(|| Error::NodeFactoryNotFound)?.1;
+					let st = arg_val.as_node_structure()
+							// node_args に指定された引数なのに NodeStructure に変換できない
+							.ok_or_else(|| Error::NodeFactoryNotFound) ?;
+					let arg_node = recurse!(&st, input) ?;
 
-					(name.clone(), arg_node)
-				}).collect();
+					node_args.insert(name.clone(), arg_node);
+				}
 				let value_args: ValueArgs = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
 				add_node!(fact.create_node(&value_args, &node_args, &vec![input]))
@@ -220,8 +235,8 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 	visit_struct(track, instrm_def, nodes, freq)
 }
 
-fn node_factories() -> HashMap<String, Box<NodeFactory>> {
-	let mut result = HashMap::<String, Box<NodeFactory>>::new();
+fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
+	let mut result = HashMap::<String, Box<dyn NodeFactory>>::new();
 	macro_rules! add {
 		($name: expr, $fact: expr) => {
 			result.insert($name.to_string(), Box::new($fact));
@@ -234,4 +249,3 @@ fn node_factories() -> HashMap<String, Box<NodeFactory>> {
 
 	result
 }
-
