@@ -14,8 +14,10 @@ impl Var {
 	pub fn new(value: Sample) -> Self { Self { value } }
 }
 impl Node for Var {
-	fn upstreams(&self) -> Vec<NodeIndex> { vec![] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample { self.value }
+	fn upstreams(&self) -> Upstreams { vec![] }
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_mono(output, self.value);
+	}
 
 	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
 		if event.event_type() != EVENT_TYPE_SET { return; }

@@ -12,9 +12,9 @@ impl Add {
 	pub fn new(args: Vec<NodeIndex>) -> Self { Self { args } }
 }
 impl Node for Add {
-	fn upstreams(&self) -> Vec<NodeIndex> { self.args.clone() }
-	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
-		inputs.iter().take(self.args.len()).sum()
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| (*a, 1)).collect() }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_mono(output, inputs.iter().take(self.args.len()).sum());
 	}
 }
 
@@ -25,9 +25,9 @@ impl Mul {
 	pub fn new(args: Vec<NodeIndex>) -> Self { Self { args } }
 }
 impl Node for Mul {
-	fn upstreams(&self) -> Vec<NodeIndex> { self.args.clone() }
-	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
-		inputs.iter().take(self.args.len()).product()
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| (*a, 1)).collect() }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_mono(output, inputs.iter().take(self.args.len()).product());
 	}
 }
 
@@ -42,13 +42,13 @@ impl Limit {
 	}
 }
 impl Node for Limit {
-	fn upstreams(&self) -> Vec<NodeIndex> { vec![self.signal, self.min, self.max] }
-	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
+	fn upstreams(&self) -> Upstreams { vec![(self.signal, 1), (self.min, 1), (self.max, 1)] }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		let sig = inputs[0];
 		let min = inputs[1];
 		let max = inputs[2];
 
-		sig.max(min).min(max)
+		output_mono(output, sig.max(min).min(max));
 	}
 }
 

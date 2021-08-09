@@ -28,8 +28,8 @@ impl Node for ExpEnv {
 		// TODO 無駄に状態をもつのがいやだが…
 		self.ratio_per_sample = self.ratio_per_sec.powf(1f32 / context.sample_rate_f32());
 	}
-	fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
-		self.amplitude
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_mono(output, self.amplitude);
 	}
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		if self.state == ExpEnvState::Idle { return; }

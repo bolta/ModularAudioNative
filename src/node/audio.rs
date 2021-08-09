@@ -1,3 +1,4 @@
+
 use crate::core::{
 	common::*,
 	context::*,
@@ -31,6 +32,7 @@ impl PortAudioOut {
 	}
 }
 impl Node for PortAudioOut {
+	fn channels(&self) -> i32 { 0 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	fn initialize(&mut self, context: &Context, env: &mut Environment) {
 		let pa = pa::PortAudio::new().expect("error");
@@ -63,10 +65,11 @@ impl Node for PortAudioOut {
 		}
 	}
 
-	fn upstreams(&self) -> Vec<NodeIndex> { vec![self.input] }
+	// TODO input のチャンネル数に応じて変える（input は NodeIndex なので別途引数でもらう）
+	fn upstreams(&self) -> Upstreams { vec![(self.input, 1)] }
 
-	fn execute(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
-		if self.buffer.len() < self.buffer_size { return NO_OUTPUT; }
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		if self.buffer.len() < self.buffer_size { return /* NO_OUTPUT */; }
 
 		let b = &mut self.buffer;
 
@@ -81,7 +84,7 @@ impl Node for PortAudioOut {
 			}
 		}
 	
-		NO_OUTPUT
+		// NO_OUTPUT
 	}
 
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {

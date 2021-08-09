@@ -13,9 +13,9 @@ impl Print {
 }
 impl Node for Print {
 	// TODO ↓これ抽象クラス的なものに括り出したい
-	fn upstreams(&self) -> Vec<NodeIndex> { vec![self.input] }
-	fn execute<'a>(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample {
+	// TODO ステレオ対応
+	fn upstreams(&self) -> Upstreams { vec![(self.input, 1)] }
+	fn execute<'a>(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		println!("{}", inputs[0]);
-		NO_OUTPUT
 	}
 }

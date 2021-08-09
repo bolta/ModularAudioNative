@@ -5,6 +5,10 @@ use super::{
 	node_host::*,
 };
 
+use std::{
+	collections::hash_map::HashMap,
+};
+
 use ringbuf::{
 	Consumer,
 	Producer,
@@ -12,6 +16,12 @@ use ringbuf::{
 };
 
 const EVENT_QUEUE_CAPACITY: usize = 1000;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ValueIndex(pub usize);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct OutputIndex(pub usize);
 
 pub struct Machine {
 }
@@ -24,16 +34,31 @@ impl Machine {
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
 	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost) {
 		let num_nodes = nodes.count();
-		let upstreams: Vec<Vec<NodeIndex>> = nodes.nodes().iter()
+		let upstreams: Vec<Vec<(NodeIndex, i32)>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
-		let instructions = self.compile(nodes, &upstreams);
+
+		let (value_offsets, value_count, max_channels) = {
+			let mut value_offsets = HashMap::<NodeIndex, ValueIndex>::new();
+			let mut next_val = ValueIndex(0_usize);
+			let mut max_channels = 0_usize;
+			for (i, node) in nodes.nodes().iter().enumerate() {
+				let chs = node.channels();
+				max_channels = max_channels.max(chs as usize);
+				if chs <= 0 { continue; }
+				value_offsets.insert(NodeIndex(i), next_val);
+// println!("{:?} -> {:?}", NodeIndex(i), next_val);
+				next_val.0 += chs as usize;
+			}
+			(value_offsets, next_val, max_channels)
+		};
 
 		let mut state = State {
-			values: vec_with_length(num_nodes),
+			values: vec_with_length(value_count.0),
 			inputs: vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap()),
-			output: 0f32,
+			output: vec_with_length(max_channels),
 		};
+		let instructions = self.compile(nodes, &upstreams, &value_offsets);
 
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
@@ -66,20 +91,40 @@ impl Machine {
 		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
 	}
 
-	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<NodeIndex>>) -> Vec<Instruction> {
+	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<(NodeIndex, i32)>>,
+			value_offsets: &HashMap<NodeIndex, ValueIndex>) -> Vec<Instruction> {
 		// nodes が topologically sorted であることを期待している。
 		// 普通に構築すればそうなるはず…
 		(0usize .. nodes.count()).flat_map(|i| {
-			let loads = upstreams[i].iter().enumerate().map(|(input_idx, upstream_idx)| {
-				Instruction::Load { to: InputIndex(input_idx), from: *upstream_idx }
+			let mut input_idx = InputIndex(0_usize);
+			let loads = upstreams[i].iter()/* .enumerate() */.flat_map(move |(/* input_idx, */ upstream_idx, channels)| {
+				// TODO エラー処理？　出力を持たないノードを upstream に指定している
+				let from = * value_offsets.get(upstream_idx).unwrap();
+				let count = nodes[*upstream_idx].channels() as usize;
+
+				// let to_0 = input_idx;
+				let instrcs = (0 .. count).map(move |j| Instruction::Load {
+					to: InputIndex(input_idx.0 + j),
+					from: ValueIndex(from.0 + j),
+				});
+				input_idx.0 += count;
+				instrcs
 			});
 
 			let node_idx = NodeIndex(i);
-			loads.chain(vec![
-				Instruction::Execute(node_idx),
-				Instruction::Store { to: node_idx },
-				Instruction::Update(node_idx),
-			])
+			loads
+					.chain(vec![Instruction::Execute(node_idx)])
+					.chain(if let Some(value_idx) = value_offsets.get(&node_idx) {
+						// vec![Instruction::Store { to: *value_idx, count: nodes[node_idx].channels() as usize }]
+						(0 .. nodes[node_idx].channels() as usize).map(|ch| Instruction::Store {
+							to: ValueIndex(value_idx.0 + ch),
+							from: OutputIndex(ch),
+						}).collect()
+					} else {
+						// 出力がないので Store しない
+						vec![]
+					})
+					.chain(vec![Instruction::Update(node_idx)])
 		}).collect()
 	}
 
@@ -116,13 +161,20 @@ impl Machine {
 		match instrc {
 			Instruction::Load { to, from } => {
 				state.inputs[to.0] = state.values[from.0];
+				// let to_slice = &mut state.inputs[to.0 .. to.0 + count];
+				// let from_slice = &state.values[from.0 .. from.0 + count];
+				// to_slice.copy_from_slice(from_slice);
 			}
-			Instruction::Store { to } => {
-				state.values[to.0] = state.output;
+			Instruction::Store { to, from } => {
+				state.values[to.0] = state.output[from.0];
+				// let to_slice = &mut state.values[to.0 .. to.0 + count];
+				// let from_slice = &state.output[0_usize .. *count];
+				// to_slice.copy_from_slice(from_slice);
 			}
 			Instruction::Execute(node_idx) => {
 				let node = &mut nodes[*node_idx];
-				state.output = node.execute(&state.inputs, context, env);
+				// state.outputs = node.execute(&state.inputs, context, env);
+				node.execute(&state.inputs, &mut state.output, context, env);
 			}
 			Instruction::Update(node_idx) => {
 				nodes[*node_idx].update(&state.inputs, context, env);
@@ -146,16 +198,22 @@ impl <'a> Environment<'a> {
 struct InputIndex(pub usize);
 
 enum Instruction {
-	Load { to: InputIndex, from: NodeIndex },
-	Store { to: NodeIndex },
+	/// 計算済みの値を次の計算のための入力値にコピー
+	Load { to: InputIndex, from: ValueIndex },
+	/// 計算された値を計算済みの値としてとっておく
+	Store { to: ValueIndex, from: OutputIndex, },
 	Execute(NodeIndex),
 	Update(NodeIndex),
 }
 
 struct State {
+	/// 各ノードの出力値。複数個所から参照される可能性があるのでキャッシュする
+	/// 添字は NodeIndex
 	values: Vec<Sample>,
+	/// 各ノードの入力値
 	inputs: Vec<Sample>,
-	output: Sample,
+	// output: Sample,
+	output: Vec<Sample>,
 	// elapsed_samples: SampleCount,
 }
 
