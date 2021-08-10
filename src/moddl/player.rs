@@ -76,12 +76,12 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), &mut nodes, &mut output_nodes) ?;
 	}
 
-	let mut context = Context::new(44100, 1); // TODO 値を外から渡せるように
+	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 
 	let mix = nodes.add(Box::new(Add::new(output_nodes)));
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = nodes.add(Box::new(Mul::new(vec![mix, master_vol])));
-	nodes.add(Box::new(PortAudioOut::new(master, &context)));
+	nodes.add(Box::new(PortAudioOut::new(master, nodes[master].channels(), &context)));
 	// nodes.add(Box::new(Print::new(master)));
 
 	Machine::new().play(&mut context, &mut nodes);

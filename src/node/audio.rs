@@ -18,20 +18,24 @@ pub struct PortAudioOut {
 	stream: Option<pa::Stream<pa::Blocking<pa::stream::Buffer>, pa::Output<Sample>>>,
 	buffer: Vec<Sample>,
 	buffer_size: usize,
+	channels: i32,
 }
 impl PortAudioOut {
-	pub fn new(input: NodeIndex, context: &Context) -> Self {
-		let buffer_size = FRAMES as usize * context.channels() as usize;
+	/// channels は input の出力チャンネル数と一致している必要がある
+	pub fn new(input: NodeIndex, channels: i32, context: &Context) -> Self {
+		let buffer_size = FRAMES as usize * channels as usize;
 
 		Self {
 			input,
 			stream: None,
 			buffer: Vec::with_capacity(buffer_size),
 			buffer_size,
+			channels,
 		}
 	}
 }
 impl Node for PortAudioOut {
+	// ノードグラフ上で出力するチャンネル数は 0
 	fn channels(&self) -> i32 { 0 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	fn initialize(&mut self, context: &Context, env: &mut Environment) {
@@ -49,7 +53,7 @@ impl Node for PortAudioOut {
 		let latency = output_info.default_low_output_latency;
 		// float32形式で再生
 		let output_params =
-			pa::StreamParameters::<f32>::new(output_device, context.channels(), INTERLEAVED, latency);
+			pa::StreamParameters::<f32>::new(output_device, self.channels, INTERLEAVED, latency);
 
 		let sample_rate = context.sample_rate() as f64;
 		pa.is_output_format_supported(output_params, sample_rate).expect("error");
@@ -65,8 +69,7 @@ impl Node for PortAudioOut {
 		}
 	}
 
-	// TODO input のチャンネル数に応じて変える（input は NodeIndex なので別途引数でもらう）
-	fn upstreams(&self) -> Upstreams { vec![(self.input, 1)] }
+	fn upstreams(&self) -> Upstreams { vec![(self.input, self.channels)] }
 
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		if self.buffer.len() < self.buffer_size { return /* NO_OUTPUT */; }
@@ -89,7 +92,9 @@ impl Node for PortAudioOut {
 
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		if self.buffer.len() >= self.buffer_size { self.buffer.clear(); }
-		self.buffer.push(inputs[0]);
+		for ch in (0 .. self.channels) {
+			self.buffer.push(inputs[ch as usize]);
+		}
 	}
 
 	fn finalize(&mut self, context: &Context, env: &mut Environment) {
