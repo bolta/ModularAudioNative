@@ -6,14 +6,12 @@ use super::{
 	machine::*,
 };
 
-pub type Upstreams = Vec<(NodeIndex, i32)>;
+pub type Upstreams = Vec<ChanneledNodeIndex>;
 
 pub trait Node {
-	fn channels(&self) -> i32 { 1 }
-	// fn upstreams(&self) -> Vec<(NodeIndex, i32)> { vec![] }
+	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn initialize(&mut self, context: &Context, env: &mut Environment) { }
-	// fn execute(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) -> Sample { NO_OUTPUT }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) { }
 	fn finalize(&mut self, context: &Context, env: &mut Environment) { }

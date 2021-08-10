@@ -6,43 +6,79 @@ use crate::core::{
 };
 
 pub struct Add {
-	args: Vec<NodeIndex>,
+	args: Vec<MonoNodeIndex>,
 }
 impl Add {
-	pub fn new(args: Vec<NodeIndex>) -> Self { Self { args } }
+	pub fn new(args: Vec<MonoNodeIndex>) -> Self { Self { args } }
 }
 impl Node for Add {
-	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| (*a, 1)).collect() }
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		output_mono(output, inputs.iter().take(self.args.len()).sum());
 	}
 }
 
+pub struct StereoAdd {
+	// とりあえず 2 項以外の場合は使っていないので 2 項で（速度的にも有利なはず）
+	lhs: StereoNodeIndex,
+	rhs: StereoNodeIndex,
+}
+impl StereoAdd {
+	pub fn new(lhs: StereoNodeIndex, rhs: StereoNodeIndex) -> Self { Self { lhs, rhs } }
+}
+impl Node for StereoAdd {
+	fn channels(&self) -> i32 { 2 }
+	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_stereo(output, inputs[0] + inputs[2], inputs[1] + inputs[3]);
+	}
+}
+
 pub struct Mul {
-	args: Vec<NodeIndex>,
+	args: Vec<MonoNodeIndex>,
 }
 impl Mul {
-	pub fn new(args: Vec<NodeIndex>) -> Self { Self { args } }
+	pub fn new(args: Vec<MonoNodeIndex>) -> Self { Self { args } }
 }
 impl Node for Mul {
-	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| (*a, 1)).collect() }
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		output_mono(output, inputs.iter().take(self.args.len()).product());
 	}
 }
 
+// TODO ちゃんと共通化
+pub struct StereoMul {
+	// とりあえず 2 項以外の場合は使っていないので 2 項で（速度的にも有利なはず）
+	lhs: StereoNodeIndex,
+	rhs: StereoNodeIndex,
+}
+impl StereoMul {
+	pub fn new(lhs: StereoNodeIndex, rhs: StereoNodeIndex) -> Self { Self { lhs, rhs } }
+}
+impl Node for StereoMul {
+	fn channels(&self) -> i32 { 2 }
+	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		output_stereo(output, inputs[0] * inputs[2], inputs[1] * inputs[3]);
+	}
+}
+
 pub struct Limit {
-	signal: NodeIndex,
-	min: NodeIndex,
-	max: NodeIndex,
+	signal: MonoNodeIndex,
+	min: MonoNodeIndex,
+	max: MonoNodeIndex,
 }
 impl Limit {
-	pub fn new(signal: NodeIndex, min: NodeIndex, max: NodeIndex) -> Self {
+	pub fn new(signal: MonoNodeIndex, min: MonoNodeIndex, max: MonoNodeIndex) -> Self {
 		Self { signal, min, max }
 	}
 }
 impl Node for Limit {
-	fn upstreams(&self) -> Upstreams { vec![(self.signal, 1), (self.min, 1), (self.max, 1)] }
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { vec![self.signal.channeled(), self.min.channeled(), self.max.channeled()] }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		let sig = inputs[0];
 		let min = inputs[1];

@@ -34,7 +34,7 @@ impl Machine {
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
 	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost) {
 		let num_nodes = nodes.count();
-		let upstreams: Vec<Vec<(NodeIndex, i32)>> = nodes.nodes().iter()
+		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
 
@@ -55,13 +55,13 @@ impl Machine {
 
 		let mut state = State {
 			values: vec_with_length(value_count.0),
-			inputs: vec_with_length(upstreams.iter().map(|u| {
-				u.iter().map(|(_, ch)| *ch).sum::<i32>()
+			inputs: vec_with_length(upstreams.iter().map(|us| {
+				us.iter().map(|u| u.channels()).sum::<i32>()
 			}).max().unwrap() as usize),
 			output: vec_with_length(max_channels),
 		};
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
-
+// println!("{:?}", &instructions);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
@@ -93,16 +93,16 @@ impl Machine {
 		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
 	}
 
-	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<(NodeIndex, i32)>>,
+	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<ChanneledNodeIndex>>,
 			value_offsets: &HashMap<NodeIndex, ValueIndex>) -> Vec<Instruction> {
 		// nodes が topologically sorted であることを期待している。
 		// 普通に構築すればそうなるはず…
 		(0usize .. nodes.count()).flat_map(|i| {
 			let mut input_idx = InputIndex(0_usize);
-			let loads = upstreams[i].iter()/* .enumerate() */.flat_map(move |(/* input_idx, */ upstream_idx, channels)| {
+			let loads = upstreams[i].iter().flat_map(move |upstream_idx| {
 				// TODO エラー処理？　出力を持たないノードを upstream に指定している
-				let from = * value_offsets.get(upstream_idx).unwrap();
-				let count = nodes[*upstream_idx].channels() as usize;
+				let from = * value_offsets.get(& upstream_idx.unchanneled()).unwrap();
+				let count = nodes[upstream_idx.unchanneled()].channels() as usize;
 
 				// let to_0 = input_idx;
 				let instrcs = (0 .. count).map(move |j| Instruction::Load {

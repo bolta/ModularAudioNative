@@ -25,6 +25,7 @@ use crate::{
 		env::*,
 		osc::*,
 		prim::*,
+		stereo::*,
 		util::*,
 		var::*,
 	},
@@ -68,7 +69,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut nodes = NodeHost::new();
 	nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
 
-	let mut output_nodes = Vec::<NodeIndex>::new();
+	let mut output_nodes = Vec::<ChanneledNodeIndex>::new();
 	for (track, mml) in &mmls {
 		let instrm = instruments.get(track)
 				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
@@ -78,11 +79,23 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 
-	let mix = nodes.add(Box::new(Add::new(output_nodes)));
+	let mix = {
+		if output_nodes.is_empty() {
+			nodes.add(Box::new(Constant::new(0f32)))
+		} else {
+			// FIXME Result が絡むときの fold をきれいに書く方法
+			let head = *output_nodes.first().unwrap();
+			let tail = &output_nodes[1..];
+			let mut sum = head;
+			for t in tail {
+				sum = add(None, &mut nodes, sum, *t) ?;
+			}
+			sum
+		}
+	};
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
-	let master = nodes.add(Box::new(Mul::new(vec![mix, master_vol])));
-	nodes.add(Box::new(PortAudioOut::new(master, nodes[master].channels(), &context)));
-	// nodes.add(Box::new(Print::new(master)));
+	let master = multiply(None, &mut nodes, mix, master_vol) ?;
+	nodes.add(Box::new(PortAudioOut::new(master, &context)));
 
 	Machine::new().play(&mut context, &mut nodes);
 
@@ -143,7 +156,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize) -> ModdlResult<Value> {
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<NodeIndex>)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult</* 'a, */ ()> {
 	let ast = default_mml_parser::compilation_unit().parse(mml)
 			.map_err(|_e| Error::MmlSyntax )?.0; // TODO パーズエラーをちゃんとラップする
@@ -163,8 +176,8 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	Ok(())
 }
 
-fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: NodeIndex) -> ModdlResult</* 'a, */ NodeIndex> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: NodeIndex) -> ModdlResult<NodeIndex> {
+fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input) }
@@ -178,6 +191,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 
 		match strukt {
 			NodeStructure::Connect(lhs, rhs) => {
+				// TODO mono/stereo 変換
 				let l_node = recurse!(lhs, input) ?;
 				recurse!(rhs, l_node)
 			},
@@ -189,7 +203,8 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::Multiply(lhs, rhs) => {
 				let l_node = recurse!(lhs, input) ?;
 				let r_node = recurse!(rhs, input) ?;
-				add_node!(Box::new(Mul::new(vec![l_node, r_node])))
+				multiply(Some(track), nodes, l_node, r_node)
+				// add_node!(Box::new(Mul::new(vec![l_node, r_node])))
 			},
 			// NodeStructure::Divide(lhs, rhs) => ,
 			// NodeStructure::Remainder(lhs, rhs) => ,
@@ -198,7 +213,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::Identifier(id) => {
 				// id は今のところ引数なしのノード生成しかない
 				let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
-				add_node!(fact.create_node(&ValueArgs::new(), &NodeArgs::new(), &vec![input]))
+				add_node!(fact.create_node(&ValueArgs::new(), &NodeArgs::new(), input))
 			},
 			// NodeStructure::Lambda => ,
 			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
@@ -224,7 +239,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				}
 				let value_args: ValueArgs = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-				add_node!(fact.create_node(&value_args, &node_args, &vec![input]))
+				add_node!(fact.create_node(&value_args, &node_args, input))
 			},
 			NodeStructure::Constant(value) => add_node!(Box::new(Constant::new(*value))),
 
@@ -233,6 +248,55 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 	}
 
 	visit_struct(track, instrm_def, nodes, freq)
+}
+
+fn add(track: Option<&str>, nodes: &mut NodeHost,
+	l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
+		binary(track, nodes, l_node, r_node, Add::new, StereoAdd::new)
+}
+fn multiply(track: Option<&str>, nodes: &mut NodeHost,
+		l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
+	binary(track, nodes, l_node, r_node, Mul::new, StereoMul::new)
+}
+
+
+fn binary<M: 'static + Node, S: 'static + Node>(
+	track: Option<&str>,
+	nodes: &mut NodeHost,
+	l_node: ChanneledNodeIndex,
+	r_node: ChanneledNodeIndex,
+	create_mono: fn (Vec<MonoNodeIndex>) -> M,
+	create_stereo: fn (StereoNodeIndex, StereoNodeIndex) -> S
+) -> ModdlResult<ChanneledNodeIndex> {
+	macro_rules! add_node {
+		// トラックに属する node は全てトラック名のタグをつける
+		($new_node: expr) => {
+			Ok(match track {
+				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
+				None => nodes.add($new_node),
+			})
+		}
+	}
+	match (l_node.channels(), r_node.channels()) {
+		(1, 1) => {
+			add_node!(Box::new(create_mono(vec![l_node.as_mono(), r_node.as_mono()])))
+		},
+		// 以下ステレオ対応
+		// 現状ステレオまでしか対応していないが、任意のチャンネル数に拡張できるはず
+		// （両者同数の場合はそれぞれで演算する。一方がモノラルの場合はそっちを拡張する。それ以外はエラー）
+		(1, 2) => {
+			let lhs_stereo: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(MonoToStereo::new(l_node.as_mono())));
+			add_node!(Box::new(create_stereo(lhs_stereo?.as_stereo(), r_node.as_stereo())))
+		},
+		(2, 1) => {
+			let rhs_stereo: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(MonoToStereo::new(r_node.as_mono())));
+			add_node!(Box::new(create_stereo(l_node.as_stereo(), rhs_stereo?.as_stereo())))
+		},
+		(2, 2) => {
+			add_node!(Box::new(create_stereo(l_node.as_stereo(), r_node.as_stereo())))
+		},
+		_ => Err(Error::ChannelMismatch),
+	}
 }
 
 fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
@@ -244,8 +308,10 @@ fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
 	};
 	add!("sineOsc", SineOscFactory { });
 	add!("limit", LimitFactory { });
+
+	// for experiments
 	add!("env1", Env1Factory { });
-	// add!("expEnv", create_exp_env);
+	add!("stereoTestOsc", StereoTestOscFactory { });
 
 	result
 }

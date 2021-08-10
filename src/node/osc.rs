@@ -6,16 +6,17 @@ use crate::core::{
 };
 
 pub struct SineOsc {
-	freq: NodeIndex,
+	freq: MonoNodeIndex,
 
 	phase: f32,
 }
 impl SineOsc {
-	pub fn new(freq: NodeIndex) -> Self { Self { freq, phase: 0f32 } }
+	pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase: 0f32 } }
 }
 impl Node for SineOsc {
+	fn channels(&self) -> i32 { 1 }
 	fn initialize(&mut self, context: &Context, env: &mut Environment) { self.phase = 0f32; }
-	fn upstreams(&self) -> Upstreams { vec![(self.freq, 1)] }
+	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		output_mono(output, self.phase.sin());
 	}
@@ -26,20 +27,20 @@ impl Node for SineOsc {
 }
 
 pub struct StereoTestOsc {
-	freq: NodeIndex,
+	freq: MonoNodeIndex,
 
 	phase_l: f32,
 	phase_r: f32,
 }
 impl StereoTestOsc {
-	pub fn new(freq: NodeIndex) -> Self { Self { freq, phase_l: 0f32, phase_r: 0f32 } }
+	pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase_l: 0f32, phase_r: 0f32 } }
 }
 impl Node for StereoTestOsc {
 	fn channels(&self) -> i32 { 2 }
 	fn initialize(&mut self, context: &Context, env: &mut Environment) { /* self.phase = 0f32; */ }
-	fn upstreams(&self) -> Upstreams { vec![(self.freq, 1)] }
+	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
-		output_stereo(output, 0.25f32 * self.phase_l.sin(), 0.5f32 * self.phase_r.sin());
+		output_stereo(output, self.phase_l.sin(), self.phase_r.sin());
 	}
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		let freq = inputs[0];

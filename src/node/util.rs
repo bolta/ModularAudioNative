@@ -6,16 +6,18 @@ use crate::core::{
 };
 
 pub struct Print {
-	input: NodeIndex,
+	input: ChanneledNodeIndex,
 }
 impl Print {
-	pub fn new(input: NodeIndex) -> Self { Self { input } }
+	pub fn new(input: ChanneledNodeIndex) -> Self { Self { input } }
 }
 impl Node for Print {
+	fn channels(&self) -> i32 { 1 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	// TODO ステレオ対応
-	fn upstreams(&self) -> Upstreams { vec![(self.input, 1)] }
+	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn execute<'a>(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		// TODO ステレオ対応
 		println!("{}", inputs[0]);
 	}
 }

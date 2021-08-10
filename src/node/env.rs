@@ -24,6 +24,7 @@ impl ExpEnv {
 	}
 }
 impl Node for ExpEnv {
+	fn channels(&self) -> i32 { 1 }
 	fn initialize(&mut self, context: &Context, env: &mut Environment) {
 		// TODO 無駄に状態をもつのがいやだが…
 		self.ratio_per_sample = self.ratio_per_sec.powf(1f32 / context.sample_rate_f32());

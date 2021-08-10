@@ -14,15 +14,14 @@ const FRAMES: u32 = 1000;
 const INTERLEAVED: bool = true;
 
 pub struct PortAudioOut {
-	input: NodeIndex,
+	input: ChanneledNodeIndex,
 	stream: Option<pa::Stream<pa::Blocking<pa::stream::Buffer>, pa::Output<Sample>>>,
 	buffer: Vec<Sample>,
 	buffer_size: usize,
-	channels: i32,
 }
 impl PortAudioOut {
-	/// channels は input の出力チャンネル数と一致している必要がある
-	pub fn new(input: NodeIndex, channels: i32, context: &Context) -> Self {
+	pub fn new(input: ChanneledNodeIndex, context: &Context) -> Self {
+		let channels = input.channels();
 		let buffer_size = FRAMES as usize * channels as usize;
 
 		Self {
@@ -30,7 +29,6 @@ impl PortAudioOut {
 			stream: None,
 			buffer: Vec::with_capacity(buffer_size),
 			buffer_size,
-			channels,
 		}
 	}
 }
@@ -53,7 +51,7 @@ impl Node for PortAudioOut {
 		let latency = output_info.default_low_output_latency;
 		// float32形式で再生
 		let output_params =
-			pa::StreamParameters::<f32>::new(output_device, self.channels, INTERLEAVED, latency);
+			pa::StreamParameters::<f32>::new(output_device, self.input.channels(), INTERLEAVED, latency);
 
 		let sample_rate = context.sample_rate() as f64;
 		pa.is_output_format_supported(output_params, sample_rate).expect("error");
@@ -69,7 +67,7 @@ impl Node for PortAudioOut {
 		}
 	}
 
-	fn upstreams(&self) -> Upstreams { vec![(self.input, self.channels)] }
+	fn upstreams(&self) -> Upstreams { vec![self.input] }
 
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		if self.buffer.len() < self.buffer_size { return /* NO_OUTPUT */; }
@@ -92,7 +90,7 @@ impl Node for PortAudioOut {
 
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		if self.buffer.len() >= self.buffer_size { self.buffer.clear(); }
-		for ch in (0 .. self.channels) {
+		for ch in (0 .. self.input.channels()) {
 			self.buffer.push(inputs[ch as usize]);
 		}
 	}

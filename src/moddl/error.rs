@@ -16,6 +16,7 @@ pub enum Error/* <'a> */ {
 	NodeFactoryArgTypeMismatch,
 	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
+	ChannelMismatch,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,
