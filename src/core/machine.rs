@@ -55,7 +55,9 @@ impl Machine {
 
 		let mut state = State {
 			values: vec_with_length(value_count.0),
-			inputs: vec_with_length(upstreams.iter().map(|u| u.len()).max().unwrap()),
+			inputs: vec_with_length(upstreams.iter().map(|u| {
+				u.iter().map(|(_, ch)| *ch).sum::<i32>()
+			}).max().unwrap() as usize),
 			output: vec_with_length(max_channels),
 		};
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
@@ -194,9 +196,10 @@ impl <'a> Environment<'a> {
 }
 
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct InputIndex(pub usize);
 
+#[derive(Debug)]
 enum Instruction {
 	/// 計算済みの値を次の計算のための入力値にコピー
 	Load { to: InputIndex, from: ValueIndex },
