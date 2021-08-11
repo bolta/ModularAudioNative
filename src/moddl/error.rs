@@ -1,4 +1,7 @@
-use std::convert::From;
+use std::{
+	convert::From,
+	io,
+};
 
 type NomError<'a> = nom::Err<nom::error::Error<&'a str>>;
 
@@ -20,6 +23,7 @@ pub enum Error/* <'a> */ {
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,
+	File(io::Error),
 }
 
 pub type ModdlResult</* 'a, */ T> = Result<T, Error/* <'a> */>;
@@ -29,5 +33,10 @@ pub type ModdlResult</* 'a, */ T> = Result<T, Error/* <'a> */>;
 impl <'a> From<NomError<'a>> for Error/* <'a> */ {
 	fn from(nom_err: NomError<'a>) -> Self {
 		Self::Syntax(format!("{}", nom_err))
+	}
+}
+impl <'a> From<io::Error> for Error {
+	fn from(io_err: io::Error) -> Self {
+		Self::File(io_err)
 	}
 }

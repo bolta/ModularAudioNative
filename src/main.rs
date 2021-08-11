@@ -38,10 +38,14 @@ use crate::moddl::{
 	error::*,
 	player,
 };
+
+use std::{
+	env,
+	process,
+};
 use combine::Parser;
 
 extern crate nom;
-
 
 // fn main() {
 // 	let mut machine = Machine::new();
@@ -75,56 +79,22 @@ extern crate nom;
 // 	machine.play(&mut context, &mut nodes);
 // }
 
-
-// fn main() {
-// 	let result = moddl::parser::compilation_unit().parse(
-// r"@tempo 120 * 2, 222
-
-// ");
-
-// 	match result {
-// 		Ok((moddl::ast::CompilationUnit { statements }, s)) => {
-// 			println!("{:?}", statements);
-// 			println!("{:?}", s);
-// 		}
-// 		Err(e) => {
-// 			println!("error: {:?}", e);
-// 		}
-// 	}
-// }
-
 use crate::moddl::parser::*;
 fn main() {
 	if let Err(e) = play() {
-		format!("error: {:?}", e);
+		println!("An error occurred: {:?}", e);
 	}
 }
-
+/*
+@instrument ^ab, stereoTestOsc | limit { min: 0.5 | sineOsc / 2 - 0.5, max: 1 } * env1
+@instrument ^c, stereoTestOsc * env1 * 0
+ */
 fn play() -> ModdlResult<()> {
-	player::play(r"
-@tempo 144
-@instrument ^ab, stereoTestOsc * env1
-@instrument ^c, stereoTestOsc * env1
-
-
-a	o4l4q8
-b	o3l4q8
-c	o3l2q8
-
-a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ g+2f+2<
-b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2<
-c	ed+ c+<b aa+ b1> ag+ f+f f+e d+<b>
-
-a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ g+2f+f+16g+16a16b16>
-b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2
-c	ed+ c+c c+<a+ b1> ag+ f+f f+e d+<b>
-
-a	c+2^8r8c+< b2^8r8g+ aa8g+8f+f f+g+ab>
-b	l8 e4ag+a4e4 e4bag+f+eg+> d<af+4g+c+d+f f+4<b>c+def+4
-c	l8 ar<ab>c+d+ef+ g+rg+f+g+rer f+4d4c+4bg+ f+4e4d4c+4<
-
-a	d2^8r8d c+2^8r8<a bb8>c8<bb8>c8< bag+f+<
-b	g2^gab a2^agf+ e4edcde4 d+2e4f+4<
-c	br>babrgr f+r>c+r<ar<ab> cr>cr<ef+g4 f+4d+4<b4a4>
-")
+	match env::args().nth(1) {
+		None => {
+			eprintln!("Please specify the moddl file path.");
+			process::exit(1);
+		}
+		Some(moddl_path) => player::play_file(moddl_path.as_str()),
+	}
 }

@@ -38,6 +38,8 @@ use crate::{
 use std::{
 	collections::btree_map::BTreeMap,
 	collections::hash_map::HashMap,
+	fs::File,
+	io::Read,
 };
 
 use combine::Parser;
@@ -50,6 +52,14 @@ const TAG_SEQUENCER: &str = "seq";
 // 	instrument: &'a Expr,
 // 	mml: String,
 // };
+
+pub fn play_file(moddl_path: &str) -> ModdlResult<()> {
+	let mut file = File::open(moddl_path) ?;
+	let mut moddl = String::new();
+	file.read_to_string(&mut moddl) ?;
+
+	play(moddl.as_str())
+}
 
 pub fn play(moddl: &str) -> ModdlResult<()> {
 	// TODO パーズエラーをちゃんと処理
