@@ -187,6 +187,15 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			// トラックに属する node は全てトラック名のタグをつける
 			($new_node: expr) => { Ok(nodes.add_with_tag(track.to_string(), $new_node)) }
 		}
+		macro_rules! binary {
+			($create_node: ident, $lhs: expr, $rhs: expr) => {
+				{
+					let l_node = recurse!($lhs, input) ?;
+					let r_node = recurse!($rhs, input) ?;
+					$create_node(Some(track), nodes, l_node, r_node)
+				}
+			}
+		}
 		let factories = node_factories();
 
 		match strukt {
@@ -195,21 +204,12 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				let l_node = recurse!(lhs, input) ?;
 				recurse!(rhs, l_node)
 			},
-			// NodeStructure::Power(lhs, rhs) => {
-			// 	let l_node = recurse(lhs, input);
-			// 	let r_node = recurse(rhs, input);
-			// 	Box::new(Power::new()
-			// },
-			NodeStructure::Multiply(lhs, rhs) => {
-				let l_node = recurse!(lhs, input) ?;
-				let r_node = recurse!(rhs, input) ?;
-				multiply(Some(track), nodes, l_node, r_node)
-				// add_node!(Box::new(Mul::new(vec![l_node, r_node])))
-			},
-			// NodeStructure::Divide(lhs, rhs) => ,
-			// NodeStructure::Remainder(lhs, rhs) => ,
-			// NodeStructure::Add(lhs, rhs) => ,
-			// NodeStructure::Subtract(lhs, rhs) => ,
+			NodeStructure::Power(lhs, rhs) => binary!(power, lhs, rhs),
+			NodeStructure::Multiply(lhs, rhs) => binary!(multiply, lhs, rhs),
+			NodeStructure::Divide(lhs, rhs) => binary!(divide, lhs, rhs),
+			NodeStructure::Remainder(lhs, rhs) => binary!(remainder, lhs, rhs),
+			NodeStructure::Add(lhs, rhs) => binary!(add, lhs, rhs),
+			NodeStructure::Subtract(lhs, rhs) => binary!(subtract, lhs, rhs),
 			NodeStructure::Identifier(id) => {
 				// id は今のところ引数なしのノード生成しかない
 				let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
@@ -250,16 +250,6 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 	visit_struct(track, instrm_def, nodes, freq)
 }
 
-fn add(track: Option<&str>, nodes: &mut NodeHost,
-	l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-		binary(track, nodes, l_node, r_node, Add::new, StereoAdd::new)
-}
-fn multiply(track: Option<&str>, nodes: &mut NodeHost,
-		l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-	binary(track, nodes, l_node, r_node, Mul::new, StereoMul::new)
-}
-
-
 fn binary<M: 'static + Node, S: 'static + Node>(
 	track: Option<&str>,
 	nodes: &mut NodeHost,
@@ -298,6 +288,21 @@ fn binary<M: 'static + Node, S: 'static + Node>(
 		_ => Err(Error::ChannelMismatch),
 	}
 }
+
+macro_rules! binary {
+	($name: ident, $mono_ctor: path, $stereo_ctor: path) => {
+		fn $name(track: Option<&str>, nodes: &mut NodeHost,
+			l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
+				binary(track, nodes, l_node, r_node, $mono_ctor, $stereo_ctor)
+		}
+	};
+}
+binary!(add, Add::new, StereoAdd::new);
+binary!(multiply, Mul::new, StereoMul::new);
+binary!(subtract, Sub::new, StereoSub::new);
+binary!(divide, Div::new, StereoDiv::new);
+binary!(remainder, Rem::new, StereoRem::new);
+binary!(power, Pow::new, StereoPow::new);
 
 fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
 	let mut result = HashMap::<String, Box<dyn NodeFactory>>::new();
