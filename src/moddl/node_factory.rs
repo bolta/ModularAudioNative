@@ -14,6 +14,7 @@ use crate::node::{
 	arith::*,
 	env::*,
 	osc::*,
+	stereo::*,
 };
 
 use std::collections::hash_map::HashMap;
@@ -72,5 +73,16 @@ impl NodeFactory for StereoTestOscFactory {
 	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		Box::new(StereoTestOsc::new(freq))
+	}
+}
+
+pub struct PanFactory { }
+impl NodeFactory for PanFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("pos", 1)] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _value_args: &ValueArgs, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let input = piped_upstream.as_mono();
+		let pan = node_args.get("pos").unwrap().as_mono();
+		Box::new(Pan::new(input, pan))
 	}
 }

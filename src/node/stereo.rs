@@ -51,3 +51,26 @@ impl Node for Join {
 		}
 	}
 }
+
+pub struct Pan {
+	input: MonoNodeIndex,
+	pos: MonoNodeIndex,
+}
+impl Pan {
+	pub fn new(input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self { input, pos } }
+}
+impl Node for Pan {
+	fn channels(&self) -> i32 { 2 }
+	fn upstreams(&self) -> Upstreams { vec![self.input.channeled(), self.pos.channeled()] }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+		let input = inputs[0];
+		let pos = inputs[1].max(-1f32).min(1f32); // 外すとどうなる？
+
+		// http://amei.or.jp/midistandardcommittee/Recommended_Practice/e/rp36.pdf
+		let arg = (pos + 1f32) / 2f32 * std::f32::consts::PI / 2f32; // [-1, 1] を [0, pi/2] に変換
+		let amp_l = arg.cos();
+		let amp_r = arg.sin();
+
+		output_stereo(output, input * amp_l, input * amp_r);
+	}
+}

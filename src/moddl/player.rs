@@ -396,6 +396,7 @@ fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
 	};
 	add!("sineOsc", SineOscFactory { });
 	add!("limit", LimitFactory { });
+	add!("pan", PanFactory { });
 
 	// for experiments
 	add!("env1", Env1Factory { });
