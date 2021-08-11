@@ -68,6 +68,7 @@ impl Node for Pan {
 
 		// http://amei.or.jp/midistandardcommittee/Recommended_Practice/e/rp36.pdf
 		let arg = (pos + 1f32) / 2f32 * std::f32::consts::PI / 2f32; // [-1, 1] を [0, pi/2] に変換
+		// TODO 定位が変わっていないのに毎サンプル計算するのは無駄だが
 		let amp_l = arg.cos();
 		let amp_r = arg.sin();
 
