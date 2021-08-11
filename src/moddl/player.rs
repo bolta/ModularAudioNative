@@ -196,6 +196,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				}
 			}
 		}
+
 		let factories = node_factories();
 
 		match strukt {
@@ -213,7 +214,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::Identifier(id) => {
 				// id は今のところ引数なしのノード生成しかない
 				let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
-				add_node!(fact.create_node(&ValueArgs::new(), &NodeArgs::new(), input))
+				apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			},
 			// NodeStructure::Lambda => ,
 			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
@@ -224,22 +225,30 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 					_ => unreachable!(),
 				};
 				let fact = factories.get(fact_id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
-				let node_names = fact.node_args();
-				let mut node_args = NodeArgs::new();
-				for name in node_names {
-					let arg_val = & args.iter().find(|(n, _)| *n == *name )
-							// 必要な引数が与えられていない
-							.ok_or_else(|| Error::NodeFactoryNotFound)?.1;
-					let st = arg_val.as_node_structure()
-							// node_args に指定された引数なのに NodeStructure に変換できない
-							.ok_or_else(|| Error::NodeFactoryNotFound) ?;
-					let arg_node = recurse!(&st, input) ?;
-
-					node_args.insert(name.clone(), arg_node);
-				}
+				let specs = fact.node_arg_specs();
+				let node_args = {
+					let mut node_args = NodeArgs::new();
+					for NodeArgSpec { name, channels } in specs {
+						let arg_val = & args.iter().find(|(n, _)| *n == *name )
+								// 必要な引数が与えられていない
+								.ok_or_else(|| Error::NodeFactoryNotFound)?.1;
+						let st = arg_val.as_node_structure()
+								// node_args に指定された引数なのに NodeStructure に変換できない
+								.ok_or_else(|| Error::NodeFactoryNotFound) ?;
+						let arg_node = recurse!(&st, input) ?;
+						let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
+							Some(result) => result,
+							// モノラルであるべき node_arg にステレオが与えられた場合、
+							// 勝手にモノラルに変換するとロスが発生するのでエラーにする
+							None => Err(Error::ChannelMismatch),
+						} ?;
+						node_args.insert(name.clone(), coerced_arg_node);
+					}
+					node_args
+				};
 				let value_args: ValueArgs = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-				add_node!(fact.create_node(&value_args, &node_args, input))
+				apply_input(Some(track), nodes, fact, &value_args, &node_args, input)
 			},
 			NodeStructure::Constant(value) => add_node!(Box::new(Constant::new(*value))),
 
@@ -250,6 +259,79 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 	visit_struct(track, instrm_def, nodes, freq)
 }
 
+fn coerce_input(
+	track: Option<&str>,
+	nodes: &mut NodeHost,
+	input: ChanneledNodeIndex,
+	expected_channels: i32
+) -> Option<ModdlResult<ChanneledNodeIndex>> {
+	// TODO 共通化
+	macro_rules! add_node {
+		// トラックに属する node は全てトラック名のタグをつける
+		($new_node: expr) => {
+			Ok(match track {
+				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
+				None => nodes.add($new_node),
+			})
+		}
+	}
+	match (input.channels(), expected_channels) {
+		(1, 1) => Some(Ok(input)),
+		(1, 2) => Some(add_node!(Box::new(MonoToStereo::new(input.as_mono())))),
+		(2, 1) => None, // ステレオの入力をモノラルに入れる場合、状況によってすべきことが異なるので、呼び出し元に任せる
+		(2, 2) => Some(Ok(input)),
+		_ => Some(Err(Error::ChannelMismatch)),
+	}
+}
+
+
+fn apply_input(
+	track: Option<&str>,
+	nodes: &mut NodeHost,
+	fact: &Box<dyn NodeFactory>,
+	value_args: &ValueArgs,
+	node_args: &NodeArgs,
+	input: ChanneledNodeIndex
+) -> ModdlResult<ChanneledNodeIndex> {
+	// TODO 共通化
+	macro_rules! add_node {
+		// トラックに属する node は全てトラック名のタグをつける
+		($new_node: expr) => {
+			Ok(match track {
+				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
+				None => nodes.add($new_node),
+			})
+		}
+	}
+
+	match coerce_input(track, nodes, input, fact.input_channels()) {
+		Some(result) => {
+			let coerced_input = result ?;
+			add_node!(fact.create_node(value_args, node_args, coerced_input))
+		},
+		None => {
+			// 一旦型を明記した変数に取らないとなぜか E0282 になる
+			let input_l = {
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(Split::new(input.as_stereo(), 0)));
+				result ?
+			};
+			let input_r = {
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(Split::new(input.as_stereo(), 1)));
+				result ?
+			};
+			let result_l = {
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(value_args, node_args, input_l));
+				result ?
+			};
+			let result_r = {
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(value_args, node_args, input_r));
+				result ?
+			};
+			add_node!(Box::new(Join::new(vec![result_l.as_mono(), result_r.as_mono()])))
+		}
+	}
+}
+
 fn binary<M: 'static + Node, S: 'static + Node>(
 	track: Option<&str>,
 	nodes: &mut NodeHost,
@@ -258,6 +340,7 @@ fn binary<M: 'static + Node, S: 'static + Node>(
 	create_mono: fn (MonoNodeIndex, MonoNodeIndex) -> M,
 	create_stereo: fn (StereoNodeIndex, StereoNodeIndex) -> S,
 ) -> ModdlResult<ChanneledNodeIndex> {
+	// TODO 共通化
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
 		($new_node: expr) => {
