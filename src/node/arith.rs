@@ -6,16 +6,17 @@ use crate::core::{
 };
 
 pub struct Add {
-	args: Vec<MonoNodeIndex>,
+	lhs: MonoNodeIndex,
+	rhs: MonoNodeIndex,
 }
 impl Add {
-	pub fn new(args: Vec<MonoNodeIndex>) -> Self { Self { args } }
+	pub fn new(lhs: MonoNodeIndex, rhs: MonoNodeIndex) -> Self { Self { lhs, rhs } }
 }
 impl Node for Add {
 	fn channels(&self) -> i32 { 1 }
-	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
+	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
-		output_mono(output, inputs.iter().take(self.args.len()).sum());
+		output_mono(output, inputs[0] + inputs[1]);
 	}
 }
 
@@ -36,16 +37,17 @@ impl Node for StereoAdd {
 }
 
 pub struct Mul {
-	args: Vec<MonoNodeIndex>,
+	lhs: MonoNodeIndex,
+	rhs: MonoNodeIndex,
 }
 impl Mul {
-	pub fn new(args: Vec<MonoNodeIndex>) -> Self { Self { args } }
+	pub fn new(lhs: MonoNodeIndex, rhs: MonoNodeIndex) -> Self { Self { lhs, rhs } }
 }
 impl Node for Mul {
 	fn channels(&self) -> i32 { 1 }
-	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
+	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
-		output_mono(output, inputs.iter().take(self.args.len()).product());
+		output_mono(output, inputs[0] * inputs[1]);
 	}
 }
 

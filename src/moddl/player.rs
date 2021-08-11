@@ -265,8 +265,8 @@ fn binary<M: 'static + Node, S: 'static + Node>(
 	nodes: &mut NodeHost,
 	l_node: ChanneledNodeIndex,
 	r_node: ChanneledNodeIndex,
-	create_mono: fn (Vec<MonoNodeIndex>) -> M,
-	create_stereo: fn (StereoNodeIndex, StereoNodeIndex) -> S
+	create_mono: fn (MonoNodeIndex, MonoNodeIndex) -> M,
+	create_stereo: fn (StereoNodeIndex, StereoNodeIndex) -> S,
 ) -> ModdlResult<ChanneledNodeIndex> {
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
@@ -279,7 +279,7 @@ fn binary<M: 'static + Node, S: 'static + Node>(
 	}
 	match (l_node.channels(), r_node.channels()) {
 		(1, 1) => {
-			add_node!(Box::new(create_mono(vec![l_node.as_mono(), r_node.as_mono()])))
+			add_node!(Box::new(create_mono(l_node.as_mono(), r_node.as_mono())))
 		},
 		// 以下ステレオ対応
 		// 現状ステレオまでしか対応していないが、任意のチャンネル数に拡張できるはず
