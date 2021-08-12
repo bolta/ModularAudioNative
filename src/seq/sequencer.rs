@@ -10,7 +10,6 @@ use crate::node::{
 };
 use super::{
 	common::*,
-	context::*,
 	instruction::*,
 	tick::EVENT_TYPE_TICK,
 	sequence::*,
@@ -53,7 +52,7 @@ struct Context {
 	wait: i32,
 }
 impl Context {
-	fn tick(&mut self, sequence: &Sequence, context: &CoreContext, env: &mut Environment) {
+	fn tick(&mut self, sequence: &Sequence, _context: &CoreContext, env: &mut Environment) {
 		if self.wait > 0 {
 			self.wait -= 1;
 			if self.wait > 0 { return; }

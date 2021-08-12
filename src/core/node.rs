@@ -11,11 +11,11 @@ pub type Upstreams = Vec<ChanneledNodeIndex>;
 pub trait Node {
 	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams { vec![] }
-	fn initialize(&mut self, context: &Context, env: &mut Environment) { }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) { }
-	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) { }
-	fn finalize(&mut self, context: &Context, env: &mut Environment) { }
-	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) { }
+	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) { }
+	fn update(&mut self, _inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) { }
+	fn finalize(&mut self, _context: &Context, _env: &mut Environment) { }
+	fn process_event(&mut self, _event: &dyn Event, _context: &Context, _env: &mut Environment) { }
 }
 
 pub fn output_mono(output: &mut Vec<Sample>, value: Sample) {

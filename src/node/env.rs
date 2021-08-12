@@ -25,14 +25,14 @@ impl ExpEnv {
 }
 impl Node for ExpEnv {
 	fn channels(&self) -> i32 { 1 }
-	fn initialize(&mut self, context: &Context, env: &mut Environment) {
+	fn initialize(&mut self, context: &Context, _env: &mut Environment) {
 		// TODO 無駄に状態をもつのがいやだが…
 		self.ratio_per_sample = self.ratio_per_sec.powf(1f32 / context.sample_rate_f32());
 	}
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.amplitude);
 	}
-	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn update(&mut self, _inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		if self.state == ExpEnvState::Idle { return; }
 
 		self.amplitude *= self.ratio_per_sample;
@@ -41,7 +41,7 @@ impl Node for ExpEnv {
 			self.state = ExpEnvState::Idle;
 		}
 	}
-	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
+	fn process_event(&mut self, event: &dyn Event, _context: &Context, _env: &mut Environment) {
 		if event.event_type() != EVENT_TYPE_NOTE { return; }
 
 		let event = event.downcast_ref::<NoteEvent>().unwrap();

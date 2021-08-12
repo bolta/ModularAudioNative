@@ -82,7 +82,7 @@ pub enum Command {
 	Tone { tone_name: ToneName, length: Length, slur: bool },
 	Rest(Length),
 	Parameter { name: String, value: f32 },
-	Loop { times: Option<i32>, Content: Vec<Command> },
+	Loop { times: Option<i32>, content: Vec<Command> },
 	LoopBreak,
 	Stack { content: Vec<Command> },
 	ExpandMacro { name: String },

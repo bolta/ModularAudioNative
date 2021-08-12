@@ -4,7 +4,6 @@ use super::{
 use crate::{
 	core::{
 		common::*,
-		node_host::*,
 		node::*,
 	},
 };
@@ -45,7 +44,7 @@ pub struct SineOscFactory { }
 impl NodeFactory for SineOscFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, value_args: &ValueArgs, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		Box::new(SineOsc::new(freq))
 	}
@@ -55,7 +54,7 @@ pub struct LimitFactory { }
 impl NodeFactory for LimitFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("min", 1), spec("max", 1)] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, value_args: &ValueArgs, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, _value_args: &ValueArgs, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
 		// ここは、存在しなければ呼び出し元でエラーにするのでチェック不要、のはず
 		let min = node_args.get("min").unwrap().as_mono();

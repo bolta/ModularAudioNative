@@ -29,12 +29,12 @@ impl Tick {
 impl Node for Tick {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![] }
-	fn initialize(&mut self, context: &Context, env: &mut Environment) {
+	fn initialize(&mut self, _context: &Context, env: &mut Environment) {
 		// TODO 各サンプルの直前にイベントを投げれる機会を設けた方がいい。
 		// 同じ処理を 2 回書いたりサンプル数に +1 したりしなくてよくなるように
 		self.tick(env);
 	}
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) { }
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		self.timer += self.tempo * self.ticks_per_beat as f32 / 60f32 / context.sample_rate_f32();
 		while self.timer >= 1f32 {

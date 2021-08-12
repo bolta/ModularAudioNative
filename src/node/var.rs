@@ -16,11 +16,11 @@ impl Var {
 impl Node for Var {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.value);
 	}
 
-	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
+	fn process_event(&mut self, event: &dyn Event, _context: &Context, _env: &mut Environment) {
 		if event.event_type() != EVENT_TYPE_SET { return; }
 
 		let event = event.downcast_ref::<SetEvent>().unwrap();

@@ -2,12 +2,6 @@ use super::{
 	default_mml_parser::*,
 };
 use crate::{
-	core::{
-		event::*,
-	},
-	node::{
-		var::*,
-	},
 	seq::{
 		instruction::*,
 		sequence::*,

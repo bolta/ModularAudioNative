@@ -37,7 +37,6 @@ impl Machine {
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
 	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost, waveforms: &mut WaveformHost) {
-		let num_nodes = nodes.count();
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();

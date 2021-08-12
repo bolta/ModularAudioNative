@@ -13,7 +13,6 @@ use crate::{
 		machine::*,
 		node::*,
 		node_host::*,
-		event::*
 	},
 	mml::default::{
 		*,
@@ -22,11 +21,8 @@ use crate::{
 	node::{
 		arith::*,
 		audio::*,
-		env::*,
-		osc::*,
 		prim::*,
 		stereo::*,
-		util::*,
 		var::*,
 	},
 	seq::{
@@ -112,7 +108,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	};
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
-	nodes.add(Box::new(PortAudioOut::new(master, &context)));
+	nodes.add(Box::new(PortAudioOut::new(master)));
 
 	Machine::new().play(&mut context, &mut nodes, &mut waveforms);
 
@@ -283,8 +279,6 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				apply_input(Some(track), nodes, fact, &value_args, &node_args, input)
 			},
 			NodeStructure::Constant(value) => add_node!(Box::new(Constant::new(*value))),
-
-			_ => unimplemented!(),
 		}
 	}
 

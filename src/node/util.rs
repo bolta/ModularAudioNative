@@ -16,7 +16,7 @@ impl Node for Print {
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	// TODO ステレオ対応
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
-	fn execute<'a>(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn execute<'a>(&mut self, inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		// TODO ステレオ対応
 		println!("{}", inputs[0]);
 	}

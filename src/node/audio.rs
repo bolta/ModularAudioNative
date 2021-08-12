@@ -20,7 +20,7 @@ pub struct PortAudioOut {
 	buffer_size: usize,
 }
 impl PortAudioOut {
-	pub fn new(input: ChanneledNodeIndex, context: &Context) -> Self {
+	pub fn new(input: ChanneledNodeIndex) -> Self {
 		let channels = input.channels();
 		let buffer_size = FRAMES as usize * channels as usize;
 
@@ -36,7 +36,7 @@ impl Node for PortAudioOut {
 	// ノードグラフ上で出力するチャンネル数は 0
 	fn channels(&self) -> i32 { 0 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
-	fn initialize(&mut self, context: &Context, env: &mut Environment) {
+	fn initialize(&mut self, context: &Context, _env: &mut Environment) {
 		let pa = pa::PortAudio::new().expect("error");
 
 		// let default_host = pa.default_host_api().expect("error");
@@ -69,8 +69,8 @@ impl Node for PortAudioOut {
 
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
-		if self.buffer.len() < self.buffer_size { return /* NO_OUTPUT */; }
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		if self.buffer.len() < self.buffer_size { return; }
 
 		let b = &mut self.buffer;
 
@@ -84,18 +84,16 @@ impl Node for PortAudioOut {
 				}).expect("error");
 			}
 		}
-	
-		// NO_OUTPUT
 	}
 
-	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn update(&mut self, inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		if self.buffer.len() >= self.buffer_size { self.buffer.clear(); }
-		for ch in (0 .. self.input.channels()) {
+		for ch in 0 .. self.input.channels() {
 			self.buffer.push(inputs[ch as usize]);
 		}
 	}
 
-	fn finalize(&mut self, context: &Context, env: &mut Environment) {
+	fn finalize(&mut self, _context: &Context, _env: &mut Environment) {
 		match &mut self.stream {
 			None => { }
 			Some(stream) => {
