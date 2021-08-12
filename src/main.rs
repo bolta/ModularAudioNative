@@ -6,6 +6,7 @@ mod mml;
 mod moddl;
 mod node;
 mod seq;
+mod wave;
 
 use crate::moddl::{
 	player,

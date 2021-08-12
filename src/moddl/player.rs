@@ -33,6 +33,10 @@ use crate::{
 		sequencer::*,
 		tick::*,
 	},
+	wave::{
+		waveform::*,
+		waveform_host::*,
+	}
 };
 
 use std::{
@@ -73,6 +77,9 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut instruments = HashMap::<String, NodeStructure>::new();
 	// トラックごとの MML を蓄積
 	let mut mmls = BTreeMap::<String, String>::new();
+	let mut waveforms = WaveformHost::new();
+	// TODO 仮
+	waveforms.add(exper_waveform());
 
 	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) ?; }
 	
@@ -107,9 +114,24 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 	nodes.add(Box::new(PortAudioOut::new(master, &context)));
 
-	Machine::new().play(&mut context, &mut nodes);
+	Machine::new().play(&mut context, &mut nodes, &mut waveforms);
 
 	Ok(())
+}
+
+fn exper_waveform() -> Waveform {
+	// 441 Hz の矩形波、1 秒間（最初の 20 周期はデューティ比を変える）
+	let mut data = vec![];
+	for _ in 0 .. 20 {
+		for _ in 0 .. 25 { data.push( 1f32); }
+		for _ in 0 .. 75 { data.push(-1f32); }
+	}
+	for _ in 0 .. 441 - 20 {
+		for _ in 0 .. 50 { data.push( 1f32); }
+		for _ in 0 .. 50 { data.push(-1f32); }
+	}
+
+	Waveform::new_with_details(1, 44100, data, Some(441f32), None, None, None)
 }
 
 fn process_statement<'a>(
@@ -411,6 +433,7 @@ fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
 	// for experiments
 	add!("env1", Env1Factory { });
 	add!("stereoTestOsc", StereoTestOscFactory { });
+	add!("waveformPlayer1", WaveformPlayer1Factory { });
 
 	result
 }

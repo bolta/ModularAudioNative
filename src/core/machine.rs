@@ -5,6 +5,10 @@ use super::{
 	node_host::*,
 };
 
+use crate::{
+	wave::waveform_host::*,
+};
+
 use std::{
 	collections::hash_map::HashMap,
 };
@@ -32,7 +36,7 @@ impl Machine {
 	}
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
-	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost) {
+	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost, waveforms: &mut WaveformHost) {
 		let num_nodes = nodes.count();
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
@@ -65,7 +69,7 @@ impl Machine {
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
-		let mut env = Environment::new(&mut events_prod);
+		let mut env = Environment::new(&mut events_prod, waveforms);
 	
 		println!("initializing...");
 		for node in nodes.nodes_mut().iter_mut() { node.initialize(context, &mut env); }
@@ -189,10 +193,15 @@ pub type EventProducer = Producer<Box<dyn Event>>;
 pub type EventConsumer = Consumer<Box<dyn Event>>;
 pub struct Environment<'a> {
 	events: &'a mut EventProducer,
+	waveforms: &'a mut WaveformHost,
 }
 impl <'a> Environment<'a> {
-	fn new(events: &'a mut EventProducer) -> Self { Self { events } }
+	fn new(events: &'a mut EventProducer, waveforms: &'a mut WaveformHost) -> Self {
+		Self { events, waveforms }
+	}
 	pub fn events_mut(&mut self) -> &mut EventProducer { self.events }
+	pub fn waveforms(&self) -> &WaveformHost { self.waveforms }
+	pub fn waveforms_mut(&mut self) -> &mut WaveformHost { self.waveforms }
 }
 
 

@@ -1,6 +1,6 @@
 @tempo 144
-@instrument ^a, (sineOsc * env1) | pan { pos: -1 }
-@instrument ^b, (sineOsc * env1) | pan { pos: 1 }
+@instrument ^a, waveformPlayer1 * env1 | pan { pos: -.5 }
+@instrument ^b, (sineOsc * env1) | pan { pos: .5 }
 @instrument ^c, (sineOsc * env1) | pan { pos: 0 }
 
 

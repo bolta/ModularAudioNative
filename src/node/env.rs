@@ -77,4 +77,4 @@ impl Event for NoteEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_NOTE }
 }
 
-const EVENT_TYPE_NOTE: &str = "Env::Note";
+pub const EVENT_TYPE_NOTE: &str = "Env::Note";

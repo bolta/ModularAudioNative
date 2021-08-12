@@ -10,12 +10,19 @@ use crate::{
 };
 
 // TODO 別の場所に移す
-use crate::node::{
-	arith::*,
-	env::*,
-	osc::*,
-	stereo::*,
+use crate::{
+	node::{
+		arith::*,
+		env::*,
+		osc::*,
+		stereo::*,
+	},
+	wave::{
+		waveform_host::*,
+		waveform_player::*,
+	}
 };
+
 
 use std::collections::hash_map::HashMap;
 
@@ -73,6 +80,16 @@ impl NodeFactory for StereoTestOscFactory {
 	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		Box::new(StereoTestOsc::new(freq))
+	}
+}
+
+pub struct WaveformPlayer1Factory { }
+impl NodeFactory for WaveformPlayer1Factory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+		Box::new(WaveformPlayer::new(1, WaveformIndex(0usize), freq))
 	}
 }
 
