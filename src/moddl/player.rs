@@ -32,6 +32,7 @@ use crate::{
 	wave::{
 		waveform::*,
 		waveform_host::*,
+		wav_reader::*,
 	}
 };
 
@@ -75,7 +76,8 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut mmls = BTreeMap::<String, String>::new();
 	let mut waveforms = WaveformHost::new();
 	// TODO 仮
-	waveforms.add(exper_waveform());
+//	waveforms.add(exper_waveform());
+	waveforms.add(read_wav_file(r"H:/dev/ModularAudioNative/wav/lead12.wav", None, None, None, None) ?);
 
 	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) ?; }
 	
