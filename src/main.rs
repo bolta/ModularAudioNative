@@ -1,6 +1,12 @@
 #![allow(dead_code)]
 #![type_length_limit="106079600"]
 
+// マクロを提供するモジュール（common::parser）はマクロを使うモジュールより先に、
+// かつ #[macro_use] をつけて宣言する必要がある
+// https://stackoverflow.com/questions/26731243/how-do-i-use-a-macro-across-module-files
+#[macro_use]
+mod common;
+
 mod core;
 mod mml;
 mod moddl;
