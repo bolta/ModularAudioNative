@@ -86,6 +86,17 @@ parser![tone_command, Command, {
 		})
 	)
 }];
+parser![loop_command, Command, {
+	// 型の無限再帰を避けるため手続きで書く
+	|input| {
+		let (input, _) = ss!(char('['))(input) ?;
+		let (input, times) = opt(ss!(integer()))(input) ?;
+		let (input, content) = many0(command())(input) ?;
+		let (input, _) = ss!(char(']'))(input) ?;
+
+		Ok((input, Command::Loop { times, content }))
+	}
+}];
 
 parser![command, Command, {
 	alt((
@@ -99,6 +110,8 @@ parser![command, Command, {
 		unary_command!(re_find(re(r"@d")), float(), Command::Detune),
 		tone_command(),
 		unary_command!(char('r'), length(), Command::Rest),
+		loop_command(),
+		nullary_command!(char(':'), Command::LoopBreak),
 	))
 }];
 
