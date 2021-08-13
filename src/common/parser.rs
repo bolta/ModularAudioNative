@@ -30,6 +30,8 @@ impl <'a> ResultMap<'a> for IResult<&'a str, &'a str> {
 	}
 }
 
+pub fn ok<T>(value: T) -> Result<T, ()> { Ok::<_, ()>(value) }
+
 pub fn re(pattern: &str) -> Regex {
 	// re_find() はマッチするところまで入力を読み飛ばしてしまう
 	// （re_find(re(r"\d"))("abc1") → Ok(("", "1"))）
@@ -71,3 +73,24 @@ macro_rules! si {
 macro_rules! ss {
 	($parser: expr) => { terminated($parser, multispace0) }
 }
+
+pub_parser![integer, i32, {
+	map_res(re_find(re(r"-?[0-9]+")),
+			|matched| matched.parse::<i32>())
+}];
+
+pub_parser![float, f32, {
+	map_res(re_find(re(r"[+-]?[0-9]+(\.[0-9]+)?|[+-]?\.[0-9]+")),
+			|matched| matched.parse::<f32>())
+}];
+
+#[cfg(test)]
+#[test]
+fn test_float() {
+	assert_eq!(float()("3.14"), Ok(("", 3.14f32)));
+	// TODO 他にも
+}
+
+pub_parser![identifier, &str, {
+	re_find(re(r"[a-zA-Z0-9_][a-zA-Z0-9_]*"))
+}];

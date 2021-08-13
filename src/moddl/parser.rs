@@ -16,18 +16,6 @@ use nom::{
 };
 
 
-parser![float, f32, {
-	map_res(re_find(re(r"[+-]?[0-9]+(\.[0-9]+)?|[+-]?\.[0-9]+")),
-			|matched| matched.parse::<f32>())
-}];
-
-#[cfg(test)]
-#[test]
-fn test_float() {
-	assert_eq!(float()("3.14"), Ok(("", 3.14f32)));
-	// TODO 他にも
-}
-
 // fn map_res_ok<I: Clone, O1, O2, E: ParseError<I>, F, G>(
 //     first: F, 
 //     second: G
@@ -39,17 +27,12 @@ fn test_float() {
 // 	map_res(first, |res| Ok::<O2, ()>(second(res)))
 // }
 
-fn ok<T>(value: T) -> Result<T, ()> { Ok::<_, ()>(value) }
-
 parser![statement_ending, (), {
 	map_res(
 			// 空行を無視するよう ss! をかます。
 			// 先頭の空行は compilation_unit で対応
 			ss!(alt((line_ending, eof))),
 			|_| Ok::<_, ()>(()))
-}];
-parser![identifier, &str, {
-	re_find(re(r"[a-zA-Z0-9_][a-zA-Z0-9_]*"))
 }];
 
 parser![float_literal, Box<Expr>, {

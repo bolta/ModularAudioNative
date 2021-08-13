@@ -16,6 +16,7 @@ use crate::{
 	},
 	mml::default::{
 		*,
+		ast as mml_ast,
 		sequence_generator::*,
 	},
 	node::{
@@ -42,8 +43,6 @@ use std::{
 	fs::File,
 	io::Read,
 };
-
-use combine::Parser;
 
 // TODO エラー処理を全体的にちゃんとする
 
@@ -188,8 +187,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize) -> ModdlResult<Value> {
 
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult</* 'a, */ ()> {
-	let ast = default_mml_parser::compilation_unit().parse(mml)
-			.map_err(|_e| Error::MmlSyntax )?.0; // TODO パーズエラーをちゃんとラップする
+	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 
 	let tag_set = TagSet {
 		freq: track.to_string(),
