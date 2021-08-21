@@ -9,12 +9,13 @@ b	o3l4q8
 c	o3l2q8
 
 abc [0
-	a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ g+2f+2<
-	b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2<
+	ab [2
+		a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ : g+2f+2<
+		b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2
+	ab ]
+	a >g+2f+f+16g+16a16b16>
+	b >
 	c	ed+ c+<b aa+ b1> ag+ f+f f+e d+<b>
-
-	a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ g+2f+f+16g+16a16b16>
-	b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2
 	c	ed+ c+c c+<a+ b1> ag+ f+f f+e d+<b>
 
 	a	c+2^8r8c+< b2^8r8g+ aa8g+8f+f f+g+ab>

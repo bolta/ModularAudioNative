@@ -17,7 +17,9 @@ pub enum Command {
 	Tone { tone_name: ToneName, length: Length, slur: bool },
 	Rest(Length),
 	Parameter { name: String, value: f32 },
-	Loop { times: Option<i32>, content: Vec<Command> },
+	/// times は Some(n) で有限、None で無限、
+	/// content1 は : より前（: がない場合は全部）、content 2 は : より後（: がない場合は None）
+	Loop { times: Option<i32>, content1: Vec<Command>, content2: Option<Vec<Command>> },
 	LoopBreak,
 	Stack { content: Vec<Command> },
 	ExpandMacro { name: String },

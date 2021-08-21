@@ -1,5 +1,5 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct InstructionIndex(pub usize);
 
-#[derive(Clone, Copy)]
-pub struct SequenceIndex(pub usize);
+#[derive(Clone, Debug)]
+pub struct SequenceName(pub String);

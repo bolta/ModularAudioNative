@@ -3,3 +3,5 @@
 // https://stackoverflow.com/questions/26731243/how-do-i-use-a-macro-across-module-files
 #[macro_use]
 pub mod parser;
+
+pub mod stack;

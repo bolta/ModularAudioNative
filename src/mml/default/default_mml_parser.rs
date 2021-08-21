@@ -90,11 +90,20 @@ parser![loop_command, Command, {
 	// 型の無限再帰を避けるため手続きで書く
 	|input| {
 		let (input, _) = ss!(char('['))(input) ?;
-		let (input, times) = opt(ss!(integer()))(input) ?;
-		let (input, content) = many0(command())(input) ?;
+		let (input, times_in_mml) = opt(ss!(integer()))(input) ?;
+		let (input, content1) = many0(command())(input) ?;
+		let (input, content2) = opt(preceded(ss!(char(':')), many0(command())))(input) ?;
+		// ss!(char('['))(input) ?;
+		// let (input, content) = many0(command())(input) ?;
 		let (input, _) = ss!(char(']'))(input) ?;
 
-		Ok((input, Command::Loop { times, content }))
+		// MML では回数省略は 2、AST では回数 None は無限ループ
+		let times = match times_in_mml {
+			None => Some(2),
+			Some(t) => if t == 0 { None } else { Some(t) },
+		};
+
+		Ok((input, Command::Loop { times, content1, content2 }))
 	}
 }];
 
@@ -111,7 +120,6 @@ parser![command, Command, {
 		tone_command(),
 		unary_command!(char('r'), length(), Command::Rest),
 		loop_command(),
-		nullary_command!(char(':'), Command::LoopBreak),
 	))
 }];
 
