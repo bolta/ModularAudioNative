@@ -13,8 +13,9 @@ pub enum Error/* <'a> */ {
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
-	DirectiveArgTypeMismatch,
+	DirectiveArgTypeMismatch, // TODO 汎用的な TypeMismatch にすべきか
 	DirectiveDuplicate { msg: String }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
+	VarNotFound { var: String },
 	NodeFactoryNotFound,
 	NodeFactoryArgTypeMismatch,
 	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？

@@ -41,6 +41,7 @@ use std::{
 	collections::hash_map::HashMap,
 	fs::File,
 	io::Read,
+	rc::Rc,
 };
 
 // TODO エラー処理を全体的にちゃんとする
@@ -77,7 +78,9 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 //	waveforms.add(exper_waveform());
 	waveforms.add(read_wav_file(r"H:/dev/ModularAudioNative/wav/lead12.wav", None, None, None, None) ?);
 
-	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls) ?; }
+	let mut vars = builtin_vars();
+
+	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars) ?; }
 	
 	let mut nodes = NodeHost::new();
 	nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
@@ -87,7 +90,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		let instrm = instruments.get(track)
 				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
 
-		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), &mut nodes, &mut output_nodes) ?;
+		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), &mut nodes, &mut output_nodes) ?;
 	}
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
@@ -136,26 +139,33 @@ fn process_statement<'a>(
 	// instruments: &mut HashMap<String, &'a Expr>,
 	instruments: &mut HashMap<String, NodeStructure>,
 	mmls: &mut BTreeMap<String, String>,
+	vars: &mut HashMap<String, Value>,
 ) -> ModdlResult</* 'a, */ ()> { // TODO 寿命指定これでいいのか
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					*tempo = evaluate_arg(&args, 0)?.as_float()
+					*tempo = evaluate_arg(&args, 0, vars)?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg(&args, 0)?.as_track_set()
+					let tracks = evaluate_arg(&args, 0, vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1)?.as_node_structure()
+						let instrm = evaluate_arg(&args, 1, vars)?.as_node_structure()
 								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 						if instruments.get(&track).is_some() {
 							return Err(Error::DirectiveDuplicate { msg: format!("@instrument ^{}", &track) });
 						}
 						instruments.insert(track, instrm);
 					}
+				}
+				"let" => {
+					let name = evaluate_arg(&args, 0, vars)?.as_identifier_literal()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let value = evaluate_arg(&args, 1, vars) ?;
+					vars.insert(name, value);
 				}
 				other => {
 					println!("unknown directive: {}", other);
@@ -176,15 +186,15 @@ fn process_statement<'a>(
 	Ok(())
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize) -> ModdlResult<Value> {
+fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -> ModdlResult<Value> {
 	if index < args.len() {
-		Ok(evaluate(&args[index]))
+		evaluate(&args[index], vars)
 	} else {
 		Err(Error::DirectiveArgNotFound)
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult</* 'a, */ ()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 
@@ -224,7 +234,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			}
 		}
 
-		let factories = node_factories();
+		// let factories = node_factories();
 
 		match strukt {
 			NodeStructure::Connect(lhs, rhs) => {
@@ -238,20 +248,28 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::Remainder(lhs, rhs) => binary!(remainder, lhs, rhs),
 			NodeStructure::Add(lhs, rhs) => binary!(add, lhs, rhs),
 			NodeStructure::Subtract(lhs, rhs) => binary!(subtract, lhs, rhs),
-			NodeStructure::Identifier(id) => {
-				// id は今のところ引数なしのノード生成しかない
-				let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
+			// NodeStructure::Identifier(id) => {
+			// 	// id は今のところ引数なしのノード生成しかない
+			// 	let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
+			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
+			// },
+			NodeStructure::NodeFactory(fact) => {
 				apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			},
 			// NodeStructure::Lambda => ,
 			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
 				// 引数ありのノード生成
 				// 今のところ factory は id で直に指定するしかなく、id は factory の名前しかない
-				let fact_id = match &**factory {
-					NodeStructure::Identifier(id) => id,
-					_ => unreachable!(),
-				};
-				let fact = factories.get(fact_id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
+				// let fact_id = match &**factory {
+				// 	NodeStructure::Identifier(id) => id,
+				// 	_ => unreachable!(),
+				// };
+				// 
+				// let fact = factories.get(fact_id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
+				let fact = match &**factory {
+					NodeStructure::NodeFactory(fact) => Ok(fact),
+					_ => Err(Error::DirectiveArgTypeMismatch),
+				} ?;
 				let specs = fact.node_arg_specs();
 				let node_args = {
 					let mut node_args = NodeArgs::new();
@@ -313,7 +331,7 @@ fn coerce_input(
 fn apply_input(
 	track: Option<&str>,
 	nodes: &mut NodeHost,
-	fact: &Box<dyn NodeFactory>,
+	fact: &Rc<dyn NodeFactory>,
 	value_args: &ValueArgs,
 	node_args: &NodeArgs,
 	input: ChanneledNodeIndex
@@ -412,21 +430,21 @@ binary!(divide, Div::new, StereoDiv::new);
 binary!(remainder, Rem::new, StereoRem::new);
 binary!(power, Pow::new, StereoPow::new);
 
-fn node_factories() -> HashMap<String, Box<dyn NodeFactory>> {
-	let mut result = HashMap::<String, Box<dyn NodeFactory>>::new();
-	macro_rules! add {
+fn builtin_vars() -> HashMap<String, Value> {
+	let mut result = HashMap::<String, Value>::new();
+	macro_rules! add_node_factory {
 		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), Box::new($fact));
+			result.insert($name.to_string(), Value::NodeFactory(Rc::new($fact)));
 		}
 	};
-	add!("sineOsc", SineOscFactory { });
-	add!("limit", LimitFactory { });
-	add!("pan", PanFactory { });
+	add_node_factory!("sineOsc", SineOscFactory { });
+	add_node_factory!("limit", LimitFactory { });
+	add_node_factory!("pan", PanFactory { });
 
 	// for experiments
-	add!("env1", Env1Factory { });
-	add!("stereoTestOsc", StereoTestOscFactory { });
-	add!("waveformPlayer1", WaveformPlayer1Factory { });
+	add_node_factory!("env1", Env1Factory { });
+	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
+	add_node_factory!("waveformPlayer1", WaveformPlayer1Factory { });
 
 	result
 }

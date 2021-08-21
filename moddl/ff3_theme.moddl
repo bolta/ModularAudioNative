@@ -1,8 +1,11 @@
-@tempo 144
-@instrument ^a, waveformPlayer1 * env1 | pan { pos: -.5 }
-@instrument ^b, (sineOsc * env1) | pan { pos: .5 }
-@instrument ^c, (sineOsc * env1) | pan { pos: 0 }
+@let `tempo`, 144
+@tempo tempo
 
+@let `instrm1`, (sineOsc | limit { min: -0.2, max: 0.8 } + 0.2) * 2 * env1
+
+@instrument ^a, waveformPlayer1 | pan { pos: -.5 }
+@instrument ^b, instrm1 | pan { pos: .5 }
+@instrument ^c, instrm1 | pan { pos: 0 }
 
 a	o4l4q8
 b	o3l4q8

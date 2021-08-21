@@ -1,3 +1,9 @@
+use super::{
+	node_factory::*,
+};
+
+use std::rc::Rc;
+
 /// 生成すべき Node の構造を表現する型。
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
@@ -9,13 +15,13 @@ pub enum NodeStructure {
 	Remainder(Box<NodeStructure>, Box<NodeStructure>),
 	Add(Box<NodeStructure>, Box<NodeStructure>),
 	Subtract(Box<NodeStructure>, Box<NodeStructure>),
-	Identifier(String),
 	// Lambda,
 	NodeWithArgs {
 		factory: Box<NodeStructure>,
 		label: String,
 		args: Vec<(String, Value)>,
 	},
+	NodeFactory(Rc<dyn NodeFactory>),
 	Constant(f32),
 }
 
@@ -23,10 +29,12 @@ pub enum NodeStructure {
 pub enum Value {
 	Float(f32),
 	TrackSet(Vec<String>),
-	/// Identifier（foo）の評価結果としての値（IdentifierLiteral は `foo` の結果）
-	Identifier(String),
+	IdentifierLiteral(String),
 	// Node(NodeIndex),
+	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
+	/// 引数を受け取ってノードを生成する関数
+	NodeFactory(Rc<dyn NodeFactory>),
 }
 
 impl Value {
@@ -42,9 +50,9 @@ impl Value {
 			_ => None,
 		}
 	}
-	pub fn as_identifier(&self) -> Option<String> {
+	pub fn as_identifier_literal(&self) -> Option<String> {
 		match self {
-			Self::Identifier(id) => Some(id.clone()),
+			Self::IdentifierLiteral(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
@@ -59,8 +67,15 @@ impl Value {
 		match self {
 			Self::NodeStructure(str) => Some(str.clone()),
 			Self::Float(value) => Some(NodeStructure::Constant(*value)),
-			Self::Identifier(id) => Some(NodeStructure::Identifier(id.clone())),
+			Self::NodeFactory(fact) => Some(NodeStructure::NodeFactory(fact.clone())),
 			_ => None,
 		}
 	}
+	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
+		match self {
+			Self::NodeFactory(fact) => Some(fact.clone()),
+			_ => None,
+		}
+	}
+
 }
