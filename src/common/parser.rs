@@ -61,17 +61,59 @@ macro_rules! pub_parser {
 	}
 }
 
+pub_parser![range_comment, char, {
+	// コメントに対応したところ、type_length_limit を超過してエラーになったので
+	// 手続きで書いた（が、解消しなかったので結局 type_length_limit を増やした）
+	|input| {
+		let (input, _) = delimited(
+			tag("/*"),
+			is_not("*/"),
+			tag("*/"),
+		)(input) ?;
+		Ok((input, ' ' /* dummy */))
+	}
+}];
+pub_parser![line_comment, char, {
+	// コメントに対応したところ、type_length_limit を超過してエラーになったので
+	// 手続きで書いた（が、解消しなかったので結局 type_length_limit を増やした）
+	|input| {
+		let (input, _) = tag("//")(input) ?;
+		let (input, _) = many0(none_of("\r\n"))(input) ?;
+		Ok((input, ' ' /* dummy */))
+	}
+}];
+
+pub_parser![inline_space, char, {
+	alt((
+		char(' '),
+		char('\t'),
+		range_comment(),
+		line_comment(),
+	))
+}];
+
+pub_parser![space, char, {
+	alt((
+		char(' '),
+		char('\t'),
+		char('\r'),
+		char('\n'),
+		range_comment(),
+		line_comment(),
+	))
+}];
+
 /// skips following inline spaces if any
 // TODO 本当は関数の方がいいかも
 #[macro_export]
 macro_rules! si {
-	($parser: expr) => { terminated($parser, space0) }
+	($parser: expr) => { terminated($parser, many0(inline_space())) }
 }
 /// skips following spaces including newlines if any
 // TODO 本当は関数の方がいいかも
 #[macro_export]
 macro_rules! ss {
-	($parser: expr) => { terminated($parser, multispace0) }
+	($parser: expr) => { terminated($parser, many0(space())) }
 }
 
 pub_parser![integer, i32, {

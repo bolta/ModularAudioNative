@@ -128,7 +128,7 @@ pub_parser![compilation_unit, CompilationUnit, {
 	map_res(
 			all_consuming(
 					preceded(
-						multispace0,
+						many0(space()),
 						many0(command()),
 					)),
 			|commands| ok(CompilationUnit { commands }))

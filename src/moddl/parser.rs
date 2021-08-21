@@ -219,7 +219,7 @@ parser![mml_statement, Statement, {
 			)),
 			|(tracks, mml)| ok(Statement::Mml {
 				tracks,
-				mml: mml.to_string(),
+				mml: mml.to_string() + "\n", // 改行は行コメントの終端に必要
 			}))
 }];
 parser![statement, Statement, {
@@ -234,7 +234,7 @@ pub_parser![compilation_unit, CompilationUnit, {
 	map_res(
 			all_consuming(
 					preceded(
-						multispace0,
+						many0(space()),
 						many0(statement()),
 					)),
 			|statements| ok(CompilationUnit { statements }))

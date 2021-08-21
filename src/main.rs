@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![type_length_limit="106079600"]
+#![type_length_limit="300000000"]
 
 // マクロを提供するモジュール（common::parser）はマクロを使うモジュールより先に、
 // かつ #[macro_use] をつけて宣言する必要がある

@@ -1,9 +1,10 @@
-@let `tempo`, 144
-@tempo tempo
+//@let `tempo`, 144
+@let `tempo`, /*144*/160
+@tempo tempo // hoge
 
 @let `instrm1`, (sineOsc | limit { min: -0.2, max: 0.8 } + 0.2) * 2 * env1
 
-@instrument ^a, waveformPlayer1 | pan { pos: -.5 }
+@instrument ^a, /*WaveformPlayer1*/ instrm1 | pan { pos: -.5 }
 @instrument ^b, instrm1 | pan { pos: .5 }
 @instrument ^c, instrm1 | pan { pos: 0 }
 
@@ -13,8 +14,8 @@ c	o3l2q8
 
 abc [0
 	ab [2
-		a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ : g+2f+2<
-		b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b2a2
+		a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ : /* g+2f+2 */ e2d+2 <
+		b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b1 //b2a2
 	ab ]
 	a >g+2f+f+16g+16a16b16>
 	b >
