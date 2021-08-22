@@ -197,15 +197,16 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult</* 'a, */ ()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
+	let freq_tag = format!("{}_freq", track);
 
 	let tag_set = TagSet {
-		freq: track.to_string(),
+		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
 	let seqs = generate_sequences(&ast, 96, &tag_set);
 	let _seqr = nodes.add_with_tag(TAG_SEQUENCER.to_string(), Box::new(Sequencer::new(seqs)));
 
-	let freq = nodes.add_with_tag(track.to_string(), Box::new(Var::new(0f32)));
+	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
 
 	let instrm = build_instrument(track, instrm_def, nodes, freq) ?;
 	output_nodes.push(instrm);
@@ -295,7 +296,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 
 				apply_input(Some(track), nodes, fact, &value_args, &node_args, input)
 			},
-			NodeStructure::Constant(value) => add_node!(Box::new(Constant::new(*value))),
+			NodeStructure::Constant(value) => add_node!(Box::new(Var::new(*value))),
 		}
 	}
 
