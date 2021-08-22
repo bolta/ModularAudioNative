@@ -203,7 +203,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, 96, &tag_set);
+	let seqs = generate_sequences(&ast, 96, &tag_set, format!("{}.", &track).as_str());
 	let _seqr = nodes.add_with_tag(TAG_SEQUENCER.to_string(), Box::new(Sequencer::new(seqs)));
 
 	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
@@ -215,10 +215,12 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 }
 
 fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, const_tag: Option<String>) -> ModdlResult<ChanneledNodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input) }
+			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, $input, Some($const_tag)) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input, None) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -281,7 +283,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 						let st = arg_val.as_node_structure()
 								// node_args に指定された引数なのに NodeStructure に変換できない
 								.ok_or_else(|| Error::NodeFactoryNotFound) ?;
-						let arg_node = recurse!(&st, input) ?;
+						let arg_node = recurse!(&st, input, format!("{}.{}", track, &name)) ?;
 						let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
 							Some(result) => result,
 							// モノラルであるべき node_arg にステレオが与えられた場合、
@@ -296,11 +298,18 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 
 				apply_input(Some(track), nodes, fact, &value_args, &node_args, input)
 			},
-			NodeStructure::Constant(value) => add_node!(Box::new(Var::new(*value))),
+			NodeStructure::Constant(value) => {
+				let node = Box::new(Var::new(*value));
+				match const_tag {
+					Some(tag) => Ok(nodes.add_with_tags(vec![track.to_string(), tag], node)),
+					None => add_node!(node),
+				}
+				
+			},
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, freq)
+	visit_struct(track, instrm_def, nodes, freq, None)
 }
 
 fn coerce_input(

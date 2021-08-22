@@ -86,6 +86,20 @@ parser![tone_command, Command, {
 		})
 	)
 }];
+
+parser![path, &str, {
+	re_find(re(r"\.?[a-zA-Z0-9_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_][a-zA-Z0-9_]*)*"))
+}];
+parser![parameter_command, Command, {
+	map_res(
+		tuple((
+			preceded(ss!(char('y')), ss!(path())),
+			preceded(ss!(char(',')), ss!(float())),
+		)),
+		|(name, value)| ok(Command::Parameter { name: name.to_string(), value }),
+	)
+}];
+
 parser![loop_command, Command, {
 	// 型の無限再帰を避けるため手続きで書く
 	|input| {
@@ -119,6 +133,7 @@ parser![command, Command, {
 		unary_command!(re_find(re(r"@d")), float(), Command::Detune),
 		tone_command(),
 		unary_command!(char('r'), length(), Command::Rest),
+		parameter_command(),
 		loop_command(),
 	))
 }];

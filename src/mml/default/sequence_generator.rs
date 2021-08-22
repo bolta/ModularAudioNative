@@ -23,15 +23,20 @@ pub struct TagSet {
 // TODO 将来はディレクティブで設定できるように
 const MAX_GATE_RATE: f32 = 8f32;
 
-pub fn generate_sequences(CompilationUnit { commands }: &CompilationUnit, ticks_per_beat: i32, tag_set: &TagSet) -> HashMap<String, Sequence>/* Vec<Sequence> */ {
+pub fn generate_sequences(
+	CompilationUnit { commands }: &CompilationUnit,
+	ticks_per_beat: i32,
+	tag_set: &TagSet,
+	param_prefix: &str,
+) -> HashMap<String, Sequence> {
 	let ticks_per_bar = 4 * ticks_per_beat;
-	// let mut state = MmlState::init();
 	let mut stack = init_stack();
 	let mut var_seq = 0;
 	let mut seq_seq = 0;
 	let mut result = HashMap::<String, Sequence>::new();
 
-	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut result);
+	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut result,
+			param_prefix);
 
 	return result;
 }
@@ -42,10 +47,7 @@ fn make_name(prefix: &str, count: &mut i32) -> String {
 	name
 }
 
-fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32, tag_set: &TagSet, stack: &mut Stack, var_seq: &mut i32, seq_seq: &mut i32, result: &mut HashMap<String, Sequence>) {
-	// let mut make_var_name = || make_name(var_seq);
-	// let mut make_seq_name = || make_name(seq_seq);
-
+fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32, tag_set: &TagSet, stack: &mut Stack, var_seq: &mut i32, seq_seq: &mut i32, result: &mut HashMap<String, Sequence>, param_prefix: &str) {
 	let mut seq = vec![];
 	for command in commands {
 		match command {
@@ -76,6 +78,10 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length);
 				seq.push(Instruction::Wait(ticks));
 			}
+			Command::Parameter { name, value } => {
+				// TODO ここで track prefix をかますことで MML には書かないでいいように
+				seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
+			}
 			Command::Loop { times, content1, content2 } => {
 				/*
 				content1, content2 をそれぞれ別個の sequence としてコンパイルする。
@@ -103,7 +109,7 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				let loop_start = seq.len();
 				stack.push_clone();
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result);
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -119,7 +125,7 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 
 					// context1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result);
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {

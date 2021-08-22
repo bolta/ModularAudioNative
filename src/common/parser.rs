@@ -65,11 +65,9 @@ pub_parser![range_comment, char, {
 	// コメントに対応したところ、type_length_limit を超過してエラーになったので
 	// 手続きで書いた（が、解消しなかったので結局 type_length_limit を増やした）
 	|input| {
-		let (input, _) = delimited(
-			tag("/*"),
-			is_not("*/"),
-			tag("*/"),
-		)(input) ?;
+		let (input, _) = tag("/*")(input) ?;
+		let (input, _) = take_until("*/")(input) ?;
+		let (input, _) = tag("*/")(input) ?;
 		Ok((input, ' ' /* dummy */))
 	}
 }];
