@@ -22,6 +22,7 @@ use std::{
 	env,
 };
 
+// パーザを切り出したがエラーを参照するため必要
 extern crate nom;
 
 fn main() {

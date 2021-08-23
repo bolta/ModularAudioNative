@@ -8,7 +8,8 @@ use crate::{
 		sequence::*,
 	},
 };
-use parser::moddl::ast::*;
+extern crate parser;
+use parser::mml::ast::*;
 
 use std::{
 	collections::hash_map::HashMap,

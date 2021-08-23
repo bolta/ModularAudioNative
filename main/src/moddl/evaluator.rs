@@ -1,8 +1,10 @@
 use super::{
-	ast::*,
 	error::*,
 	value::*,
 };
+
+extern crate parser;
+use parser::moddl::ast::*;
 
 use std::{
 	collections::hash_map::HashMap,

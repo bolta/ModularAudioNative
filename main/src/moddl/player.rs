@@ -2,7 +2,6 @@ use super::{
 	error::*,
 	evaluator::*,
 	node_factory::*,
-	parser::*,
 	value::*,
 };
 use crate::{
@@ -35,7 +34,11 @@ use crate::{
 	}
 };
 extern crate parser;
-use parser::moddl::ast::*;
+use parser::{
+	mml::default_mml_parser,
+	moddl::ast::*,
+	moddl::parser::compilation_unit,
+};
 
 use std::{
 	collections::btree_map::BTreeMap,

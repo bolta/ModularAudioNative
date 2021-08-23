@@ -1,6 +1,6 @@
 use super::ast::*;
 
-use crate::common::parser::*;
+use crate::common::*;
 
 extern crate nom;
 //use nom::regexp::str::*;

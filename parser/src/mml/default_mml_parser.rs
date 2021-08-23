@@ -3,7 +3,7 @@ use super::{
 };
 
 use crate::{
-	common::parser::*,
+	common::*,
 };
 
 extern crate nom;
@@ -138,7 +138,6 @@ parser![command, Command, {
 	))
 }];
 
-// TODO コメントに対応
 pub_parser![compilation_unit, CompilationUnit, {
 	map_res(
 			all_consuming(

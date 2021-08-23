@@ -64,7 +64,7 @@ impl Machine {
 			output: vec_with_length(max_channels),
 		};
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
-// println!("{:?}", &instructions);
+println!("{:?}", &instructions);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
