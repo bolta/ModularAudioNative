@@ -5,6 +5,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct Var {
 	value: Sample,
@@ -13,6 +14,7 @@ pub struct Var {
 impl Var {
 	pub fn new(value: Sample) -> Self { Self { value } }
 }
+#[node_impl]
 impl Node for Var {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }

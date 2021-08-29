@@ -13,6 +13,7 @@ use crate::{
 	},
 	node::env::*,
 };
+use node_macro::node_impl;
 
 pub struct WaveformPlayer {
 	// TODO 波形のチャンネル数と照合
@@ -37,6 +38,7 @@ impl WaveformPlayer {
 
 	fn waveform<'a>(&self, env: &'a Environment) -> &'a Waveform { & env.waveforms()[self.index] }
 }
+#[node_impl]
 impl Node for WaveformPlayer {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }

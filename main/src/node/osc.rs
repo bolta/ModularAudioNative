@@ -4,6 +4,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct SineOsc {
 	freq: MonoNodeIndex,
@@ -13,6 +14,8 @@ pub struct SineOsc {
 impl SineOsc {
 	pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase: 0f32 } }
 }
+
+#[node_impl]
 impl Node for SineOsc {
 	fn channels(&self) -> i32 { 1 }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { self.phase = 0f32; }
@@ -35,6 +38,7 @@ pub struct StereoTestOsc {
 impl StereoTestOsc {
 	pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase_l: 0f32, phase_r: 0f32 } }
 }
+#[node_impl]
 impl Node for StereoTestOsc {
 	fn channels(&self) -> i32 { 2 }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }

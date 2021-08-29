@@ -2,4 +2,6 @@
 members = [
 	"main",
 	"parser",
+	"node_macro",
+	"node_macro_impl",
 ]

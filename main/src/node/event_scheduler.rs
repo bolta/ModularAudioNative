@@ -5,6 +5,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -50,13 +51,13 @@ impl EventScheduler {
 		self.next_key = self.events.keys().next().map(|k| *k);
 	}
 }
+#[node_impl]
 impl Node for EventScheduler {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn initialize(&mut self, _context: &Context, env: &mut Environment) {
 		self.process_events(0, env.events_mut());
 	}
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		self.process_events(context.elapsed_samples() + 1, env.events_mut());
 	}

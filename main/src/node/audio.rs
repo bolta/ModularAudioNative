@@ -5,6 +5,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 // TODO 全体的に要整理
 
@@ -32,6 +33,7 @@ impl PortAudioOut {
 		}
 	}
 }
+#[node_impl]
 impl Node for PortAudioOut {
 	// ノードグラフ上で出力するチャンネル数は 0
 	fn channels(&self) -> i32 { 0 }

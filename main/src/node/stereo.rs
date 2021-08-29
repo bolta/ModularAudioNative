@@ -4,6 +4,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct MonoToStereo {
 	input: MonoNodeIndex,
@@ -11,6 +12,7 @@ pub struct MonoToStereo {
 impl MonoToStereo {
 	pub fn new(input: MonoNodeIndex) -> Self { Self { input } }
 }
+#[node_impl]
 impl Node for MonoToStereo {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
@@ -28,6 +30,7 @@ impl Split {
 		Self { input, channel: channel as usize }
 	}
 }
+#[node_impl]
 impl Node for Split {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
@@ -42,6 +45,7 @@ pub struct Join {
 impl Join {
 	pub fn new(inputs: Vec<MonoNodeIndex>) -> Self { Self { inputs } }
 }
+#[node_impl]
 impl Node for Join {
 	fn channels(&self) -> i32 { self.inputs.len() as i32 }
 	fn upstreams(&self) -> Upstreams { self.inputs.iter().map(|i| i.channeled()).collect() }
@@ -59,6 +63,7 @@ pub struct Pan {
 impl Pan {
 	pub fn new(input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self { input, pos } }
 }
+#[node_impl]
 impl Node for Pan {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled(), self.pos.channeled()] }

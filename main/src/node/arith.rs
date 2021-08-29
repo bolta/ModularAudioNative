@@ -4,6 +4,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 use std::{
 	marker::PhantomData,
@@ -48,6 +49,7 @@ impl <Op: BinaryOp> MonoBinary<Op> {
 		Self { _op: PhantomData, lhs, rhs }
 	}
 }
+#[node_impl]
 impl <Op: BinaryOp> Node for MonoBinary<Op> {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
@@ -66,6 +68,7 @@ impl <Op: BinaryOp> StereoBinary<Op> {
 		Self { _op: PhantomData, lhs, rhs }
 	}
 }
+#[node_impl]
 impl <Op: BinaryOp> Node for StereoBinary<Op> {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
@@ -97,6 +100,7 @@ impl Limit {
 		Self { signal, min, max }
 	}
 }
+#[node_impl]
 impl Node for Limit {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.signal.channeled(), self.min.channeled(), self.max.channeled()] }

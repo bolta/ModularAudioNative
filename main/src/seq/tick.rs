@@ -5,6 +5,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct Tick {
 //	value: Sample,
@@ -26,6 +27,7 @@ impl Tick {
 		env.events_mut().push(Box::new(TickEvent::new(EventTarget::Tag(self.target_tag.clone()))));
 	}
 }
+#[node_impl]
 impl Node for Tick {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![] }
@@ -34,7 +36,6 @@ impl Node for Tick {
 		// 同じ処理を 2 回書いたりサンプル数に +1 したりしなくてよくなるように
 		self.tick(env);
 	}
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
 		self.timer += self.tempo * self.ticks_per_beat as f32 / 60f32 / context.sample_rate_f32();
 		while self.timer >= 1f32 {

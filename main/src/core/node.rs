@@ -16,6 +16,10 @@ pub trait Node {
 	fn update(&mut self, _inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn finalize(&mut self, _context: &Context, _env: &mut Environment) { }
 	fn process_event(&mut self, _event: &dyn Event, _context: &Context, _env: &mut Environment) { }
+
+	// 以下は node_impl 属性によって自動実装されるため実装不要
+	fn implements_execute(&self) -> bool;
+	fn implements_update(&self) -> bool;
 }
 
 pub fn output_mono(output: &mut Vec<Sample>, value: Sample) {

@@ -15,6 +15,7 @@ use super::{
 	tick::EVENT_TYPE_TICK,
 	sequence::*,
 };
+use node_macro::node_impl;
 
 use std::{
 	collections::hash_map::HashMap,
@@ -41,6 +42,7 @@ impl Sequencer {
 	}
 }
 
+#[node_impl]
 impl Node for Sequencer {
 	fn channels(&self) -> i32 { 0 }
 	fn process_event(&mut self, event: &dyn Event, context: &CoreContext, env: &mut Environment) {

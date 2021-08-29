@@ -5,6 +5,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct ExpEnv {
 	amplitude: Sample,
@@ -23,6 +24,7 @@ impl ExpEnv {
 		}
 	}
 }
+#[node_impl]
 impl Node for ExpEnv {
 	fn channels(&self) -> i32 { 1 }
 	fn initialize(&mut self, context: &Context, _env: &mut Environment) {

@@ -4,6 +4,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 };
+use node_macro::node_impl;
 
 pub struct Print {
 	input: ChanneledNodeIndex,
@@ -11,6 +12,7 @@ pub struct Print {
 impl Print {
 	pub fn new(input: ChanneledNodeIndex) -> Self { Self { input } }
 }
+#[node_impl]
 impl Node for Print {
 	fn channels(&self) -> i32 { 1 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
