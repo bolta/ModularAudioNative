@@ -20,6 +20,9 @@ use crate::moddl::{
 
 use std::{
 	env,
+	process::{
+		exit,
+	},
 };
 
 // パーザを切り出したがエラーを参照するため必要
@@ -29,10 +32,12 @@ fn main() {
 	match env::args().nth(1) {
 		None => {
 			eprintln!("Please specify the moddl file path.");
+			exit(1);
 		}
 		Some(moddl_path) => {
 			if let Err(e) = player::play_file(moddl_path.as_str()) {
 				eprintln!("An error occurred: {:?}", e);
+				exit(1);
 			}
 		}
 	}
