@@ -148,10 +148,65 @@ parser![assoc_array_literal, Box<Expr>, {
 	)
 }];
 
+parser![function_args, (Vec<Box<Expr>>, AssocArray), {
+	alt((
+		map_res(
+			ss!(separated_list1(ss!(char(',')), ss!(named_entry()))),
+			|named_args| ok((vec![], named_args)),
+		),
+		map_res(
+			tuple((
+				separated_list0(
+					ss!(char(',')),
+					// 識別子はそれだけ見ても式（unnamed_args の一部）なのか名前（named_args の一部）なのか
+					// 区別できないので、直後に : があるかどうか（あれば名前で、named_args の一部）で判別する
+					ss!(terminated(
+						expr(),
+						peek(not(char(':'))),
+					)),
+				),
+				opt(
+					preceded(
+						ss!(char(',')),
+						separated_list1(ss!(char(',')), ss!(named_entry())),
+					)
+				),
+			)),
+			|(unnamed_args, named_args)| ok((unnamed_args, named_args.unwrap_or_else(|| vec![]))),
+		),
+	))
+}];
+
+parser![function_call, Box<Expr>, {
+	map_res(
+		tuple((
+			si!(primary_expr()),
+			opt(delimited(
+				ss!(char('(')),
+				ss!(function_args()),
+				tuple((
+					opt(ss!(char(','))),
+					si!(char(')')),
+				)),
+			)),
+		)),
+		|(x, args)| ok(match args {
+			None => x,
+			Some((unnamed_args, named_args)) => {
+				Box::new(Expr::FunctionCall {
+					function: x,
+					unnamed_args,
+					named_args,
+				})
+			},
+		}),
+	)
+}];
+
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
 			tuple((
-				si!(primary_expr()),
+				si!(function_call()),
 				opt(si!(assoc_array_literal())),
 			)),
 			|(x, assoc)| ok(match assoc {
