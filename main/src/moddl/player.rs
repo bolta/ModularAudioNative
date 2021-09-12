@@ -21,6 +21,7 @@ use crate::{
 		audio::*,
 		prim::*,
 		stereo::*,
+		util::*,
 		var::*,
 	},
 	seq::{
@@ -116,6 +117,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 	nodes.add(Box::new(PortAudioOut::new(master)));
+	// nodes.add(Box::new(Print::new(master)));
 
 	Machine::new().play(&mut context, &mut nodes, &mut waveforms);
 
@@ -261,6 +263,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			NodeStructure::NodeFactory(fact) => {
+				// TODO こっちでもデフォルト引数を解決する
 				apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			},
 			// NodeStructure::Lambda => ,
@@ -280,14 +283,21 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				let specs = fact.node_arg_specs();
 				let node_args = {
 					let mut node_args = NodeArgs::new();
-					for NodeArgSpec { name, channels } in specs {
-						let arg_val = & args.iter().find(|(n, _)| *n == *name )
-								// 必要な引数が与えられていない
-								.ok_or_else(|| Error::NodeFactoryNotFound)?.1;
-						let st = arg_val.as_node_structure()
-								// node_args に指定された引数なのに NodeStructure に変換できない
-								.ok_or_else(|| Error::NodeFactoryNotFound) ?;
-						let arg_node = recurse!(&st, input, format!("{}.{}", track, &name)) ?;
+					for NodeArgSpec { name, channels, default } in specs {
+						let arg_val = args.iter().find(|(n, _)| *n == *name );
+						let strukt = if let Some(arg_val) = arg_val {
+							arg_val.1.as_node_structure()
+									// node_args に指定された引数なのに NodeStructure に変換できない
+									.ok_or_else(|| Error::NodeFactoryNotFound) ?
+						} else if let Some(default) = default {
+							Value::Float(default).as_node_structure().unwrap()
+						} else {
+							// 必要な引数が与えられていない
+							Err(Error::NodeFactoryNotFound) ?
+						};
+								// .or(default.map(|value| &(name.clone(), Value::Float(value))))
+								// .ok_or_else(|| Error::NodeFactoryNotFound)?.1;
+						let arg_node = recurse!(&strukt, input, format!("{}.{}", track, &name)) ?;
 						let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
 							Some(result) => result,
 							// モノラルであるべき node_arg にステレオが与えられた場合、
@@ -452,6 +462,7 @@ fn builtin_vars() -> HashMap<String, Value> {
 		}
 	};
 	add_node_factory!("sineOsc", SineOscFactory { });
+	add_node_factory!("pulseOsc", PulseOscFactory { });
 	add_node_factory!("limit", LimitFactory { });
 	add_node_factory!("pan", PanFactory { });
 

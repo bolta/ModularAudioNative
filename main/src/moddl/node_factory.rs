@@ -27,8 +27,25 @@ use std::collections::hash_map::HashMap;
 
 type Error = String;
 
-pub struct NodeArgSpec { pub name: String, pub channels: i32 }
-fn spec(name: &str, channels: i32) -> NodeArgSpec { NodeArgSpec { name: name.to_string(), channels } }
+pub struct NodeArgSpec {
+	pub name: String,
+	pub channels: i32,
+	pub default: Option<Sample>,
+}
+fn spec(name: &str, channels: i32) -> NodeArgSpec {
+	NodeArgSpec {
+		name: name.to_string(),
+		channels,
+		default: None,
+	}
+}
+fn spec_with_default(name: &str, channels: i32, default: Sample) -> NodeArgSpec {
+	NodeArgSpec {
+		name: name.to_string(),
+		channels,
+		default: Some(default),
+	}
+}
 
 pub type ValueArgs = HashMap<String, Value>;
 pub type NodeArgs = HashMap<String, ChanneledNodeIndex>;
@@ -47,6 +64,18 @@ impl NodeFactory for SineOscFactory {
 	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		Box::new(SineOsc::new(freq))
+	}
+}
+
+pub struct PulseOscFactory { }
+impl NodeFactory for PulseOscFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("duty", 1, 0.5f32)] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _value_args: &ValueArgs, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+dbg!(freq);
+		let duty = node_args.get("duty").unwrap().as_mono(); 
+		Box::new(PulseOsc::new(freq, duty))
 	}
 }
 

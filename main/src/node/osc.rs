@@ -29,6 +29,35 @@ impl Node for SineOsc {
 	}
 }
 
+pub struct PulseOsc {
+	freq: MonoNodeIndex,
+	duty: MonoNodeIndex,
+
+	phase: f32,
+}
+impl PulseOsc {
+	pub fn new(freq: MonoNodeIndex, duty: MonoNodeIndex) -> Self { Self { freq, duty, phase: 0f32 } }
+}
+
+#[node_impl]
+impl Node for PulseOsc {
+	fn channels(&self) -> i32 { 1 }
+	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { self.phase = 0f32; }
+	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled(), self.duty.channeled()] }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		let duty = inputs[1];
+		output_mono(output, if self.phase % TWO_PI < TWO_PI * duty {
+			1f32 
+		} else {
+			-1f32
+		});
+	}
+	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
+		let freq = inputs[0];
+		self.phase = (self.phase + TWO_PI * freq / context.sample_rate_f32()) % TWO_PI;
+	}
+}
+
 pub struct StereoTestOsc {
 	freq: MonoNodeIndex,
 

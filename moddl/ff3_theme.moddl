@@ -4,7 +4,7 @@
 
 @let `instrm1`, (sineOsc | limit { min: -0.2, max: 0.8 } + 0.2) * 2 * env1
 
-@instrument ^a, /*WaveformPlayer1*/ instrm1 | pan { pos: -.5 }
+@instrument ^a, /*WaveformPlayer1*/ (pulseOsc { } * env1) | pan { pos: -.5 }
 @instrument ^b, instrm1 | pan { pos: .5 }
 @instrument ^c, instrm1 | pan { pos: 0 }
 
@@ -17,7 +17,7 @@ abc [0
 		a	b>ef+<b> a2g+f+ ed+8e8f+ee2d+2 c+f+g+c+ b2ag+ f+f8g+8f+c+ : /* g+2f+2 */ e2d+2 <
 		b	b2.>c+8d+8ec+d+f+ c+d+8e8f+g+8a+8 bf+d+<b> f+2ff+8g+8 af+fb a2a+2 b1 //b2a2
 	ab ]
-	a >g+2f+f+16g+16a16b16>
+	a >g+2f+ yduty,0.25 f+16g+16a16b16>
 	b >
 	c	ed+ c+<b aa+ b1> ag+ f+f f+e d+<b>
 	c	ed+ c+c c+<a+ b1> ag+ f+f f+e d+<b>
@@ -26,7 +26,7 @@ abc [0
 	b	l8 e4ag+a4e4 e4bag+f+eg+> d<af+4g+c+d+f f+4<b>c+def+4
 	c	l8 ar<ab>c+d+ef+ g+rg+f+g+rer f+4d4c+4bg+ f+4e4d4c+4<
 
-	a	d2^8r8d c+2^8r8<a bb8>c8<bb8>c8< bag+f+<
+	a	d2^8r8d c+2^8r8<a bb8>c8<bb8>c8< bag+f+< yduty,0.5
 	b	g2^gab a2^agf+ e4edcde4 d+2e4f+4<
 	c	br>babrgr f+r>c+r<ar<ab> cr>cr<ef+g4 f+4d+4<b4a4>
 abc ]
