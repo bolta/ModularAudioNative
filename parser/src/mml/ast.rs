@@ -49,4 +49,3 @@ pub struct ToneName {
 pub enum ToneBaseName {
 	C, D, E, F, G, A, B,
 }
-
