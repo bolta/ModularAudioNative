@@ -158,8 +158,8 @@ parser![function_args, (Vec<Box<Expr>>, AssocArray), {
 			tuple((
 				separated_list0(
 					ss!(char(',')),
-					// 識別子はそれだけ見ても式（unnamed_args の一部）なのか名前（named_args の一部）なのか
-					// 区別できないので、直後に : があるかどうか（あれば名前で、named_args の一部）で判別する
+					// 識別子はそれだけ見ても式（unnamed_args の一部）なのか引数名（named_args の一部）なのか
+					// 区別できないので、直後に : があるかどうか（あれば引数名）で判別する
 					ss!(terminated(
 						expr(),
 						peek(not(char(':'))),
