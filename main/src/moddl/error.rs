@@ -13,14 +13,15 @@ pub enum Error/* <'a> */ {
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
-	DirectiveArgTypeMismatch, // TODO 汎用的な TypeMismatch にすべきか
+	DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
 	DirectiveDuplicate { msg: String }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
 	NodeFactoryNotFound,
-	NodeFactoryArgTypeMismatch,
+	NodeFactoryArgTypeMismatch, // TODO 今後 TypeMismatch に統合
 	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
+	TypeMismatch,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,

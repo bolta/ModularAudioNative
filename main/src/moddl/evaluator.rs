@@ -33,6 +33,17 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 		Expr::TrackSetLiteral(tracks) => Ok(Value::TrackSet(tracks.clone())),
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
+		Expr::FunctionCall { function, unnamed_args, named_args } => {
+			let function = evaluate(function, vars)?.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+
+			// TODO unnamed_args も使う
+			let mut value_args = HashMap::<String, Value>::new();
+			for (name, expr) in named_args {
+				value_args.insert(name.clone(), evaluate(expr, vars) ?);
+			}
+
+			function.call(&value_args)
+		},
 		Expr::NodeWithArgs { node_def, label, args } => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut value_args = vec![];

@@ -1,4 +1,5 @@
 use super::{
+	function::*,
 	node_factory::*,
 };
 
@@ -35,6 +36,7 @@ pub enum Value {
 	NodeStructure(NodeStructure),
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
+	Function(Rc<dyn Function>),
 }
 
 impl Value {
@@ -78,4 +80,10 @@ impl Value {
 		}
 	}
 
+	pub fn as_function(&self) -> Option<Rc<dyn Function>> {
+		match self {
+			Self::Function(func) => Some(func.clone()),
+			_ => None,
+		}
+	}
 }

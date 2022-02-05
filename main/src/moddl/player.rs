@@ -1,6 +1,7 @@
 use super::{
 	error::*,
 	evaluator::*,
+	function::*,
 	node_factory::*,
 	value::*,
 };
@@ -470,6 +471,7 @@ fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("env1", Env1Factory { });
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_node_factory!("waveformPlayer1", WaveformPlayer1Factory { });
+	result.insert("twice".to_string(), Value::Function(Rc::new(Twice { })));
 
 	result
 }
