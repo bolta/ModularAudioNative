@@ -28,6 +28,7 @@ pub enum Expr {
 	FloatLiteral(f32),
 	TrackSetLiteral(Vec<String>),
 	IdentifierLiteral(String),
+	StringLiteral(String),
 	MmlLiteral(String),
 	AssocArrayLiteral(AssocArray),
 }

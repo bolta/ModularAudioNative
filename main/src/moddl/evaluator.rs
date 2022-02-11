@@ -27,6 +27,7 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 			Ok(val.clone())
 		},
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
+		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
 		Expr::Lambda { input_param: _, body: _ } => unimplemented!(),
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
 		Expr::FloatLiteral(value) => Ok(Value::Float(*value)),

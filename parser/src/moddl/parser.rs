@@ -51,6 +51,11 @@ parser![identifier_literal, Box<Expr>, {
 	map_res(si!(delimited(char('`'), identifier(), char('`'))),
 			|id| { ok(Box::new(Expr::IdentifierLiteral(id.to_string()))) })
 }];
+parser![string_literal, Box<Expr>, {
+	// TODO " などをエスケープできるようにする
+	map_res(si!(delimited(char('"'), re_find(re(r#"[^"]*"#)), char('"'))),
+			|str| { ok(Box::new(Expr::StringLiteral(str.to_string()))) })
+}];
 parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
@@ -77,6 +82,7 @@ parser![primary_expr, Box<Expr>, {
 		float_literal(),
 		track_set_literal(),
 		identifier_literal(),
+		string_literal(),
 		identifier_expr(),
 		parenthesized_expr(),
 	))

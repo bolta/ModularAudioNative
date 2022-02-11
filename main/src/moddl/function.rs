@@ -1,9 +1,11 @@
 use super::{
 	error::*,
 	value::*,
+	node_factory::*,
 };
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub trait Function {
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value>;
@@ -21,5 +23,16 @@ impl Function for Twice {
 		let result = arg * 2f32;
 
 		Ok(Value::Float(result))
+	}
+}
+
+pub struct WaveformPlayer { }
+impl Function for WaveformPlayer {
+	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
+		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
+		let result = Rc::new(WaveformPlayerFactory::new(wave));
+
+		Ok(Value::NodeFactory(result))
 	}
 }

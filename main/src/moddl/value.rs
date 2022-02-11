@@ -2,6 +2,7 @@ use super::{
 	function::*,
 	node_factory::*,
 };
+use crate::wave::waveform_host::WaveformIndex;
 
 use std::rc::Rc;
 
@@ -29,8 +30,10 @@ pub enum NodeStructure {
 #[derive(Clone)]
 pub enum Value {
 	Float(f32),
+	WaveformIndex(WaveformIndex),
 	TrackSet(Vec<String>),
 	IdentifierLiteral(String),
+	StringLiteral(String),
 	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
@@ -46,6 +49,12 @@ impl Value {
 			_ => None,
 		}
 	}
+	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
+		match self {
+			Self::WaveformIndex(value) => Some(*value),
+			_ => None,
+		}
+	}
 	pub fn as_track_set(&self) -> Option<Vec<String>> {
 		match self {
 			Self::TrackSet(tracks) => Some(tracks.clone()),
@@ -55,6 +64,13 @@ impl Value {
 	pub fn as_identifier_literal(&self) -> Option<String> {
 		match self {
 			Self::IdentifierLiteral(id) => Some(id.clone()),
+			_ => None,
+		}
+	}
+
+	pub fn as_string_literal(&self) -> Option<String> {
+		match self {
+			Self::StringLiteral(content) => Some(content.clone()),
 			_ => None,
 		}
 	}

@@ -121,6 +121,24 @@ impl NodeFactory for WaveformPlayer1Factory {
 	}
 }
 
+pub struct WaveformPlayerFactory {
+	waveformIndex: WaveformIndex,
+}
+impl WaveformPlayerFactory {
+	pub fn new(waveformIndex: WaveformIndex) -> Self {
+		Self { waveformIndex }
+	}
+}
+
+impl NodeFactory for WaveformPlayerFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _value_args: &ValueArgs, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+		Box::new(WaveformPlayer::new(1, self.waveformIndex, freq))
+	}
+}
+
 pub struct PanFactory { }
 impl NodeFactory for PanFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("pos", 1)] }

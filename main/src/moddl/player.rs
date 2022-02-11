@@ -86,7 +86,9 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 
 	let mut vars = builtin_vars();
 
-	for stmt in &statements { process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars) ?; }
+	for stmt in &statements {
+		process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars, &mut waveforms) ?;
+	}
 	
 	let mut nodes = NodeHost::new();
 	nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
@@ -147,6 +149,7 @@ fn process_statement<'a>(
 	instruments: &mut HashMap<String, NodeStructure>,
 	mmls: &mut BTreeMap<String, String>,
 	vars: &mut HashMap<String, Value>,
+	waveforms: &mut WaveformHost,
 ) -> ModdlResult</* 'a, */ ()> { // TODO 寿命指定これでいいのか
 	match stmt {
 		Statement::Directive { name, args } => {
@@ -173,6 +176,16 @@ fn process_statement<'a>(
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let value = evaluate_arg(&args, 1, vars) ?;
 					vars.insert(name, value);
+				}
+				"waveform" => {
+					let name = evaluate_arg(&args, 0, vars)?.as_identifier_literal()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let value = evaluate_arg(&args, 1, vars) ?;
+					let path = value.as_string_literal().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					// TODO 読み込み失敗時のエラー処理
+					let index = waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
+					vars.insert(name, Value::WaveformIndex(index));
+					// vars.insert(name, value);
 				}
 				other => {
 					println!("unknown directive: {}", other);
@@ -461,17 +474,24 @@ fn builtin_vars() -> HashMap<String, Value> {
 		($name: expr, $fact: expr) => {
 			result.insert($name.to_string(), Value::NodeFactory(Rc::new($fact)));
 		}
-	};
+	}
+	macro_rules! add_function {
+		($name: expr, $fact: expr) => {
+			result.insert($name.to_string(), Value::Function(Rc::new($fact)));
+		}
+	}
+
 	add_node_factory!("sineOsc", SineOscFactory { });
 	add_node_factory!("pulseOsc", PulseOscFactory { });
 	add_node_factory!("limit", LimitFactory { });
 	add_node_factory!("pan", PanFactory { });
+	add_function!("waveformPlayer", WaveformPlayer { });
 
 	// for experiments
 	add_node_factory!("env1", Env1Factory { });
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_node_factory!("waveformPlayer1", WaveformPlayer1Factory { });
-	result.insert("twice".to_string(), Value::Function(Rc::new(Twice { })));
+	add_function!("twice", Twice { });
 
 	result
 }
