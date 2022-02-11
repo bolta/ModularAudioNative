@@ -26,21 +26,21 @@ pub fn node_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		_ => None,
 	}).collect();
 
-	println!("{:?}", &ast.self_ty);
+	// println!("{:?}", &ast.self_ty);
 
 	macro_rules! add_implementation_marker {
 		($target_name: expr) => {
 			let marker_name = format!("implements_{}", $target_name);
 			let marker_name_ident = Ident::new(marker_name.as_str(), Span::call_site());
 			if ! method_names.contains(& marker_name) {
-				println!("{:?}", &ast.self_ty);
+				// println!("{:?}", &ast.self_ty);
 				let meth: TokenStream = if method_names.contains(& $target_name.to_string()) {
-					println!("adding method {}: true", marker_name);
+					// println!("adding method {}: true", marker_name);
 					quote! {
 						fn #marker_name_ident(&self) -> bool { true }
 					}
 				} else {
-					println!("adding method {}: false", marker_name);
+					// println!("adding method {}: false", marker_name);
 					quote! {
 						fn #marker_name_ident(&self) -> bool { false }
 					}
