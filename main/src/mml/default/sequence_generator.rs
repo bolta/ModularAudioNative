@@ -145,7 +145,11 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				}
 				stack.pop();
 			}
-			_ => { unimplemented!(); }
+			Command::Volume(value) => unimplemented!(),
+			Command::Velocity(value) => unimplemented!(),
+			Command::Detune(value) => unimplemented!(),
+			Command::Stack { content } => unimplemented!(),
+			Command::ExpandMacro { name } => unimplemented!(),
 		}
 	}
 
