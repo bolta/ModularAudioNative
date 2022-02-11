@@ -5,6 +5,8 @@ use nom::{
 	bytes::complete::*,
 	character::complete::*,
 	combinator::*,
+	error::Error,
+	error::VerboseError,
 	IResult,
 	multi::*,
 	regexp::str::*,
@@ -22,10 +24,10 @@ use regex::Regex;
 // 	}
 // }
 trait ResultMap<'a> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R>;
+	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R, VerboseError<&'a str>>;
 }
-impl <'a> ResultMap<'a> for IResult<&'a str, &'a str> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R> {
+impl <'a> ResultMap<'a> for IResult<&'a str, &'a str, VerboseError<&'a str>> {
+	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R, VerboseError<&'a str>> {
 		self.map(|(rest, matched)| (rest, f(matched)))
 	}
 }
@@ -47,7 +49,7 @@ pub fn re(pattern: &str) -> Regex {
 #[macro_export]
 macro_rules! parser {
 	($name: ident, $result_type: ty, $impl: expr) => {
-		fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type> {
+		fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type, nom::error::VerboseError<&'a str>> {
 			$impl
 		}
 	}
@@ -55,7 +57,7 @@ macro_rules! parser {
 #[macro_export]
 macro_rules! pub_parser {
 	($name: ident, $result_type: ty, $impl: expr) => {
-		pub fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type> {
+		pub fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type, nom::error::VerboseError<&'a str>> {
 			$impl
 		}
 	}

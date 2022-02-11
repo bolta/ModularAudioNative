@@ -3,7 +3,7 @@ use std::{
 	io,
 };
 
-type NomError<'a> = nom::Err<nom::error::Error<&'a str>>;
+type NomError<'a> = nom::Err<nom::error::VerboseError<&'a str>>;
 
 // それぞれのエラーに十分な付加情報を含めるべきだが、とりあえずはざっと分類まで
 #[derive(Debug)]
