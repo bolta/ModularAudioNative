@@ -229,7 +229,16 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
 
 	let instrm = build_instrument(track, instrm_def, nodes, freq) ?;
-	output_nodes.push(instrm);
+	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
+	let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
+	let instrm_vel = multiply(Some(track), nodes, instrm, vel) ?; // 必ず成功するはず
+	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
+	let vol = nodes.add_with_tag(format!("{}.#volume", &track), Box::new(Var::new(1f32)));
+	let instrm_vel_vol = multiply(Some(track), nodes, instrm_vel, vol) ?; // 必ず成功するはず
+
+	output_nodes.push(instrm_vel_vol);
 
 	Ok(())
 }

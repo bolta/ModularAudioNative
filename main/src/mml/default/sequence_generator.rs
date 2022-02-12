@@ -22,6 +22,12 @@ pub struct TagSet {
 
 // TODO 将来はディレクティブで設定できるように
 const MAX_GATE_RATE: f32 = 8f32;
+const MAX_VOLUME: f32 = 15f32;
+const MAX_VELOCITY: f32 = 15f32;
+
+const PARAM_NAME_VOLUME: &str = "#volume";
+const PARAM_NAME_VELOCITY: &str = "#velocity";
+const PARAM_NAME_DETUNE: &str = "#detune";
 
 pub fn generate_sequences(
 	CompilationUnit { commands }: &CompilationUnit,
@@ -85,7 +91,17 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 			}
 			Command::Parameter { name, value } => {
 				// TODO ここで track prefix をかますことで MML には書かないでいいように
-				seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
+				// seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
+				seq.push(make_param_instrc(param_prefix, &name, *value));
+			}
+			Command::Volume(value) => {
+				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VOLUME, *value / MAX_VOLUME));
+			}
+			Command::Velocity(value) => {
+				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VELOCITY, *value / MAX_VELOCITY));
+			}
+			Command::Detune(value) => {
+				seq.push(make_param_instrc(param_prefix, PARAM_NAME_DETUNE, *value));
 			}
 			Command::Loop { times, content1, content2 } => {
 				/*
@@ -150,9 +166,6 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				}
 				stack.pop();
 			}
-			Command::Volume(_value) => unimplemented!(),
-			Command::Velocity(_value) => unimplemented!(),
-			Command::Detune(_value) => unimplemented!(),
 			Command::Stack { content: _ } => unimplemented!(),
 			Command::ExpandMacro { name: _ } => unimplemented!(),
 		}
@@ -160,6 +173,10 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 
 println!("{}: {:?}", seq_name.to_string(), &seq);
 	result.insert(seq_name.to_string(), seq);
+}
+
+fn make_param_instrc(param_prefix: &str, name: &str, value: f32) -> Instruction {
+	Instruction::Value { tag: format!("{}{}", param_prefix, name), value }
 }
 
 fn calc_ticks_from_length(Length { elements: length_spec }: &Length, ticks_per_bar: i32, default: i32) -> i32 {
