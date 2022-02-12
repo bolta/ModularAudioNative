@@ -72,7 +72,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
 	let mut tempo = 120f32;
-	let ticks_per_bar = 1536; // TODO 外から渡せるように
+	let mut ticks_per_bar = 384;
 	// トラックごとの instrument を保持
 	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
 	// let mut instruments = HashMap::<String, &Expr>::new();
@@ -87,7 +87,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut vars = builtin_vars();
 
 	for stmt in &statements {
-		process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars, &mut waveforms) ?;
+		process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars, &mut waveforms, &mut ticks_per_bar) ?;
 	}
 	
 	let mut nodes = NodeHost::new();
@@ -150,6 +150,7 @@ fn process_statement<'a>(
 	mmls: &mut BTreeMap<String, String>,
 	vars: &mut HashMap<String, Value>,
 	waveforms: &mut WaveformHost,
+	ticks_per_bar: &mut i32,
 ) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
@@ -186,6 +187,18 @@ fn process_statement<'a>(
 					let index = waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
 					vars.insert(name, Value::WaveformIndex(index));
 					// vars.insert(name, value);
+				}
+				"ticksPerBar" => {
+					let value = evaluate_arg(&args, 0, vars) ?.as_float()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					// TODO さらに、正の整数であることを検証
+					*ticks_per_bar = value as i32;
+				}
+				"ticksPerBeat" => {
+					let value = evaluate_arg(&args, 0, vars) ?.as_float()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					// TODO さらに、正の整数であることを検証
+					*ticks_per_bar = 4 * value as i32;
 				}
 				other => {
 					println!("unknown directive: {}", other);

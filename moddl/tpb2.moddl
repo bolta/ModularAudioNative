@@ -1,0 +1,14 @@
+@tempo 66
+// デフォルトの分解能（384 tpB）では 5 連符は使えない。この行を外すとエラーになる
+@ticksPerBar 240
+
+@instrument ^ab, pulseOsc { } * env1
+
+a	o4l40q6
+b	o2l8q8
+
+// 原曲は 4 連符だけど
+a	reeeereeeereeeereeeerddddrdddd rccccrccccrccccrccccrddddrdddd
+a	reeeereeeereeeereeeereeeereeee reeeereeeereeeereeeerffffrffff
+
+b	a>e>c<ebe< a>eaebe< a>e>c<e>c<e< a>e>c<e>d<g
