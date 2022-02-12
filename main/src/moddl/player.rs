@@ -22,6 +22,7 @@ use crate::{
 		audio::*,
 		prim::*,
 		stereo::*,
+		system::*,
 		util::*,
 		var::*,
 	},
@@ -117,6 +118,8 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 	nodes.add(Box::new(PortAudioOut::new(master)));
+	// TODO タグ名共通化
+	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
 	// nodes.add(Box::new(Print::new(master)));
 
 	Machine::new().play(&mut context, &mut nodes, &mut waveforms);

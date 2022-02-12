@@ -7,6 +7,7 @@ use crate::core::{
 };
 use crate::node::{
 	env::NoteEvent,
+	system::*,
 	var::*,
 };
 use super::{
@@ -77,6 +78,11 @@ impl Context {
 		// ウェイトを挟まずに並んでいるインストラクションは全て実行する
 		while self.wait == 0 {
 			let instrc_idx = self.stack.top_mut().instrc_idx as usize;
+			// TODO 無限ループで先頭に戻ったときも開始扱いになってしまう
+			if instrc_idx == 0usize && self.stack.is_bottom() {
+				// TODO キューが一杯だったときの処理
+				env.events_mut().push(Box::new(JobEvent::starting()));
+			}
 			// TODO 毎回ハッシュテーブルを引くと遅いか？
 			let sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
 			if instrc_idx >= sequence.len() { return; }
@@ -91,6 +97,7 @@ impl Context {
 
 				// シーケンスの終わりに達した
 				if self.stack.is_bottom() {
+					env.events_mut().push(Box::new(JobEvent::ended()));
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
 					self.stack.pop(); // 呼び出し元の続きに復帰

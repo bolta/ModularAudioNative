@@ -5,5 +5,6 @@ pub mod event_scheduler;
 pub mod osc;
 pub mod prim;
 pub mod stereo;
+pub mod system;
 pub mod util;
 pub mod var;
