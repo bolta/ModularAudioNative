@@ -1,0 +1,14 @@
+@tempo 120
+
+@let `instrm1`, (sineOsc | limit { min: -0.2, max: 0.8 } + 0.2) * 2 * env1
+
+@instrument ^a, instrm1
+
+a	o4l16q8
+
+a [2
+	a ce-gb-ce-gb-ce-gb-ce-gb- d&f&a&>c&<d&f&a&>c&<d&f&a&>c&<d&f&a&>c&<
+	// ループの末尾から先頭へ、またループの中から外へのスラーができていない
+	// （というかループもバグっている…）
+	a [4 ce-gb-] [4 d&f&a&>c&<]
+a ]

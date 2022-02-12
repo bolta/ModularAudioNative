@@ -66,13 +66,18 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				
 				// TODO タグは intern したい
 				seq.push(Instruction::Value { tag: tag_set.freq.clone(), value: freq });
-				seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: true });
+				if ! stack.mml_state().slur {
+					seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: true });
+				}
 				seq.push(Instruction::Wait(gate_ticks));
-				seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: false });
+				if ! *slur {
+					seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: false });
+				}
 				if step_ticks - gate_ticks > 0 {
 					seq.push(Instruction::Wait(step_ticks - gate_ticks));
 				}
-				// TODO スラー対応
+
+				stack.mml_state().slur = *slur;
 			}
 			Command::Rest(val) => {
 				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length);
