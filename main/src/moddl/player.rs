@@ -72,7 +72,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
 	let mut tempo = 120f32;
-	let ticks_per_beat = 96; // TODO 外から渡せるように
+	let ticks_per_bar = 1536; // TODO 外から渡せるように
 	// トラックごとの instrument を保持
 	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
 	// let mut instruments = HashMap::<String, &Expr>::new();
@@ -91,14 +91,14 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	}
 	
 	let mut nodes = NodeHost::new();
-	nodes.add(Box::new(Tick::new(tempo, ticks_per_beat, TAG_SEQUENCER.to_string())));
+	nodes.add(Box::new(Tick::new(tempo, ticks_per_bar, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = Vec::<ChanneledNodeIndex>::new();
 	for (track, mml) in &mmls {
 		let instrm = instruments.get(track)
 				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
 
-		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), ticks_per_beat, &mut nodes, &mut output_nodes) ?;
+		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), ticks_per_bar, &mut nodes, &mut output_nodes) ?;
 	}
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
@@ -214,7 +214,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, ticks_per_beat: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult<()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
@@ -223,7 +223,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, ticks_per_beat, &tag_set, format!("{}.", &track).as_str());
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
 	let _seqr = nodes.add_with_tag(TAG_SEQUENCER.to_string(), Box::new(Sequencer::new(seqs)));
 
 	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));

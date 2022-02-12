@@ -31,11 +31,10 @@ const PARAM_NAME_DETUNE: &str = "#detune";
 
 pub fn generate_sequences(
 	CompilationUnit { commands }: &CompilationUnit,
-	ticks_per_beat: i32,
+	ticks_per_bar: i32,
 	tag_set: &TagSet,
 	param_prefix: &str,
 ) -> HashMap<String, Sequence> {
-	let ticks_per_bar = 4 * ticks_per_beat;
 	let mut stack = init_stack();
 	let mut var_seq = 0;
 	let mut seq_seq = 0;

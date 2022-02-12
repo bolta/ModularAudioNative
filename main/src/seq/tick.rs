@@ -10,15 +10,15 @@ use node_macro::node_impl;
 pub struct Tick {
 //	value: Sample,
 	tempo: f32,
-	ticks_per_beat: i32,
+	ticks_per_bar: i32,
 	timer: f32,
 	target_tag: String,
 }
 impl Tick {
-	pub fn new(tempo: f32, ticks_per_beat: i32, target_tag: String) -> Self {
+	pub fn new(tempo: f32, ticks_per_bar: i32, target_tag: String) -> Self {
 		Self {
 			tempo,
-			ticks_per_beat,
+			ticks_per_bar,
 			timer: 0f32,
 			target_tag,
 		}
@@ -37,7 +37,7 @@ impl Node for Tick {
 		self.tick(env);
 	}
 	fn update(&mut self, _inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
-		self.timer += self.tempo * self.ticks_per_beat as f32 / 60f32 / context.sample_rate_f32();
+		self.timer += self.tempo * self.ticks_per_bar as f32 / 240f32 / context.sample_rate_f32();
 		while self.timer >= 1f32 {
 			self.tick(env);
 			self.timer -= 1f32;

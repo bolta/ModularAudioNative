@@ -1,0 +1,8 @@
+@tempo 120
+
+@instrument ^a, pulseOsc { } * env1
+
+a	o5l12q8
+
+// ticksPer(Beat|Bar) によらず 0.5 秒間隔であれば OK
+a	[0 c4]
