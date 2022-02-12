@@ -98,7 +98,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		let instrm = instruments.get(track)
 				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
 
-		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), &mut nodes, &mut output_nodes) ?;
+		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), ticks_per_beat, &mut nodes, &mut output_nodes) ?;
 	}
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
@@ -214,7 +214,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, ticks_per_beat: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult<()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
@@ -223,7 +223,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, 96, &tag_set, format!("{}.", &track).as_str());
+	let seqs = generate_sequences(&ast, ticks_per_beat, &tag_set, format!("{}.", &track).as_str());
 	let _seqr = nodes.add_with_tag(TAG_SEQUENCER.to_string(), Box::new(Sequencer::new(seqs)));
 
 	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
