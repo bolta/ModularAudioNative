@@ -228,7 +228,18 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMa
 
 	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
 
-	let instrm = build_instrument(track, instrm_def, nodes, freq) ?;
+	// セント単位のデチューン
+	// freq_detuned = freq * 2 ^ (detune / 1200)
+	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+	let detune = nodes.add_with_tag(format!("{}.#detune", &track), Box::new(Var::new(0f32)));
+	let cents_per_oct = nodes.add(Box::new(Constant::new(1200f32)));
+	let detune_oct = divide(Some(track), nodes, detune, cents_per_oct) ?; // 必ず成功するはず
+	let const_2 = nodes.add(Box::new(Constant::new(2f32)));
+	let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
+	let freq_detuned = multiply(Some(track), nodes, freq, freq_ratio) ?; // 必ず成功するはず
+
+	// デチューンを使う場合、入力が freq から freq_detuned に変わる
+	let instrm = build_instrument(track, instrm_def, nodes, /* freq */freq_detuned) ?;
 	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
 	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
 	let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));

@@ -1,0 +1,15 @@
+@tempo 100
+
+@instrument ^ab, pulseOsc { } * env1
+
+a	o5l12q8
+b	o5l12q8 @d-10
+
+a	ceg>c4r2<
+b	r1
+
+a	r1
+b	ceg>c4r2<
+
+a	ceg>c4r2<
+b	ceg>c4r2<
