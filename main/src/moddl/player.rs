@@ -80,9 +80,6 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	// トラックごとの MML を蓄積
 	let mut mmls = BTreeMap::<String, String>::new();
 	let mut waveforms = WaveformHost::new();
-	// TODO 仮
-//	waveforms.add(exper_waveform());
-	waveforms.add(read_wav_file(r"H:/dev/ModularAudioNative/wav/lead12.wav", None, None, None, None) ?);
 
 	let mut vars = builtin_vars();
 
@@ -125,21 +122,6 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	Machine::new().play(&mut context, &mut nodes, &mut waveforms);
 
 	Ok(())
-}
-
-fn exper_waveform() -> Waveform {
-	// 441 Hz の矩形波、1 秒間（最初の 20 周期はデューティ比を変える）
-	let mut data = vec![];
-	for _ in 0 .. 20 {
-		for _ in 0 .. 25 { data.push( 1f32); }
-		for _ in 0 .. 75 { data.push(-1f32); }
-	}
-	for _ in 0 .. 441 - 20 {
-		for _ in 0 .. 50 { data.push( 1f32); }
-		for _ in 0 .. 50 { data.push(-1f32); }
-	}
-
-	Waveform::new_with_details(1, 44100, data, Some(441f32), None, None, None)
 }
 
 fn process_statement<'a>(
@@ -523,7 +505,6 @@ fn builtin_vars() -> HashMap<String, Value> {
 	// for experiments
 	add_node_factory!("env1", Env1Factory { });
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
-	add_node_factory!("waveformPlayer1", WaveformPlayer1Factory { });
 	add_function!("twice", Twice { });
 
 	result
