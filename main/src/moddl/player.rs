@@ -150,7 +150,7 @@ fn process_statement<'a>(
 	mmls: &mut BTreeMap<String, String>,
 	vars: &mut HashMap<String, Value>,
 	waveforms: &mut WaveformHost,
-) -> ModdlResult</* 'a, */ ()> { // TODO 寿命指定これでいいのか
+) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
@@ -215,7 +215,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -
 }
 
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
-		-> ModdlResult</* 'a, */ ()> {
+		-> ModdlResult<()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
 

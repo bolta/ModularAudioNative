@@ -255,7 +255,6 @@ parser![expr, Box<Expr>, {
 	}
 }];
 
-// TODO いちいち Ok::<_, ()>(...) を書きたくないので吸収するユーティリティを書きたい↑
 parser![directive_statement, Statement, {
 	map_res(
 			tuple((
@@ -290,7 +289,6 @@ parser![statement, Statement, {
 	))
 }];
 
-// TODO コメントに対応
 pub_parser![compilation_unit, CompilationUnit, {
 	map_res(
 			all_consuming(
