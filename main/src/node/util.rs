@@ -14,7 +14,7 @@ impl Print {
 }
 #[node_impl]
 impl Node for Print {
-	fn channels(&self) -> i32 { 1 }
+	fn channels(&self) -> i32 { 0 }
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	// TODO ステレオ対応
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
