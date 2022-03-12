@@ -296,7 +296,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			// },
 			NodeStructure::NodeFactory(fact) => {
 				// TODO こっちでもデフォルト引数を解決する
-				apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
+				apply_input(Some(track), nodes, fact, &NodeArgs::new(), input)
 			},
 			// NodeStructure::Lambda => ,
 			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
@@ -340,9 +340,8 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 					}
 					node_args
 				};
-				let value_args: ValueArgs = args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-				apply_input(Some(track), nodes, fact, &value_args, &node_args, input)
+				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
 			NodeStructure::Constant(value) => {
 				let node = Box::new(Var::new(*value));
@@ -388,7 +387,6 @@ fn apply_input(
 	track: Option<&str>,
 	nodes: &mut NodeHost,
 	fact: &Rc<dyn NodeFactory>,
-	value_args: &ValueArgs,
 	node_args: &NodeArgs,
 	input: ChanneledNodeIndex
 ) -> ModdlResult<ChanneledNodeIndex> {
@@ -406,7 +404,7 @@ fn apply_input(
 	match coerce_input(track, nodes, input, fact.input_channels()) {
 		Some(result) => {
 			let coerced_input = result ?;
-			add_node!(fact.create_node(value_args, node_args, coerced_input))
+			add_node!(fact.create_node(node_args, coerced_input))
 		},
 		None => {
 			// 一旦型を明記した変数に取らないとなぜか E0282 になる
@@ -419,11 +417,11 @@ fn apply_input(
 				result ?
 			};
 			let result_l = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(value_args, node_args, input_l));
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(node_args, input_l));
 				result ?
 			};
 			let result_r = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(value_args, node_args, input_r));
+				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(node_args, input_r));
 				result ?
 			};
 			add_node!(Box::new(Join::new(vec![result_l.as_mono(), result_r.as_mono()])))
