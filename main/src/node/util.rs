@@ -23,3 +23,18 @@ impl Node for Print {
 		println!("{}", inputs[0]);
 	}
 }
+
+pub struct NullOut {
+	input: ChanneledNodeIndex,
+}
+impl NullOut {
+	pub fn new(input: ChanneledNodeIndex) -> Self { Self { input } }
+}
+#[node_impl]
+impl Node for NullOut {
+	fn channels(&self) -> i32 { 0 }
+	fn upstreams(&self) -> Upstreams { vec![self.input] }
+	fn execute<'a>(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		// do nothing
+	}
+}
