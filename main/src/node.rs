@@ -8,3 +8,4 @@ pub mod stereo;
 pub mod system;
 pub mod util;
 pub mod var;
+pub mod wave;

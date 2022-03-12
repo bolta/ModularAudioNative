@@ -3,6 +3,7 @@ use crate::core::{
 	context::*,
 	machine::*,
 	node::*,
+	node_factory::*,
 };
 use node_macro::node_impl;
 
@@ -113,4 +114,17 @@ impl Node for Limit {
 	}
 }
 
-// TODO Neg, Abs, Sgn, Sqrt, Max, Min, Limit, 
+pub struct LimitFactory { }
+impl NodeFactory for LimitFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("min", 1), spec("max", 1)] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let signal = piped_upstream.as_mono();
+		// ここは、存在しなければ呼び出し元でエラーにするのでチェック不要、のはず
+		let min = node_args.get("min").unwrap().as_mono();
+		let max = node_args.get("max").unwrap().as_mono();
+		Box::new(Limit::new(signal, min, max))
+	}
+}
+
+// TODO Neg, Abs, Sgn, Sqrt, Max, Min,

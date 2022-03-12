@@ -3,8 +3,12 @@ use crate::core::{
 	context::*,
 	machine::*,
 	node::*,
+	node_factory::*,
 };
 use node_macro::node_impl;
+
+ ////
+//// SineOsc
 
 pub struct SineOsc {
 	freq: MonoNodeIndex,
@@ -28,6 +32,19 @@ impl Node for SineOsc {
 		self.phase = (self.phase + TWO_PI * freq / context.sample_rate_f32()) % TWO_PI;
 	}
 }
+
+pub struct SineOscFactory { }
+impl NodeFactory for SineOscFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+		Box::new(SineOsc::new(freq))
+	}
+}
+
+ ////
+//// PulseOsc
 
 pub struct PulseOsc {
 	freq: MonoNodeIndex,
@@ -58,6 +75,21 @@ impl Node for PulseOsc {
 	}
 }
 
+pub struct PulseOscFactory { }
+impl NodeFactory for PulseOscFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("duty", 1, 0.5f32)] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+dbg!(freq);
+		let duty = node_args.get("duty").unwrap().as_mono(); 
+		Box::new(PulseOsc::new(freq, duty))
+	}
+}
+
+ ////
+//// StereoTestOsc
+
 pub struct StereoTestOsc {
 	freq: MonoNodeIndex,
 
@@ -79,5 +111,15 @@ impl Node for StereoTestOsc {
 		let freq = inputs[0];
 		self.phase_l = (self.phase_l + TWO_PI * freq         / context.sample_rate_f32()) % TWO_PI;
 		self.phase_r = (self.phase_r + TWO_PI * freq / 2_f32 / context.sample_rate_f32()) % TWO_PI;
+	}
+}
+
+pub struct StereoTestOscFactory { }
+impl NodeFactory for StereoTestOscFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+		Box::new(StereoTestOsc::new(freq))
 	}
 }

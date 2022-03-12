@@ -1,4 +1,4 @@
-// pub mod ast;
+pub mod builtin;
 pub mod error;
 pub mod evaluator;
 pub mod function;

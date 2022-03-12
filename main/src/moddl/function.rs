@@ -27,14 +27,3 @@ impl Function for Twice {
 		Ok(Value::Float(result))
 	}
 }
-
-pub struct WaveformPlayer { }
-impl Function for WaveformPlayer {
-	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
-		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
-		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
-		let result = Rc::new(WaveformPlayerFactory::new(wave));
-
-		Ok(Value::NodeFactory(result))
-	}
-}

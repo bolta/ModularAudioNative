@@ -15,7 +15,6 @@ use crate::{
 	},
 	wave::{
 		waveform_host::*,
-		waveform_player::*,
 	}
 };
 
@@ -29,14 +28,14 @@ pub struct NodeArgSpec {
 	pub channels: i32,
 	pub default: Option<Sample>,
 }
-fn spec(name: &str, channels: i32) -> NodeArgSpec {
+pub fn spec(name: &str, channels: i32) -> NodeArgSpec {
 	NodeArgSpec {
 		name: name.to_string(),
 		channels,
 		default: None,
 	}
 }
-fn spec_with_default(name: &str, channels: i32, default: Sample) -> NodeArgSpec {
+pub fn spec_with_default(name: &str, channels: i32, default: Sample) -> NodeArgSpec {
 	NodeArgSpec {
 		name: name.to_string(),
 		channels,
@@ -53,75 +52,12 @@ pub trait NodeFactory {
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node>;
 }
 
-pub struct SineOscFactory { }
-impl NodeFactory for SineOscFactory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		let freq = piped_upstream.as_mono();
-		Box::new(SineOsc::new(freq))
-	}
-}
-
-pub struct PulseOscFactory { }
-impl NodeFactory for PulseOscFactory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("duty", 1, 0.5f32)] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		let freq = piped_upstream.as_mono();
-dbg!(freq);
-		let duty = node_args.get("duty").unwrap().as_mono(); 
-		Box::new(PulseOsc::new(freq, duty))
-	}
-}
-
-pub struct LimitFactory { }
-impl NodeFactory for LimitFactory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("min", 1), spec("max", 1)] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		let signal = piped_upstream.as_mono();
-		// ここは、存在しなければ呼び出し元でエラーにするのでチェック不要、のはず
-		let min = node_args.get("min").unwrap().as_mono();
-		let max = node_args.get("max").unwrap().as_mono();
-		Box::new(Limit::new(signal, min, max))
-	}
-}
-
 pub struct Env1Factory { }
 impl NodeFactory for Env1Factory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		Box::new(ExpEnv::new(0.125f32))
-	}
-}
-
-pub struct StereoTestOscFactory { }
-impl NodeFactory for StereoTestOscFactory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		let freq = piped_upstream.as_mono();
-		Box::new(StereoTestOsc::new(freq))
-	}
-}
-
-pub struct WaveformPlayerFactory {
-	waveform_index: WaveformIndex,
-}
-impl WaveformPlayerFactory {
-	pub fn new(waveform_index: WaveformIndex) -> Self {
-		Self { waveform_index }
-	}
-}
-
-impl NodeFactory for WaveformPlayerFactory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		let freq = piped_upstream.as_mono();
-		Box::new(WaveformPlayer::new(1, self.waveform_index, freq))
 	}
 }
 

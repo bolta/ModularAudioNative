@@ -1,4 +1,5 @@
 use super::{
+	builtin::*,
 	error::*,
 	evaluator::*,
 	function::*,
@@ -31,7 +32,6 @@ use crate::{
 		tick::*,
 	},
 	wave::{
-		waveform::*,
 		waveform_host::*,
 		wav_reader::*,
 	}
@@ -483,30 +483,3 @@ binary!(subtract, Sub::new, StereoSub::new);
 binary!(divide, Div::new, StereoDiv::new);
 binary!(remainder, Rem::new, StereoRem::new);
 binary!(power, Pow::new, StereoPow::new);
-
-fn builtin_vars() -> HashMap<String, Value> {
-	let mut result = HashMap::<String, Value>::new();
-	macro_rules! add_node_factory {
-		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), Value::NodeFactory(Rc::new($fact)));
-		}
-	}
-	macro_rules! add_function {
-		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), Value::Function(Rc::new($fact)));
-		}
-	}
-
-	add_node_factory!("sineOsc", SineOscFactory { });
-	add_node_factory!("pulseOsc", PulseOscFactory { });
-	add_node_factory!("limit", LimitFactory { });
-	add_node_factory!("pan", PanFactory { });
-	add_function!("waveformPlayer", WaveformPlayer { });
-
-	// for experiments
-	add_node_factory!("env1", Env1Factory { });
-	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
-	add_function!("twice", Twice { });
-
-	result
-}
