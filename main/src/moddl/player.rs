@@ -2,7 +2,6 @@ use super::{
 	error::*,
 	evaluator::*,
 	function::*,
-	node_factory::*,
 	value::*,
 };
 use crate::{
@@ -11,6 +10,7 @@ use crate::{
 		context::*,
 		machine::*,
 		node::*,
+		node_factory::*,
 		node_host::*,
 	},
 	mml::default::{

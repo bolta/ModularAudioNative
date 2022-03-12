@@ -1,8 +1,10 @@
 use super::{
 	function::*,
-	node_factory::*,
 };
-use crate::wave::waveform_host::WaveformIndex;
+use crate::{
+	core::node_factory::*,
+	wave::waveform_host::WaveformIndex,
+};
 
 use std::rc::Rc;
 
