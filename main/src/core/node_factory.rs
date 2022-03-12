@@ -52,15 +52,6 @@ pub trait NodeFactory {
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node>;
 }
 
-pub struct Env1Factory { }
-impl NodeFactory for Env1Factory {
-	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
-	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(ExpEnv::new(0.125f32))
-	}
-}
-
 pub struct PanFactory { }
 impl NodeFactory for PanFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("pos", 1)] }

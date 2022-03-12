@@ -81,7 +81,6 @@ impl NodeFactory for PulseOscFactory {
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-dbg!(freq);
 		let duty = node_args.get("duty").unwrap().as_mono(); 
 		Box::new(PulseOsc::new(freq, duty))
 	}
