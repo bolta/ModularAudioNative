@@ -6,7 +6,7 @@ use crate::core::{
 	context::Context as CoreContext,
 };
 use crate::node::{
-	env::NoteEvent,
+	envelope::NoteEvent,
 	system::*,
 	var::*,
 };

@@ -7,7 +7,7 @@ use crate::{
 		node::*,
 		node_factory::*,
 	},
-	node::env::*,
+	node::envelope::*,
 	wave::{
 		waveform::*,
 		waveform_host::*,

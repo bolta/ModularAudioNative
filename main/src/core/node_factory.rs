@@ -9,7 +9,7 @@ use crate::{
 use crate::{
 	node::{
 		arith::*,
-		env::*,
+		envelope::*,
 		osc::*,
 		stereo::*,
 	},
