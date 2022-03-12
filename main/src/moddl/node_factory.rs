@@ -108,11 +108,11 @@ impl NodeFactory for StereoTestOscFactory {
 }
 
 pub struct WaveformPlayerFactory {
-	waveformIndex: WaveformIndex,
+	waveform_index: WaveformIndex,
 }
 impl WaveformPlayerFactory {
-	pub fn new(waveformIndex: WaveformIndex) -> Self {
-		Self { waveformIndex }
+	pub fn new(waveform_index: WaveformIndex) -> Self {
+		Self { waveform_index }
 	}
 }
 
@@ -121,7 +121,7 @@ impl NodeFactory for WaveformPlayerFactory {
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(WaveformPlayer::new(1, self.waveformIndex, freq))
+		Box::new(WaveformPlayer::new(1, self.waveform_index, freq))
 	}
 }
 
