@@ -12,6 +12,7 @@ use crate::{
 	},
 	node::{
 		envelope::*,
+		lofi::*,
 		osc::*,
 		arith::*,
 		wave::*,
@@ -42,6 +43,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("expEnv", ExpEnvFactory { });
 	add_node_factory!("adsrEnv", AdsrEnvFactory { });
 	add_node_factory!("limit", LimitFactory { });
+	add_node_factory!("quantCrush", QuantCrushFactory { });
 	add_node_factory!("pan", PanFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 

@@ -2,6 +2,7 @@ pub mod arith;
 pub mod audio;
 pub mod envelope;
 pub mod event_scheduler;
+pub mod lofi;
 pub mod osc;
 pub mod prim;
 pub mod stereo;
