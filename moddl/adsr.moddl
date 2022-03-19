@@ -1,0 +1,16 @@
+@tempo 108
+
+@instrument ^a, pulseOsc { duty: 0.25 } * adsrEnv { attack: 0.05, decay: 0.2, sustain: 0.5, release: 0.1 }
+@instrument ^b, pulseOsc { duty: 0.5 } * adsrEnv { attack: 0, decay: 1.2, sustain: 0, release: 0.1 }
+@instrument ^c, sineOsc * adsrEnv { attack: 0, decay: 0, sustain: 1, release: 0 }
+
+a	o4l8v15
+b	o4l8v11
+c	o3l8v15
+
+// 開始直後が欠けることがある（欠けないこともある）なぜだろう
+abc r4
+
+a	raq4f>dq8c4<q4aq8f4q4dq8g2r4 fgq4a>q8d^eq4fq8c^1
+b	c2c4.d4.f2. d4.<b^2 >dfb-^-24v9g48b-48v11>f^e4.
+c	f2a4.b-4.>d-2^.r16 d4.<g^4.>c^2rq6cq8<c4
