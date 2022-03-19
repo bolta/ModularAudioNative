@@ -170,10 +170,10 @@ pub struct AdsrEnvFactory { }
 impl NodeFactory for AdsrEnvFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> {
 		vec![
-			spec("attack", 1),
-			spec("decay", 1),
-			spec("sustain", 1),
-			spec("release", 1),
+			spec_with_default("attack", 1, 0f32),
+			spec_with_default("decay", 1, 0f32),
+			spec_with_default("sustain", 1, 1f32),
+			spec_with_default("release", 1, 0f32),
 		]
 	}
 	fn input_channels(&self) -> i32 { 1 }
