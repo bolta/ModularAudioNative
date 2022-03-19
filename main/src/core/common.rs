@@ -73,6 +73,7 @@ impl ChanneledNodeIndex {
 	}
 }
 
-pub const TWO_PI: f32 = 2_f32 * std::f32::consts::PI;
+pub const PI: f32 = std::f32::consts::PI;
+pub const TWO_PI: f32 = 2_f32 * PI;
 
 pub const NO_OUTPUT: Sample = f32::NAN;

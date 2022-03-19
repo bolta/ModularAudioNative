@@ -2,7 +2,7 @@
 
 @instrument ^a, pulseOsc { duty: 0.25 } * adsrEnv { attack: 0.05, decay: 0.2, sustain: 0.5, release: 0.1 }
 @instrument ^b, pulseOsc { duty: 0.5 } * adsrEnv { attack: 0, decay: 1.2, sustain: 0, release: 0.1 }
-@instrument ^c, sineOsc * adsrEnv { attack: 0, decay: 0, sustain: 1, release: 0 }
+@instrument ^c, triangleOsc * adsrEnv { attack: 0, decay: 0, sustain: 1, release: 0 }
 
 a	o4l8v15
 b	o4l8v11
