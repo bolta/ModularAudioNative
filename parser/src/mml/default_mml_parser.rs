@@ -134,6 +134,7 @@ parser![command, Command, {
 		tone_command(),
 		unary_command!(char('r'), length(), Command::Rest),
 		parameter_command(),
+		unary_command!(char('t'), float(), Command::Tempo),
 		loop_command(),
 	))
 }];

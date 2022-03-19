@@ -9,17 +9,22 @@
 @let `nesTriangle`, triangleOsc | quantCrush { resolution: 16 }
 
 @instrument ^d, pulseOsc { duty: 0.25 } | autoWah * adsrEnv { attack: 0, decay: 0.25, sustain: 0, release: 0 }
+@instrument ^t, expEnv { } // dummy（これがないとエラーになる。なんとかしたい）
 
 abc	o5l8v10
-d o1l16v11
+d o1l16v12
 
 // 開始直後が欠けることがある（欠けないこともある）なぜだろう
-abcd r4
+abcdt r4
 
-abcd [0
+// トラックが増えてくるとワイルドカードがほしくなる（もしくは範囲指定とか）
+abcdt [0
 	a rg4.q2g4.q8g rg4.q1g4.q8g rg 4.q1g 4.q8g  rg4.q1g4.q8g
 	b rf4.q2f4.q8f re4.q1e4.q8e re-4.q1e-4.q8e- re4.q1e4.q8e
 	c rc4.q2c4.q8c rc4.q1c4.q8c rc 4.q1c 4.q8c  rc4.q1c4.q8c
 
 	d [4 [4 g>dgd<] ]
-abcd ]
+
+	// 125 bpm, c16c16 = 3:2
+	t [4 [8 t104.167 r16 t156.25 r16 ]]
+abcdt ]

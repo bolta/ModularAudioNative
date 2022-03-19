@@ -28,6 +28,7 @@ const MAX_VELOCITY: f32 = 15f32;
 const PARAM_NAME_VOLUME: &str = "#volume";
 const PARAM_NAME_VELOCITY: &str = "#velocity";
 const PARAM_NAME_DETUNE: &str = "#detune";
+const PARAM_NAME_TEMPO: &str = "#tempo";
 
 pub fn generate_sequences(
 	CompilationUnit { commands }: &CompilationUnit,
@@ -101,6 +102,9 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 			}
 			Command::Detune(value) => {
 				seq.push(make_param_instrc(param_prefix, PARAM_NAME_DETUNE, *value));
+			}
+			Command::Tempo(value) => {
+				seq.push(make_param_instrc("" /* global */, PARAM_NAME_TEMPO, *value));
 			}
 			Command::Loop { times, content1, content2 } => {
 				/*

@@ -105,7 +105,9 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	}
 	
 	let mut nodes = NodeHost::new();
-	nodes.add(Box::new(Tick::new(pctx.tempo, pctx.ticks_per_bar, TAG_SEQUENCER.to_string())));
+	// TODO タグ名を sequence_generator と共通化
+	let tempo = nodes.add_with_tag("#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
+	nodes.add(Box::new(Tick::new(tempo.as_mono(), pctx.ticks_per_bar, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = Vec::<ChanneledNodeIndex>::new();
 
