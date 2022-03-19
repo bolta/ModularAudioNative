@@ -10,7 +10,7 @@ pub type Upstreams = Vec<ChanneledNodeIndex>;
 
 pub trait Node {
 	fn channels(&self) -> i32;
-	fn upstreams(&self) -> Upstreams { vec![] }
+	fn upstreams(&self) -> Upstreams;
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }
 	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) { }

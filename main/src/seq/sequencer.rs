@@ -46,6 +46,7 @@ impl Sequencer {
 #[node_impl]
 impl Node for Sequencer {
 	fn channels(&self) -> i32 { 0 }
+	fn upstreams(&self) -> Upstreams { vec![] }
 	fn process_event(&mut self, event: &dyn Event, context: &CoreContext, env: &mut Environment) {
 		if event.event_type() != EVENT_TYPE_TICK { return; }
 
