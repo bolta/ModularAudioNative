@@ -1,3 +1,5 @@
+//@mute ^a
+
 @tempo 108
 
 @instrument ^a, pulseOsc { duty: 0.25 } * adsrEnv { attack: 0.05, decay: 0.2, sustain: 0.5, release: 0.1 }
@@ -12,5 +14,5 @@ c	o3l8v15
 abc r4
 
 a	raq4f>dq8c4<q4aq8f4q4dq8g2r4 fgq4a>q8d^eq4fq8c^1
-b	c2c4.d4.f2. d4.<b^2 >dfb-^-24v9g48b-48v11>f^e4.
+b	c2c4.d4.f2. f4.f^2 dfb-^-24v9g48b-48v11>f^e4.
 c	f2a4.b-4.>d-2^.r16 d4.<g^4.>c^2rq6cq8<c4

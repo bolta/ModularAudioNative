@@ -2,7 +2,6 @@ use super::{
 	builtin::*,
 	error::*,
 	evaluator::*,
-	function::*,
 	value::*,
 };
 use crate::{
@@ -24,7 +23,6 @@ use crate::{
 		prim::*,
 		stereo::*,
 		system::*,
-		util::*,
 		var::*,
 	},
 	seq::{
@@ -46,6 +44,7 @@ use parser::{
 use std::{
 	collections::btree_map::BTreeMap,
 	collections::hash_map::HashMap,
+	collections::hash_set::HashSet,
 	fs::File,
 	io::Read,
 	rc::Rc,
@@ -68,35 +67,55 @@ pub fn play_file(moddl_path: &str) -> ModdlResult<()> {
 	play(moddl.as_str())
 }
 
+#[derive(PartialEq)]
+enum MuteSolo { Mute, Solo }
+
+struct PlayerContext {
+	tempo: f32,
+	ticks_per_bar: i32,
+	// トラックごとの instrument を保持
+	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
+	// let mut instruments = HashMap::<String, &Expr>::new();
+	instruments: HashMap<String, NodeStructure>,
+	// トラックごとの MML を蓄積
+	mmls: BTreeMap<String, String>,
+	waveforms: WaveformHost,
+	mute_solo: MuteSolo,
+	mute_solo_tracks: HashSet<String>,
+	vars: HashMap<String, Value>,
+}
+
 pub fn play(moddl: &str) -> ModdlResult<()> {
 	// TODO パーズエラーをちゃんと処理
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
-	let mut tempo = 120f32;
-	let mut ticks_per_bar = 384;
-	// トラックごとの instrument を保持
-	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
-	// let mut instruments = HashMap::<String, &Expr>::new();
-	let mut instruments = HashMap::<String, NodeStructure>::new();
-	// トラックごとの MML を蓄積
-	let mut mmls = BTreeMap::<String, String>::new();
-	let mut waveforms = WaveformHost::new();
-
-	let mut vars = builtin_vars();
+	let mut pctx = PlayerContext {
+		tempo: 120f32,
+		ticks_per_bar: 384,
+		instruments: HashMap::<String, NodeStructure>::new(),
+		mmls: BTreeMap::<String, String>::new(),
+		waveforms: WaveformHost::new(),
+		mute_solo: MuteSolo::Mute,
+		mute_solo_tracks: HashSet::<String>::new(),
+		vars: builtin_vars(),
+	};
 
 	for stmt in &statements {
-		process_statement(&stmt, &mut tempo, &mut instruments, &mut mmls, &mut vars, &mut waveforms, &mut ticks_per_bar) ?;
+		process_statement(&stmt, &mut pctx) ?;
 	}
 	
 	let mut nodes = NodeHost::new();
-	nodes.add(Box::new(Tick::new(tempo, ticks_per_bar, TAG_SEQUENCER.to_string())));
+	nodes.add(Box::new(Tick::new(pctx.tempo, pctx.ticks_per_bar, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = Vec::<ChanneledNodeIndex>::new();
-	for (track, mml) in &mmls {
-		let instrm = instruments.get(track)
-				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
 
-		build_nodes_by_mml(track.as_str(), instrm, &vars, mml.as_str(), ticks_per_bar, &mut nodes, &mut output_nodes) ?;
+	for (track, mml) in &pctx.mmls {
+		// @mute で指定されているか、@solo で指定されていなければ、除外
+		if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) { continue; }
+
+		let instrm = pctx.instruments.get(track)
+				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
+		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), pctx.ticks_per_bar, &mut nodes, &mut output_nodes) ?;
 	}
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
@@ -122,68 +141,69 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
 	// nodes.add(Box::new(Print::new(master)));
 
-	Machine::new().play(&mut context, &mut nodes, &mut waveforms);
+	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms);
 
 	Ok(())
 }
 
-fn process_statement<'a>(
-	stmt: &'a Statement,
-	tempo: &mut f32,
-	// instruments: &mut HashMap<String, &'a Expr>,
-	instruments: &mut HashMap<String, NodeStructure>,
-	mmls: &mut BTreeMap<String, String>,
-	vars: &mut HashMap<String, Value>,
-	waveforms: &mut WaveformHost,
-	ticks_per_bar: &mut i32,
-) -> ModdlResult<()> {
+fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					*tempo = evaluate_arg(&args, 0, vars)?.as_float()
+					(*pctx).tempo = evaluate_arg(&args, 0, &pctx.vars)?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg(&args, 0, vars)?.as_track_set()
+					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1, vars)?.as_node_structure()
+						let instrm = evaluate_arg(&args, 1, &pctx.vars)?.as_node_structure()
 								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-						if instruments.get(&track).is_some() {
+						if pctx.instruments.get(&track).is_some() {
 							return Err(Error::DirectiveDuplicate { msg: format!("@instrument ^{}", &track) });
 						}
-						instruments.insert(track, instrm);
+						pctx.instruments.insert(track, instrm);
 					}
 				}
 				"let" => {
-					let name = evaluate_arg(&args, 0, vars)?.as_identifier_literal()
+					let name = evaluate_arg(&args, 0, &pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, vars) ?;
-					vars.insert(name, value);
+					let value = evaluate_arg(&args, 1, &pctx.vars) ?;
+					pctx.vars.insert(name, value);
 				}
 				"waveform" => {
-					let name = evaluate_arg(&args, 0, vars)?.as_identifier_literal()
+					let name = evaluate_arg(&args, 0, &pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, vars) ?;
+					let value = evaluate_arg(&args, 1, &pctx.vars) ?;
 					let path = value.as_string_literal().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO 読み込み失敗時のエラー処理
-					let index = waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
-					vars.insert(name, Value::WaveformIndex(index));
+					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
+					pctx.vars.insert(name, Value::WaveformIndex(index));
 					// vars.insert(name, value);
 				}
 				"ticksPerBar" => {
-					let value = evaluate_arg(&args, 0, vars) ?.as_float()
+					let value = evaluate_arg(&args, 0, &pctx.vars) ?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO さらに、正の整数であることを検証
-					*ticks_per_bar = value as i32;
+					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_arg(&args, 0, vars) ?.as_float()
+					let value = evaluate_arg(&args, 0, &pctx.vars) ?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO さらに、正の整数であることを検証
-					*ticks_per_bar = 4 * value as i32;
+					(*pctx).ticks_per_bar = 4 * value as i32;
+				}
+				"mute" => {
+					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
+				}
+				"solo" => {
+					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
 				other => {
 					println!("unknown directive: {}", other);
@@ -192,16 +212,24 @@ fn process_statement<'a>(
 		}
 		Statement::Mml { tracks, mml } => {
 			for track in tracks {
-				if let Some(mml_concat) = mmls.get_mut(track) {
+				if let Some(mml_concat) = pctx.mmls.get_mut(track) {
 					mml_concat.push_str(mml.as_str());
 				} else {
-					mmls.insert(track.clone(), mml.clone());
+					pctx.mmls.insert(track.clone(), mml.clone());
 				}
 			}
 		}
 	}
 
 	Ok(())
+}
+
+fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerContext) {
+	(*pctx).mute_solo = mute_solo;
+	(*pctx).mute_solo_tracks.clear();
+	tracks.iter().for_each(|t| {
+		(*pctx).mute_solo_tracks.insert(t.clone());
+	});
 }
 
 fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -> ModdlResult<Value> {
@@ -212,7 +240,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, vars: &HashMap<String, Value>, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
 		-> ModdlResult<()> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
