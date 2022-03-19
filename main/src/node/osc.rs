@@ -57,6 +57,7 @@ simple_osc!(TriangleOsc, TriangleOscFactory, (|phase: f32|
 		} else {
 			(2f32 / PI) * phase - 4f32
 		}));
+simple_osc!(SawOsc, SawOscFactory, (|phase: f32| phase / PI - 1f32));
 
  ////
 //// Pulse Oscillator
