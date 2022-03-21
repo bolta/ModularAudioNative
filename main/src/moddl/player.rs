@@ -305,8 +305,35 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			}
 		}
 
-		// let factories = node_factories();
-
+		// ノードの引数をデフォルトを考慮して解決する
+		let mut make_node_args = |args: &Vec<(String, Value)>, fact: &Rc<dyn NodeFactory>|
+				-> ModdlResult<HashMap<String, ChanneledNodeIndex>> {
+			let specs = fact.node_arg_specs();
+			let mut node_args = NodeArgs::new();
+			for NodeArgSpec { name, channels, default } in specs {
+				let arg_val = args.iter().find(|(n, _)| *n == *name );
+				let strukt = if let Some(arg_val) = arg_val {
+					arg_val.1.as_node_structure()
+							// node_args に指定された引数なのに NodeStructure に変換できない
+							.ok_or_else(|| Error::NodeFactoryNotFound) ?
+				} else if let Some(default) = default {
+					Value::Float(default).as_node_structure().unwrap()
+				} else {
+					// 必要な引数が与えられていない
+					Err(Error::NodeFactoryNotFound) ?
+				};
+				let arg_node = recurse!(&strukt, input, format!("{}.{}", track, &name)) ?;
+				let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
+					Some(result) => result,
+					// モノラルであるべき node_arg にステレオが与えられた場合、
+					// 勝手にモノラルに変換するとロスが発生するのでエラーにする
+					None => Err(Error::ChannelMismatch),
+				} ?;
+				node_args.insert(name.clone(), coerced_arg_node);
+			}
+			Ok(node_args)
+		};
+		
 		match strukt {
 			NodeStructure::Connect(lhs, rhs) => {
 				// TODO mono/stereo 変換
@@ -325,51 +352,17 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			NodeStructure::NodeFactory(fact) => {
-				// TODO こっちでもデフォルト引数を解決する
-				apply_input(Some(track), nodes, fact, &NodeArgs::new(), input)
+				let node_args = make_node_args(&vec![], fact) ?;
+				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
 			// NodeStructure::Lambda => ,
 			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
 				// 引数ありのノード生成
-				// 今のところ factory は id で直に指定するしかなく、id は factory の名前しかない
-				// let fact_id = match &**factory {
-				// 	NodeStructure::Identifier(id) => id,
-				// 	_ => unreachable!(),
-				// };
-				// 
-				// let fact = factories.get(fact_id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
 				let fact = match &**factory {
 					NodeStructure::NodeFactory(fact) => Ok(fact),
 					_ => Err(Error::DirectiveArgTypeMismatch),
 				} ?;
-				let specs = fact.node_arg_specs();
-				let node_args = {
-					let mut node_args = NodeArgs::new();
-					for NodeArgSpec { name, channels, default } in specs {
-						let arg_val = args.iter().find(|(n, _)| *n == *name );
-						let strukt = if let Some(arg_val) = arg_val {
-							arg_val.1.as_node_structure()
-									// node_args に指定された引数なのに NodeStructure に変換できない
-									.ok_or_else(|| Error::NodeFactoryNotFound) ?
-						} else if let Some(default) = default {
-							Value::Float(default).as_node_structure().unwrap()
-						} else {
-							// 必要な引数が与えられていない
-							Err(Error::NodeFactoryNotFound) ?
-						};
-								// .or(default.map(|value| &(name.clone(), Value::Float(value))))
-								// .ok_or_else(|| Error::NodeFactoryNotFound)?.1;
-						let arg_node = recurse!(&strukt, input, format!("{}.{}", track, &name)) ?;
-						let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
-							Some(result) => result,
-							// モノラルであるべき node_arg にステレオが与えられた場合、
-							// 勝手にモノラルに変換するとロスが発生するのでエラーにする
-							None => Err(Error::ChannelMismatch),
-						} ?;
-						node_args.insert(name.clone(), coerced_arg_node);
-					}
-					node_args
-				};
+				let node_args = make_node_args(args, fact) ?;
 
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
