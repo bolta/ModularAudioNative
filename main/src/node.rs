@@ -3,6 +3,7 @@ pub mod audio;
 pub mod envelope;
 pub mod event_scheduler;
 pub mod filter;
+pub mod freq;
 pub mod lofi;
 pub mod osc;
 pub mod prim;

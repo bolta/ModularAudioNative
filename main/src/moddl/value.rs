@@ -51,6 +51,12 @@ impl Value {
 			_ => None,
 		}
 	}
+	pub fn as_boolean(&self) -> Option<bool> {
+		match self {
+			Self::Float(value) => Some(*value > 0f32),
+			_ => None,
+		}
+	}
 	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
 		match self {
 			Self::WaveformIndex(value) => Some(*value),
@@ -105,3 +111,9 @@ impl Value {
 		}
 	}
 }
+
+// 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
+// 代表の値として true = 1、false = -1 とする
+pub const VALUE_FALSE: Value = Value::Float(-1f32);
+pub const VALUE_TRUE: Value = Value::Float(1f32);
+
