@@ -58,7 +58,7 @@ impl Node for Sequencer {
 // TODO 他の型の変数もほしいかも…
 type Vars = HashMap<String, i32>;
 type Stack = common::stack::Stack<StackFrame>;
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StackFrame {
 	seq_idx: SequenceName,
 	instrc_idx: i32, // 一時的に -1 にする必要があるので符号つきで持つ
@@ -85,7 +85,7 @@ impl Context {
 				env.events_mut().push(Box::new(JobEvent::starting()));
 			}
 			// TODO 毎回ハッシュテーブルを引くと遅いか？
-			let sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
+			let mut sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
 			if instrc_idx >= sequence.len() { return; }
 
 			self.process_instruction(&sequence[instrc_idx], env);
@@ -102,6 +102,7 @@ impl Context {
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
 					self.stack.pop(); // 呼び出し元の続きに復帰
+					sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
 				}
 			}
 
@@ -139,7 +140,6 @@ impl Context {
 				let mut new_top = self.stack.top_mut();
 				new_top.seq_idx = SequenceName(seq_name.clone());
 				new_top.instrc_idx = -1; // この後インクリメントされるので 1 引いておく
-
 			}
 			Instruction::Jump { seq_name, pos } => {
 				let mut top = self.stack.top_mut();

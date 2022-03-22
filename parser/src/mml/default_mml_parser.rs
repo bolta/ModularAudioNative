@@ -121,6 +121,17 @@ parser![loop_command, Command, {
 	}
 }];
 
+parser![stack_command, Command, {
+	// 型の無限再帰を避けるため手続きで書く
+	|input| {
+		let (input, _) = ss!(char('{'))(input) ?;
+		let (input, content) = many0(command())(input) ?;
+		let (input, _) = ss!(char('}'))(input) ?;
+
+		Ok((input, Command::Stack { content }))
+	}
+}];
+
 parser![command, Command, {
 	alt((
 		unary_command!(char('o'), integer(), Command::Octave),
@@ -136,6 +147,7 @@ parser![command, Command, {
 		parameter_command(),
 		unary_command!(char('t'), float(), Command::Tempo),
 		loop_command(),
+		stack_command(),
 	))
 }];
 

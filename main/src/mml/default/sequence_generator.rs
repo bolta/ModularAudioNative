@@ -53,7 +53,17 @@ fn make_name(prefix: &str, count: &mut i32) -> String {
 	name
 }
 
-fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32, tag_set: &TagSet, stack: &mut Stack, var_seq: &mut i32, seq_seq: &mut i32, result: &mut HashMap<String, Sequence>, param_prefix: &str) {
+fn generate_sequence(
+	seq_name: &str,
+	commands: &Vec<Command>,
+	ticks_per_bar: i32,
+	tag_set: &TagSet,
+	stack: &mut Stack,
+	var_seq: &mut i32,
+	seq_seq: &mut i32,
+	result: &mut HashMap<String, Sequence>,
+	param_prefix: &str,
+) {
 	let mut seq = vec![];
 	for command in commands {
 		match command {
@@ -169,7 +179,14 @@ fn generate_sequence(seq_name: &str, commands: &Vec<Command>, ticks_per_bar: i32
 				}
 				stack.pop();
 			}
-			Command::Stack { content: _ } => unimplemented!(),
+			Command::Stack { content } => {
+				stack.push_clone();
+				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
+				let content_name = make_name("seq", seq_seq);
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
+				seq.push(Instruction::Call { seq_name: content_name });
+				stack.pop();
+			}
 			Command::ExpandMacro { name: _ } => unimplemented!(),
 		}
 	}
