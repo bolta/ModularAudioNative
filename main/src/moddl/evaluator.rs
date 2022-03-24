@@ -6,7 +6,13 @@ use super::{
 extern crate parser;
 use parser::moddl::ast::*;
 
+use crate::{
+	core::common::*,
+	operator::*,
+};
+
 use std::{
+	any::TypeId,
 	collections::hash_map::HashMap,
 };
 
@@ -14,14 +20,13 @@ use std::{
 
 pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value> {
 	match expr {
-		// TODO lhs, rhs 両方が数値の場合は計算を行う
-		Expr::Connect { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Connect),
-		Expr::Power { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Power),
-		Expr::Multiply { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Multiply),
-		Expr::Divide { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Divide),
-		Expr::Remainder { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Remainder),
-		Expr::Add { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Add),
-		Expr::Subtract { lhs, rhs } => evaluate_binary_structure(lhs, rhs, vars, NodeStructure::Subtract),
+		Expr::Connect { lhs, rhs } => evaluate_binary_structure::<NoneOp>(lhs, rhs, vars, NodeStructure::Connect),
+		Expr::Power { lhs, rhs } => evaluate_binary_structure::<PowOp>(lhs, rhs, vars, NodeStructure::Power),
+		Expr::Multiply { lhs, rhs } => evaluate_binary_structure::<MulOp>(lhs, rhs, vars, NodeStructure::Multiply),
+		Expr::Divide { lhs, rhs } => evaluate_binary_structure::<DivOp>(lhs, rhs, vars, NodeStructure::Divide),
+		Expr::Remainder { lhs, rhs } => evaluate_binary_structure::<RemOp>(lhs, rhs, vars, NodeStructure::Remainder),
+		Expr::Add { lhs, rhs } => evaluate_binary_structure::<AddOp>(lhs, rhs, vars, NodeStructure::Add),
+		Expr::Subtract { lhs, rhs } => evaluate_binary_structure::<SubOp>(lhs, rhs, vars, NodeStructure::Subtract),
 		Expr::Identifier(id) => {
 			let val = vars.get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
 			Ok(val.clone())
@@ -63,18 +68,38 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 	}
 }
 
-fn evaluate_binary_structure(
+// 定数畳み込みに対応しない演算子に与えるダミーの演算
+struct NoneOp { }
+impl BinaryOp for NoneOp { fn oper(_lhs: Sample, _rhs: Sample) -> Sample { unreachable!() } }
+
+fn evaluate_binary_structure<Op: BinaryOp + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
 	vars: &HashMap<String, Value>,
 	make_structure: fn(Box<NodeStructure>, Box<NodeStructure>) -> NodeStructure,
 ) -> ModdlResult<Value> {
-	// TODO 
-	let l_str = evaluate_as_node_structure(lhs, vars) ?;
-	let r_str = evaluate_as_node_structure(rhs, vars) ?;
+	let l_val = evaluate(lhs, vars) ?;
+	let r_val = evaluate(rhs, vars) ?;
+
+	// 定数はコンパイル時に計算
+	if TypeId::of::<Op>() != TypeId::of::<NoneOp>() {
+		match (l_val.as_float(), r_val.as_float()) {
+			(Some(l_float), Some(r_float)) => {
+				return Ok(Value::Float(Op::oper(l_float, r_float)));
+			}
+			_ => { }
+		}
+	}
+
+	let l_str = as_node_structure(&l_val) ?;
+	let r_str = as_node_structure(&r_val) ?;
 	Ok(Value::NodeStructure(make_structure(Box::new(l_str), Box::new(r_str))))
 }
-fn evaluate_as_node_structure(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<NodeStructure> {
+
+fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
-	Ok(evaluate(expr, vars)?.as_node_structure().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?)
+	Ok(val.as_node_structure().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?)
+}
+fn evaluate_as_node_structure(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<NodeStructure> {
+	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
 }

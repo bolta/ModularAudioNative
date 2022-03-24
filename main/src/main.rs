@@ -11,6 +11,7 @@ mod core;
 mod mml;
 mod moddl;
 mod node;
+mod operator;
 mod seq;
 mod wave;
 

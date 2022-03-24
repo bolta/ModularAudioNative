@@ -1,44 +1,18 @@
-use crate::core::{
-	common::*,
-	context::*,
-	machine::*,
-	node::*,
-	node_factory::*,
+use crate::{
+	core::{
+		common::*,
+		context::*,
+		machine::*,
+		node::*,
+		node_factory::*,
+	},
+	operator::*,
 };
 use node_macro::node_impl;
 
 use std::{
 	marker::PhantomData,
 };
-
-mod op {
-	use crate::core::common::Sample;
-	pub trait BinaryOp {
-		fn oper(lhs: Sample, rhs: Sample) -> Sample;
-	}
-
-	// TODO マクロでやろうとしたがうまくいかない
-	// macro_rules! op {
-	// 	($name: ident, $def: block) => {
-	// 		pub struct $name { }
-	// 		impl BinaryOp for $name { $def }
-	// 	}
-	// }
-	// op!(AddOp, { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs + rhs } });
-	pub struct AddOp { }
-	impl BinaryOp for AddOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs + rhs } }
-	pub struct SubOp { }
-	impl BinaryOp for SubOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs - rhs } }
-	pub struct MulOp { }
-	impl BinaryOp for MulOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs * rhs } }
-	pub struct DivOp { }
-	impl BinaryOp for DivOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs / rhs } }
-	pub struct RemOp { }
-	impl BinaryOp for RemOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs % rhs } }
-	pub struct PowOp { }
-	impl BinaryOp for PowOp { fn oper(lhs: Sample, rhs: Sample) -> Sample { lhs.powf(rhs) } }
-}
-use self::op::*;
 
 pub struct MonoBinary<Op: BinaryOp> {
 	_op: PhantomData<fn () -> Op>,
