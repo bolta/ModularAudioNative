@@ -38,3 +38,21 @@ impl Node for NullOut {
 		// do nothing
 	}
 }
+
+pub struct MemoryOut<'a> {
+	input: ChanneledNodeIndex,
+	output: &'a mut Vec<Sample>,
+}
+impl <'a> MemoryOut<'a> {
+	pub fn new(input: ChanneledNodeIndex, output: &'a mut Vec<Sample>) -> Self {
+		Self { input, output }
+	}
+}
+#[node_impl]
+impl <'a> Node for MemoryOut<'a> {
+	fn channels(&self) -> i32 { 0 }
+	fn upstreams(&self) -> Upstreams { vec![self.input] }
+	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		self.output.push(inputs[0]);
+	}
+}
