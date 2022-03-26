@@ -245,11 +245,27 @@ binary_expr![add_sub_expr, mul_div_mod_expr, r"[+-]", |lhs, op, rhs| match op {
 	"-" => Expr::Subtract { lhs, rhs },
 	_ => unreachable!(),
 }];
+binary_expr![comparison_expr, add_sub_expr, r"<=|<|==|!=|>=|>", |lhs, op, rhs| match op {
+	"<" => Expr::Less { lhs, rhs },
+	"<=" => Expr::LessOrEqual { lhs, rhs },
+	"==" => Expr::Equal { lhs, rhs },
+	"!=" => Expr::NotEqual { lhs, rhs },
+	">" => Expr::Greater { lhs, rhs },
+	">=" => Expr::GreaterOrEqual { lhs, rhs },
+	_ => unreachable!(),
+}];
+binary_expr![logical_expr, comparison_expr, r"&&|\|\|", |lhs, op, rhs| match op {
+	"&&" => Expr::And { lhs, rhs },
+	"||" => Expr::Or { lhs, rhs },
+	_ => unreachable!(),
+}];
+
+
 
 parser![expr, Box<Expr>, {
 	// 効果ない？
 	|input| {
-		let (input, result) = add_sub_expr()(input)?;
+		let (input, result) = logical_expr()(input)?;
 
 		Ok((input, result))
 	}

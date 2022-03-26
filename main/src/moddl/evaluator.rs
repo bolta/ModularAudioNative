@@ -27,6 +27,15 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 		Expr::Remainder { lhs, rhs } => evaluate_binary_structure::<RemOp>(lhs, rhs, vars, NodeStructure::Remainder),
 		Expr::Add { lhs, rhs } => evaluate_binary_structure::<AddOp>(lhs, rhs, vars, NodeStructure::Add),
 		Expr::Subtract { lhs, rhs } => evaluate_binary_structure::<SubOp>(lhs, rhs, vars, NodeStructure::Subtract),
+		Expr::Less { lhs, rhs } => evaluate_binary_structure::<LeOp>(lhs, rhs, vars, NodeStructure::Less),
+		Expr::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeOp>(lhs, rhs, vars, NodeStructure::LessOrEqual),
+		Expr::Equal { lhs, rhs } => evaluate_binary_structure::<EqOp>(lhs, rhs, vars, NodeStructure::Equal),
+		Expr::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeOp>(lhs, rhs, vars, NodeStructure::NotEqual),
+		Expr::Greater { lhs, rhs } => evaluate_binary_structure::<GtOp>(lhs, rhs, vars, NodeStructure::Greater),
+		Expr::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeOp>(lhs, rhs, vars, NodeStructure::GreaterOrEqual),
+		Expr::And { lhs, rhs } => evaluate_binary_structure::<AndOp>(lhs, rhs, vars, NodeStructure::And),
+		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrOp>(lhs, rhs, vars, NodeStructure::Or),
+
 		Expr::Identifier(id) => {
 			let val = vars.get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
 			Ok(val.clone())
@@ -64,7 +73,8 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 			}))
 		},
 
-		_ => unimplemented!(),
+		Expr::AssocArrayLiteral(_) => unimplemented!(),
+		Expr::MmlLiteral(_) => unimplemented!(),
 	}
 }
 

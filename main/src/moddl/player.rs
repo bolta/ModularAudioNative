@@ -346,6 +346,14 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::Remainder(lhs, rhs) => binary!(remainder, lhs, rhs),
 			NodeStructure::Add(lhs, rhs) => binary!(add, lhs, rhs),
 			NodeStructure::Subtract(lhs, rhs) => binary!(subtract, lhs, rhs),
+			NodeStructure::Less(lhs, rhs) => binary!(less, lhs, rhs),
+			NodeStructure::LessOrEqual(lhs, rhs) => binary!(less_or_equal, lhs, rhs),
+			NodeStructure::Equal(lhs, rhs) => binary!(equal, lhs, rhs),
+			NodeStructure::NotEqual(lhs, rhs) => binary!(not_equal, lhs, rhs),
+			NodeStructure::Greater(lhs, rhs) => binary!(greater, lhs, rhs),
+			NodeStructure::GreaterOrEqual(lhs, rhs) => binary!(greater_or_equal, lhs, rhs),
+			NodeStructure::And(lhs, rhs) => binary!(and, lhs, rhs),
+			NodeStructure::Or(lhs, rhs) => binary!(or, lhs, rhs),
 			// NodeStructure::Identifier(id) => {
 			// 	// id は今のところ引数なしのノード生成しかない
 			// 	let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
@@ -506,3 +514,11 @@ binary!(subtract, Sub::new, StereoSub::new);
 binary!(divide, Div::new, StereoDiv::new);
 binary!(remainder, Rem::new, StereoRem::new);
 binary!(power, Pow::new, StereoPow::new);
+binary!(less, Less::new, StereoLess::new);
+binary!(less_or_equal, LessOrEqual::new, StereoLessOrEqual::new);
+binary!(equal, Equal::new, StereoEqual::new);
+binary!(not_equal, NotEqual::new, StereoNotEqual::new);
+binary!(greater, Greater::new, StereoGreater::new);
+binary!(greater_or_equal, GreaterOrEqual::new, StereoGreaterOrEqual::new);
+binary!(and, And::new, StereoAnd::new);
+binary!(or, Or::new, StereoOr::new);
