@@ -1,0 +1,10 @@
+@tempo 120
+
+//@instrument ^a, (node (f) f * 2^(1/12)) | pulseOsc * adsrEnv
+//@instrument ^a, (node (f) f|sineOsc + (3*f)|sineOsc / 3	+ (5*f)|sineOsc / 5 + (7*f)|sineOsc / 7 + (9*f)|sineOsc / 9) * adsrEnv
+
+// 最後の node 式 node (a) f * 0.1 は入力を無視して三角波を出力する。サイン波は出ない
+@instrument ^a, (node (f) f | sineOsc | node (a) f | triangleOsc) * adsrEnv
+
+a o4l1v15
+a cdefg

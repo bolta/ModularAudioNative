@@ -7,6 +7,7 @@ extern crate parser;
 use parser::moddl::ast::*;
 
 use crate::{
+	common::stack::*,
 	core::common::*,
 	operator::*,
 };
@@ -16,9 +17,9 @@ use std::{
 	collections::hash_map::HashMap,
 };
 
+pub type VarStack = Stack<HashMap<String, Value>>;
 
-
-pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value> {
+pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 	match expr {
 		Expr::Connect { lhs, rhs } => evaluate_binary_structure::<NoneOp>(lhs, rhs, vars, NodeStructure::Connect),
 		Expr::Power { lhs, rhs } => evaluate_binary_structure::<PowOp>(lhs, rhs, vars, NodeStructure::Power),
@@ -37,12 +38,21 @@ pub fn evaluate(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<Value
 		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrOp>(lhs, rhs, vars, NodeStructure::Or),
 
 		Expr::Identifier(id) => {
-			let val = vars.get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
+			let val = vars.top().get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
 			Ok(val.clone())
 		},
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
 		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
-		Expr::Lambda { input_param: _, body: _ } => unimplemented!(),
+		Expr::Lambda { input_param, body } => {
+			vars.push_clone();
+			vars.top_mut().insert(input_param.clone(), Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }));
+			let result = Ok(Value::NodeStructure(NodeStructure::Lambda {
+				input_param: input_param.clone(),
+				body: Box::new(evaluate(body, vars)?.as_node_structure().ok_or_else(|| Error::TypeMismatch) ?),
+			}));
+			vars.pop();
+			result
+		},
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
 		Expr::FloatLiteral(value) => Ok(Value::Float(*value)),
 		Expr::TrackSetLiteral(tracks) => Ok(Value::TrackSet(tracks.clone())),
@@ -85,7 +95,7 @@ impl BinaryOp for NoneOp { fn oper(_lhs: Sample, _rhs: Sample) -> Sample { unrea
 fn evaluate_binary_structure<Op: BinaryOp + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
-	vars: &HashMap<String, Value>,
+	vars: &mut VarStack,
 	make_structure: fn(Box<NodeStructure>, Box<NodeStructure>) -> NodeStructure,
 ) -> ModdlResult<Value> {
 	let l_val = evaluate(lhs, vars) ?;
@@ -110,6 +120,6 @@ fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
 	Ok(val.as_node_structure().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?)
 }
-fn evaluate_as_node_structure(expr: &Expr, vars: &HashMap<String, Value>) -> ModdlResult<NodeStructure> {
+fn evaluate_as_node_structure(expr: &Expr, vars: &mut VarStack) -> ModdlResult<NodeStructure> {
 	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
 }

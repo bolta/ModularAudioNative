@@ -27,7 +27,7 @@ pub enum NodeStructure {
 	GreaterOrEqual(Box<NodeStructure>, Box<NodeStructure>),
 	And(Box<NodeStructure>, Box<NodeStructure>),
 	Or(Box<NodeStructure>, Box<NodeStructure>),
-	// Lambda,
+	Lambda { input_param: String, body: Box<NodeStructure> },
 	NodeWithArgs {
 		factory: Box<NodeStructure>,
 		label: String,
@@ -35,6 +35,7 @@ pub enum NodeStructure {
 	},
 	NodeFactory(Rc<dyn NodeFactory>),
 	Constant(f32),
+	Placeholder { name: String },
 }
 
 #[derive(Clone)]

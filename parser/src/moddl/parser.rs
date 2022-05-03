@@ -60,6 +60,25 @@ parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
 }];
+parser![lambda_expr, Box<Expr>, {
+	map_res(
+		preceded(
+			ss!(tag("node")),
+			tuple((
+				delimited(
+					ss!(char('(')),
+					ss!(identifier()),
+					ss!(char(')')),
+				),
+				si!(expr()),
+			)),
+		),
+		|(input_param, body)| { ok(Box::new(Expr::Lambda {
+			input_param: input_param.to_string(),
+			body,
+		})) },
+	)
+}];
 parser![parenthesized_expr, Box<Expr>, {
 	// preceded(si!(char('(')),
 	// 		terminated(expr(),
@@ -83,6 +102,7 @@ parser![primary_expr, Box<Expr>, {
 		track_set_literal(),
 		identifier_literal(),
 		string_literal(),
+		lambda_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		identifier_expr(),
 		parenthesized_expr(),
 	))

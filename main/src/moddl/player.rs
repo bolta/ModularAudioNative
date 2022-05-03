@@ -5,6 +5,7 @@ use super::{
 	value::*,
 };
 use crate::{
+	common::stack::*,
 	core::{
 		common::*,
 		context::*,
@@ -82,7 +83,7 @@ struct PlayerContext {
 	waveforms: WaveformHost,
 	mute_solo: MuteSolo,
 	mute_solo_tracks: HashSet<String>,
-	vars: HashMap<String, Value>,
+	vars: VarStack,
 }
 
 pub fn play(moddl: &str) -> ModdlResult<()> {
@@ -97,7 +98,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		waveforms: WaveformHost::new(),
 		mute_solo: MuteSolo::Mute,
 		mute_solo_tracks: HashSet::<String>::new(),
-		vars: builtin_vars(),
+		vars: VarStack::init(builtin_vars()),
 	};
 
 	for stmt in &statements {
@@ -153,16 +154,16 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_arg(&args, 0, &pctx.vars)?.as_float()
+					(*pctx).tempo = evaluate_arg(&args, 0, &mut pctx.vars)?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
+					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1, &pctx.vars)?.as_node_structure()
-								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+						let instrm = evaluate_arg(&args, 1, &mut pctx.vars)?.as_node_structure()
+								.ok_or_else(|| { dbg!("boke"); Error::DirectiveArgTypeMismatch }) ?;
 						if pctx.instruments.get(&track).is_some() {
 							return Err(Error::DirectiveDuplicate { msg: format!("@instrument ^{}", &track) });
 						}
@@ -170,40 +171,40 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					}
 				}
 				"let" => {
-					let name = evaluate_arg(&args, 0, &pctx.vars)?.as_identifier_literal()
+					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, &pctx.vars) ?;
-					pctx.vars.insert(name, value);
+					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
+					pctx.vars.top_mut().insert(name, value);
 				}
 				"waveform" => {
-					let name = evaluate_arg(&args, 0, &pctx.vars)?.as_identifier_literal()
+					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, &pctx.vars) ?;
+					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
 					let path = value.as_string_literal().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO 読み込み失敗時のエラー処理
 					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
-					pctx.vars.insert(name, Value::WaveformIndex(index));
+					pctx.vars.top_mut().insert(name, Value::WaveformIndex(index));
 					// vars.insert(name, value);
 				}
 				"ticksPerBar" => {
-					let value = evaluate_arg(&args, 0, &pctx.vars) ?.as_float()
+					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_arg(&args, 0, &pctx.vars) ?.as_float()
+					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
 				"mute" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
+					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 				}
 				"solo" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars)?.as_track_set()
+					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
@@ -234,7 +235,7 @@ fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerCon
 	});
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &HashMap<String, Value>) -> ModdlResult<Value> {
+fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &mut VarStack) -> ModdlResult<Value> {
 	if index < args.len() {
 		evaluate(&args[index], vars)
 	} else {
@@ -282,13 +283,17 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	Ok(())
 }
 
+pub type PlaceholderStack = Stack<HashMap<String, ChanneledNodeIndex>>;
+
 fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, const_tag: Option<String>) -> ModdlResult<ChanneledNodeIndex> {
+	let mut placeholders = PlaceholderStack::init(HashMap::new());
+
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, const_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, $input, Some($const_tag)) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input, None) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, $input, Some($const_tag), placeholders) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input, None, placeholders) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -306,7 +311,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
-		let mut make_node_args = |args: &Vec<(String, Value)>, fact: &Rc<dyn NodeFactory>|
+		let mut make_node_args = |args: &Vec<(String, Value)>, fact: &Rc<dyn NodeFactory>/* , label: String */|
 				-> ModdlResult<HashMap<String, ChanneledNodeIndex>> {
 			let specs = fact.node_arg_specs();
 			let mut node_args = NodeArgs::new();
@@ -354,6 +359,18 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 			NodeStructure::GreaterOrEqual(lhs, rhs) => binary!(greater_or_equal, lhs, rhs),
 			NodeStructure::And(lhs, rhs) => binary!(and, lhs, rhs),
 			NodeStructure::Or(lhs, rhs) => binary!(or, lhs, rhs),
+
+			NodeStructure::Lambda { input_param, body } => {
+				placeholders.push_clone();
+				placeholders.top_mut().insert(input_param.clone(), input);
+
+				let result = recurse!(body, input);
+
+				placeholders.pop();
+
+				result
+			}
+
 			// NodeStructure::Identifier(id) => {
 			// 	// id は今のところ引数なしのノード生成しかない
 			// 	let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
@@ -363,14 +380,13 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				let node_args = make_node_args(&vec![], fact) ?;
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
-			// NodeStructure::Lambda => ,
-			NodeStructure::NodeWithArgs { factory, label: _label, args } => {
+			NodeStructure::NodeWithArgs { factory, label, args } => {
 				// 引数ありのノード生成
 				let fact = match &**factory {
 					NodeStructure::NodeFactory(fact) => Ok(fact),
-					_ => Err(Error::DirectiveArgTypeMismatch),
+					_ => { dbg!("poke"); Err(Error::DirectiveArgTypeMismatch) },
 				} ?;
-				let node_args = make_node_args(args, fact) ?;
+				let node_args = make_node_args(args, fact/* , &label */) ?;
 
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
@@ -382,10 +398,14 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				}
 				
 			},
+			NodeStructure::Placeholder { name } => {
+				// 名前に対応する placeholder は必ずある
+				Ok(placeholders.top()[name])
+			},
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, freq, None)
+	visit_struct(track, instrm_def, nodes, freq, None, &mut placeholders)
 }
 
 fn coerce_input(
