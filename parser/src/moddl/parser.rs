@@ -129,7 +129,7 @@ macro_rules! binary_expr {
 			|input| {
 				let (input, head) = si!($constituent_expr())(input) ?;
 				let (input, tail) = opt(many1(tuple((
-					si!(re_find(re($oper_regexp))),
+					ss!(re_find(re($oper_regexp))),
 					si!($constituent_expr()),
 				))))(input) ?;
 				let result = match tail {
