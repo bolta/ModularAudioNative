@@ -6,7 +6,6 @@ use syn::{
 	ImplItem,
 	ImplItemMethod,
 	Item,
-	ItemFn,
 	ItemImpl,
 	parse_macro_input,
 };

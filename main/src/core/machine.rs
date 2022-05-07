@@ -1,3 +1,5 @@
+use crate::common::util::ignore_errors;
+
 use super::{
 	common::*,
 	context::*,
@@ -64,7 +66,6 @@ impl Machine {
 			output: vec_with_length(max_channels),
 		};
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
-println!("{:?}", &instructions);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
@@ -199,6 +200,9 @@ impl <'a> Environment<'a> {
 		Self { events, waveforms }
 	}
 	pub fn events_mut(&mut self) -> &mut EventProducer { self.events }
+	pub fn post_event(&mut self, event: Box<dyn Event>) {
+		ignore_errors(self.events_mut().push(event));
+	}
 	pub fn waveforms(&self) -> &WaveformHost { self.waveforms }
 	pub fn waveforms_mut(&mut self) -> &mut WaveformHost { self.waveforms }
 }

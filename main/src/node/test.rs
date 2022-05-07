@@ -1,3 +1,4 @@
+#[cfg(test)]
 use crate::{
 	core::{
 		machine::*,
@@ -5,12 +6,14 @@ use crate::{
 	wave::waveform_host::*,
 };
 
+#[cfg(test)]
 use crate::core::{
 	common::*,
 	context::*,
 	node_host::*,
 };
 
+#[cfg(test)]
 use crate::node::{
 	arith::*,
 	event_scheduler::*,

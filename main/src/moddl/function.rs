@@ -2,12 +2,8 @@ use super::{
 	error::*,
 	value::*,
 };
-use crate::{
-	core::node_factory::*,
-};
 
 use std::collections::HashMap;
-use std::rc::Rc;
 
 pub trait Function {
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value>;

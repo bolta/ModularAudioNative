@@ -24,7 +24,7 @@ impl Tick {
 		}
 	}
 	fn tick(&self, env: &mut Environment) {
-		env.events_mut().push(Box::new(TickEvent::new(EventTarget::Tag(self.target_tag.clone()))));
+		env.post_event(Box::new(TickEvent::new(EventTarget::Tag(self.target_tag.clone()))));
 	}
 }
 #[node_impl]

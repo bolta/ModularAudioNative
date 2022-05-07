@@ -27,7 +27,7 @@ impl Terminator {
 impl Node for Terminator {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
-	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		// TODO 無音検知
 	}
 	fn process_event(&mut self, event: &dyn Event, _context: &Context, env: &mut Environment) {
@@ -41,7 +41,7 @@ impl Node for Terminator {
 		}
 		// TODO 無音が続いていたら、も追加
 		if self.thread_count <= 0 {
-			env.events_mut().push(Box::new(TerminateEvent { }));
+			env.post_event(Box::new(TerminateEvent { }));
 		}
 }
 }

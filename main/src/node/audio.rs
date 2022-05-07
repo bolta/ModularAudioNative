@@ -1,3 +1,4 @@
+use crate::common::util::ignore_errors;
 
 use crate::core::{
 	common::*,
@@ -99,8 +100,8 @@ impl Node for PortAudioOut {
 		match &mut self.stream {
 			None => { }
 			Some(stream) => {
-				stream.stop();
-				stream.close();
+				ignore_errors(stream.stop());
+				ignore_errors(stream.close());
 			}
 		}
 		self.stream = None;

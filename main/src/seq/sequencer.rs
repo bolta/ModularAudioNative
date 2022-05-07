@@ -81,8 +81,7 @@ impl Context {
 			let instrc_idx = self.stack.top_mut().instrc_idx as usize;
 			// TODO 無限ループで先頭に戻ったときも開始扱いになってしまう
 			if instrc_idx == 0usize && self.stack.is_bottom() {
-				// TODO キューが一杯だったときの処理
-				env.events_mut().push(Box::new(JobEvent::starting()));
+				env.post_event(Box::new(JobEvent::starting()));
 			}
 			// TODO 毎回ハッシュテーブルを引くと遅いか？
 			let mut sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
@@ -98,7 +97,7 @@ impl Context {
 
 				// シーケンスの終わりに達した
 				if self.stack.is_bottom() {
-					env.events_mut().push(Box::new(JobEvent::ended()));
+					env.post_event(Box::new(JobEvent::ended()));
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
 					self.stack.pop(); // 呼び出し元の続きに復帰
@@ -112,11 +111,10 @@ impl Context {
 	fn process_instruction(&mut self, instrc: &Instruction, env: &mut Environment) {
 		match instrc {
 			Instruction::Note { tag, note_on } => {
-				env.events_mut().push(Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
+				env.post_event(Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
 			}
 			Instruction::Value { tag, value } => {
-				// TODO キューが一杯だったときの処理
-				env.events_mut().push(Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), *value)));
+				env.post_event(Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), *value)));
 			}
 			Instruction::Wait(wait) => {
 				self.wait = *wait;

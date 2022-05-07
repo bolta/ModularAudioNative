@@ -5,12 +5,10 @@ use nom::{
 	bytes::complete::*,
 	character::complete::*,
 	combinator::*,
-	error::Error,
 	error::VerboseError,
 	IResult,
 	multi::*,
 	regexp::str::*,
-	sequence::*,
 };
 
 use regex::Regex;

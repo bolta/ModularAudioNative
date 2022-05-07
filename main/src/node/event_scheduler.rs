@@ -1,3 +1,5 @@
+use crate::common::util::ignore_errors;
+
 use crate::core::{
 	common::*,
 	context::*,
@@ -45,7 +47,7 @@ impl EventScheduler {
 			let events_at_key = self.events.remove(&key).unwrap();
 			for e in events_at_key {
 				// TODO キューが一杯だったときの処理
-				prod.push(e);
+				ignore_errors(prod.push(e));
 			}
 		}
 		self.next_key = self.events.keys().next().map(|k| *k);
