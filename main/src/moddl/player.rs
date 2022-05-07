@@ -287,7 +287,7 @@ pub type PlaceholderStack = Stack<HashMap<String, ChanneledNodeIndex>>;
 fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
 	let mut placeholders = PlaceholderStack::init(HashMap::new());
 
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, const_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
@@ -326,7 +326,9 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 					// 必要な引数が与えられていない
 					Err(Error::NodeFactoryNotFound) ?
 				};
-				let arg_node = recurse!(&strukt, input, format!("{}.{}", track, &name)) ?;
+				// ラベルが明示されていればそちらを使う
+				let arg_name = arg_val.map(|(_, value)| value.label()).flatten().unwrap_or(name.clone());
+				let arg_node = recurse!(&strukt, input, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
 					Some(result) => result,
 					// モノラルであるべき node_arg にステレオが与えられた場合、
@@ -389,9 +391,12 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
-			NodeStructure::Constant(value) => {
+			NodeStructure::Constant { value, label } => {
 				let node = Box::new(Var::new(*value));
-				match const_tag {
+				let local_tag = label.as_ref().or(default_tag.as_ref());
+				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
+				// dbg!(label, &default_tag, &local_tag, &full_tag);
+				match full_tag {
 					Some(tag) => Ok(nodes.add_with_tags(vec![track.to_string(), tag], node)),
 					None => add_node!(node),
 				}

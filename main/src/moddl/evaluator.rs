@@ -85,6 +85,12 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 
 		Expr::AssocArrayLiteral(_) => unimplemented!(),
 		Expr::MmlLiteral(_) => unimplemented!(),
+
+		Expr::Labeled { label, inner } => {
+			let inner_val = evaluate(inner, vars) ?;
+
+			Ok(Value::Labeled { label: label.clone(), inner: Box::new(inner_val) })
+		}
 	}
 }
 
@@ -102,7 +108,9 @@ fn evaluate_binary_structure<Op: BinaryOp + 'static>(
 	let r_val = evaluate(rhs, vars) ?;
 
 	// 定数はコンパイル時に計算
-	if TypeId::of::<Op>() != TypeId::of::<NoneOp>() {
+	if TypeId::of::<Op>() != TypeId::of::<NoneOp>()
+			// ラベルがついているときは設定の対象になるため最適化しない
+			&& l_val.label().is_none() && r_val.label().is_none() {
 		match (l_val.as_float(), r_val.as_float()) {
 			(Some(l_float), Some(r_float)) => {
 				return Ok(Value::Float(Op::oper(l_float, r_float)));

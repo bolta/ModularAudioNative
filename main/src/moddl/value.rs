@@ -34,7 +34,11 @@ pub enum NodeStructure {
 		args: Vec<(String, Value)>,
 	},
 	NodeFactory(Rc<dyn NodeFactory>),
-	Constant(f32),
+	// Constant(f32),
+	Constant {
+		value: f32,
+		label: Option<String>,
+	},
 	Placeholder { name: String },
 }
 
@@ -51,42 +55,46 @@ pub enum Value {
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
+	Labeled {
+		label: String,
+		inner: Box<Value>,
+	},
 }
 
 impl Value {
 	pub fn as_float(&self) -> Option<f32> {
-		match self {
+		match self.value() {
 			Self::Float(value) => Some(*value),
 			_ => None,
 		}
 	}
 	pub fn as_boolean(&self) -> Option<bool> {
-		match self {
+		match self.value() {
 			Self::Float(value) => Some(*value > 0f32),
 			_ => None,
 		}
 	}
 	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
-		match self {
+		match self.value() {
 			Self::WaveformIndex(value) => Some(*value),
 			_ => None,
 		}
 	}
 	pub fn as_track_set(&self) -> Option<Vec<String>> {
-		match self {
+		match self.value() {
 			Self::TrackSet(tracks) => Some(tracks.clone()),
 			_ => None,
 		}
 	}
 	pub fn as_identifier_literal(&self) -> Option<String> {
-		match self {
+		match self.value() {
 			Self::IdentifierLiteral(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_string_literal(&self) -> Option<String> {
-		match self {
+		match self.value() {
 			Self::StringLiteral(content) => Some(content.clone()),
 			_ => None,
 		}
@@ -99,23 +107,44 @@ impl Value {
 		// 代わりに、Node の一歩手前というか、Node の生成における仕様となる NodeStructure を提供し、
 		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
 		// 数値や変数参照から Node への暗黙の変換もここで提供する
-		match self {
+		match self.value() {
 			Self::NodeStructure(str) => Some(str.clone()),
-			Self::Float(value) => Some(NodeStructure::Constant(*value)),
+			Self::Float(value) => Some(NodeStructure::Constant { value: *value, label: self.label() }),
 			Self::NodeFactory(fact) => Some(NodeStructure::NodeFactory(fact.clone())),
 			_ => None,
 		}
 	}
 	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
-		match self {
+		match self.value() {
 			Self::NodeFactory(fact) => Some(fact.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_function(&self) -> Option<Rc<dyn Function>> {
-		match self {
+		match self.value() {
 			Self::Function(func) => Some(func.clone()),
+			_ => None,
+		}
+	}
+
+	fn value(&self) -> &Value {
+		let result = match self {
+			Self::Labeled { inner, .. } => inner.value(),
+			_ => self,
+		};
+
+		match result {
+			Self::Labeled { .. } => assert!(false),
+			_ => { },
+		}
+
+		result
+	}
+
+	pub fn label(&self) -> Option<String> {
+		match self {
+			Self::Labeled { label, .. } => Some(label.clone()),
 			_ => None,
 		}
 	}
