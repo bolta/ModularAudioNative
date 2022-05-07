@@ -16,6 +16,7 @@ impl NodeHost {
 			tags: HashMap::new(),
 		}
 	}
+
 	pub fn add(&mut self, node: Box<dyn Node>) -> ChanneledNodeIndex {
 		let chs = node.channels();
 		let idx = self.count();
