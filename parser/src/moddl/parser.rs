@@ -108,6 +108,26 @@ parser![primary_expr, Box<Expr>, {
 	))
 }];
 
+parser![labeled_expr, Box<Expr>, {
+	map_res(
+		tuple((
+			si!(primary_expr()),
+			opt(
+				preceded(
+					ss!(char('@')),
+					si!(identifier()),
+				),
+			),
+		)),
+		|(expr, label)| ok(
+			match label {
+				Some(label) => Box::new(Expr::Labeled { label: label.to_string(), inner: expr }),
+				None => expr,
+			}
+		)
+	)
+}];
+
 macro_rules! binary_expr {
 	($name: ident, $constituent_expr: expr, $oper_regexp: expr, $make_expr: expr) => {
 		parser![$name, Box<Expr>, {
@@ -206,7 +226,7 @@ parser![function_args, (Vec<Box<Expr>>, AssocArray), {
 parser![function_call, Box<Expr>, {
 	map_res(
 		tuple((
-			si!(primary_expr()),
+			si!(labeled_expr()),
 			opt(delimited(
 				ss!(char('(')),
 				ss!(function_args()),

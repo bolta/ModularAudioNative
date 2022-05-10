@@ -39,4 +39,6 @@ pub enum Expr {
 	StringLiteral(String),
 	MmlLiteral(String),
 	AssocArrayLiteral(AssocArray),
+
+	Labeled { label: String, inner: Box<Expr> },
 }
