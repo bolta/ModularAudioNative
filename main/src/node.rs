@@ -9,6 +9,7 @@ pub mod osc;
 pub mod prim;
 pub mod stereo;
 pub mod system;
+pub mod transit;
 pub mod util;
 pub mod var;
 pub mod wave;

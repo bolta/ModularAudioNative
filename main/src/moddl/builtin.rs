@@ -11,12 +11,13 @@ use crate::{
 		error::*,
 	},
 	node::{
+		arith::*,
 		envelope::*,
 		filter::*,
 		freq::*,
 		lofi::*,
 		osc::*,
-		arith::*,
+		transit::*,
 		wave::*,
 	},
 };
@@ -54,6 +55,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("bpf", BandPassFilterFactory { });
 	add_node_factory!("quantCrush", QuantCrushFactory { });
 	add_node_factory!("pan", PanFactory { });
+	add_node_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 	add_function!("nesFreq", NesFreq { });
 
