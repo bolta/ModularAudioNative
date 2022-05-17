@@ -78,6 +78,7 @@ pub struct AdsrEnv {
 	decay_time: MonoNodeIndex,
 	sustain_level: MonoNodeIndex,
 	release_time: MonoNodeIndex,
+	initial_level: MonoNodeIndex,
 
 	amplitude: Sample,
 	state: AdsrEnvState,
@@ -88,12 +89,14 @@ impl AdsrEnv {
 		decay_time: MonoNodeIndex,
 		sustain_level: MonoNodeIndex,
 		release_time: MonoNodeIndex,
+		initial_level: MonoNodeIndex, 
 	) -> Self {
 		Self {
 			attack_time,
 			decay_time,
 			sustain_level,
 			release_time,
+			initial_level,
 			amplitude: 0f32,
 			state: AdsrEnvState::Idle,
 		}
@@ -108,24 +111,39 @@ impl Node for AdsrEnv {
 			self.decay_time.channeled(),
 			self.sustain_level.channeled(),
 			self.release_time.channeled(),
+			self.initial_level.channeled(),
 		]
 	}
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.amplitude);
 	}
+
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
 		let to_rate_per_sample = |sec| { if sec <= 0f32 { 1f32 } else { 1f32 / context.sample_rate_f32() / sec } };
+		let attack = |this: &mut Self| {
+			let attack_rate_per_sample = to_rate_per_sample(inputs[0]);
+			this.amplitude += attack_rate_per_sample;
+			if this.amplitude >= 1f32 {
+				this.amplitude = 1f32;
+				this.state = AdsrEnvState::Decay;
+			}
+		};;
 		match self.state {
 			AdsrEnvState::Idle => {
 				// nop: waiting for NoteOn
 			},
+			AdsrEnvState::Initial => {
+				// note on のイベント処理中は初期値が取れないため、ここで設定する。
+				// 直後にアタック処理に流すため、最初の出力は initial_level + attack_rate_per_sample であり、
+				// initial_level そのものを出力することはない
+				// （そうしないと attack_time = 0 で note on の瞬間に出力が 1 にならない）
+				let initial_level = inputs[4];
+				self.amplitude = initial_level;
+				self.state = AdsrEnvState::Attack;
+				attack(self);
+			},
 			AdsrEnvState::Attack => {
-				let attack_rate_per_sample = to_rate_per_sample(inputs[0]);
-				self.amplitude += attack_rate_per_sample;
-				if self.amplitude >= 1f32 {
-					self.amplitude = 1f32;
-					self.state = AdsrEnvState::Decay;
-				}
+				attack(self);
 			},
 			AdsrEnvState::Decay => {
 				let decay_rate_per_sample = to_rate_per_sample(inputs[1]);
@@ -156,15 +174,14 @@ impl Node for AdsrEnv {
 
 		let event = event.downcast_ref::<NoteEvent>().unwrap();
 		if event.note_on() {
-			self.amplitude = 0f32;
-			self.state = AdsrEnvState::Attack;
+			self.state = AdsrEnvState::Initial;
 		} else {
 			self.state = AdsrEnvState::Release;
 		}
 	}
 
 }
-#[derive(Eq, PartialEq)] enum AdsrEnvState { Idle, Attack, Decay, Sustain, Release }
+#[derive(Eq, PartialEq)] enum AdsrEnvState { Idle, Initial, Attack, Decay, Sustain, Release }
 
 pub struct AdsrEnvFactory { }
 impl NodeFactory for AdsrEnvFactory {
@@ -174,6 +191,8 @@ impl NodeFactory for AdsrEnvFactory {
 			spec_with_default("decay", 1, 0f32),
 			spec_with_default("sustain", 1, 1f32),
 			spec_with_default("release", 1, 0f32),
+			// 状態遷移の順序的には attack より先だが、一般的な ADSR からするとオプションなので最後に置く
+			spec_with_default("initial", 1, 0f32),
 		]
 	}
 	fn input_channels(&self) -> i32 { 1 }
@@ -183,6 +202,7 @@ impl NodeFactory for AdsrEnvFactory {
 			node_args.get("decay").unwrap().as_mono(),
 			node_args.get("sustain").unwrap().as_mono(),
 			node_args.get("release").unwrap().as_mono(),
+			node_args.get("initial").unwrap().as_mono(),
 		))
 	}
 }
