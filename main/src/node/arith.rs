@@ -118,3 +118,54 @@ impl NodeFactory for LimitFactory {
 }
 
 // TODO Neg, Abs, Sgn, Sqrt, Max, Min,
+
+// TODO 以下仮置き
+
+pub struct MonoCalc<C: Calc> {
+	_c: PhantomData<fn () -> C>,
+	args: Vec<MonoNodeIndex>,
+}
+impl <C: Calc> MonoCalc<C> {
+	pub fn new(args: Vec<MonoNodeIndex>) -> Self {
+		Self { _c: PhantomData, args }
+	}
+}
+#[node_impl]
+impl <C: Calc> Node for MonoCalc<C> {
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		output_mono(output, C::calc(inputs));
+	}
+}
+
+pub struct StereoCalc<C: Calc> {
+	_c: PhantomData<fn () -> C>,
+	args: Vec<StereoNodeIndex>,
+
+	// 値の受け渡し処理用
+	inputs_l: Vec<Sample>,
+	inputs_r: Vec<Sample>,
+}
+impl <C: Calc> StereoCalc<C> {
+	pub fn new(args: Vec<StereoNodeIndex>) -> Self {
+		Self {
+			_c: PhantomData,
+			args,
+			inputs_l: vec![0f32; C::arg_count() as usize],
+			inputs_r: vec![0f32; C::arg_count() as usize],
+		}
+	}
+}
+#[node_impl]
+impl <C: Calc> Node for StereoCalc<C> {
+	fn channels(&self) -> i32 { 2 }
+	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+		for i in 0 .. C::arg_count() as usize {
+			self.inputs_l[i] = inputs[2 * i];
+			self.inputs_r[i] = inputs[2 * i + 1];
+		}
+		output_stereo(output, C::calc(&self.inputs_l), C::calc(&self.inputs_r));
+	}
+}

@@ -8,10 +8,39 @@ use crate::{
 
 use std::rc::Rc;
 
+// TODO 仮置き
+use crate::core::common::*;
+use crate::core::node::Node;
+use crate::operator::*;
+use crate::node::arith::*;
+use std::marker::PhantomData;
+pub trait CalcNodeFactoryTrait {
+	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
+	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
+}
+// #[derive(Clone)]
+pub struct CalcNodeFactory<C: 'static + Calc> {
+	_c: PhantomData<fn () -> C>,
+}
+impl <C: 'static + Calc> CalcNodeFactory<C> {
+	pub fn new() -> Self { Self { _c: PhantomData } }
+}
+impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
+	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
+		Box::new(MonoCalc::<C>::new(args))
+	}
+	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node> {
+		Box::new(StereoCalc::<C>::new(args))
+	}
+}
+
 /// 生成すべき Node の構造を表現する型。
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
 pub enum NodeStructure {
+	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<NodeStructure>> },
+
+	// TODO 演算子ごとに分けず、全て Calc にする
 	Connect(Box<NodeStructure>, Box<NodeStructure>),
 	Power(Box<NodeStructure>, Box<NodeStructure>),
 	Multiply(Box<NodeStructure>, Box<NodeStructure>),

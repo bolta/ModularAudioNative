@@ -341,6 +341,17 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 		};
 		
 		match strukt {
+			// TODO binary 系も Calc で置き換える
+			NodeStructure::Calc { node_factory, args } => {
+				// TODO Result が絡んでるときも map できれいに書きたい
+				let mut arg_nodes = vec![];
+				for arg in args {
+					arg_nodes.push(recurse!(arg, input) ?);
+				}
+
+				create_calc_node(Some(track), nodes, arg_nodes, &node_factory)
+			},
+
 			NodeStructure::Connect(lhs, rhs) => {
 				// TODO mono/stereo 変換
 				let l_node = recurse!(lhs, input) ?;
@@ -481,6 +492,56 @@ fn apply_input(
 			};
 			add_node!(Box::new(Join::new(vec![result_l.as_mono(), result_r.as_mono()])))
 		}
+	}
+}
+
+fn create_calc_node(
+	track: Option<&str>,
+	nodes: &mut NodeHost,
+	arg_nodes: Vec<ChanneledNodeIndex>,
+	node_factory: &Rc<dyn CalcNodeFactoryTrait>,
+) -> ModdlResult<ChanneledNodeIndex> {
+	// TODO 共通化
+	macro_rules! add_node {
+		// トラックに属する node は全てトラック名のタグをつける
+		($new_node: expr) => {
+			ModdlResult::<ChanneledNodeIndex>::Ok(match track {
+				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
+				None => nodes.add($new_node),
+			})
+		}
+	}
+
+	// 引数にモノラルとステレオが混在していたらモノラルをステレオに拡張
+	// TODO モノラル以外動作確認が不十分…
+	enum ChannelCombination { AllMono, AllStereo, MonoAndStereo, Other };
+	let any_mono = arg_nodes.iter().any(|n| n.channels() == 1);
+	let any_stereo = arg_nodes.iter().any(|n| n.channels() == 2);
+	let any_unknown = arg_nodes.iter().any(|n| n.channels() != 1 && n.channels() != 2);
+	let comb = if any_unknown { ChannelCombination::Other }
+			else if any_mono && any_stereo { ChannelCombination::MonoAndStereo }
+			else if any_mono { ChannelCombination::AllMono }
+			else { ChannelCombination::AllStereo };
+	match comb {
+		ChannelCombination::AllMono => {
+			add_node!(node_factory.create_mono(arg_nodes.iter().map(|n| n.as_mono()).collect()))
+		},
+		ChannelCombination::AllStereo => {
+			add_node!(node_factory.create_stereo(arg_nodes.iter().map(|n| n.as_stereo()).collect()))
+		},
+		ChannelCombination::MonoAndStereo => {
+			let mut coerced_arg_nodes: Vec<StereoNodeIndex> = vec![];
+			for n in arg_nodes {
+				coerced_arg_nodes.push(if n.channels() == 1 {
+					let stereo = add_node!(Box::new(MonoToStereo::new(n.as_mono()))) ?;
+					stereo.as_stereo()
+				} else {
+					n.as_stereo()
+				});
+			}
+			add_node!(node_factory.create_stereo(coerced_arg_nodes))
+		},
+		ChannelCombination::Other => { Err(Error::ChannelMismatch) },
 	}
 }
 

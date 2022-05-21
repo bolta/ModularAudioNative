@@ -58,6 +58,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 	add_function!("nesFreq", NesFreq { });
+	add_function!("log", Log { });
 
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
@@ -87,5 +88,24 @@ impl Function for NesFreq {
 		let result = Rc::new(NesFreqFactory::new(triangle));
 
 		Ok(Value::NodeFactory(result))
+	}
+}
+
+
+use crate::operator::*;
+pub struct Log { }
+impl Function for Log {
+	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+		let arg = args.get(& "arg".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
+		if let Some(val) = arg.as_float() {
+			Ok(Value::Float(val.ln()))
+		} else if let Some(val) = arg.as_node_structure() {
+			Ok(Value::NodeStructure(NodeStructure::Calc {
+				node_factory: Rc::new(CalcNodeFactory::<LogCalc>::new()),
+				args: vec![Box::new(val)],
+			}))
+		} else {
+			Err(Error::TypeMismatch)
+		}
 	}
 }

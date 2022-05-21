@@ -49,3 +49,17 @@ fn sample_to_bool(s: Sample) -> bool { s > 0f32 }
 fn bool_binary(lhs: Sample, rhs: Sample, op: fn (lhs: bool, rhs: bool) -> bool) -> Sample {
 	bool_to_sample(op(sample_to_bool(lhs), sample_to_bool(rhs)))
 }
+
+
+
+// TODO 仮置き
+pub trait Calc {
+	fn arg_count() -> i32;
+	fn calc(args: &Vec<Sample>) -> Sample;
+}
+
+pub struct LogCalc { }
+impl Calc for LogCalc {
+	fn arg_count() -> i32 { 1 }
+	fn calc(args: &Vec<Sample>) -> Sample { args[0].ln() }
+}

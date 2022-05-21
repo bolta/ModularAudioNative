@@ -1,0 +1,15 @@
+@tempo 100
+
+@let `f`, 220 * log(arg: 16) / log(arg: 4)
+
+@instrument ^a, f | triangleOsc * adsrEnv
+@instrument ^b, (node (g) (g * log(arg: 64)) / log(arg: 4)) | sawOsc * adsrEnv
+
+// o1c ではなく o4a が出れば正解
+a o1l8v15
+a c1
+
+b r1r4
+// o4cdefga ではなく o5gab>cde が出れば正解
+b o4l8v15
+b cdefga
