@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
 	common::stack::*,
+	operator::*,
 	core::{
 		common::*,
 		context::*,
@@ -42,6 +43,7 @@ use parser::{
 };
 
 use std::{
+	borrow::Borrow,
 	collections::btree_map::BTreeMap,
 	collections::hash_map::HashMap,
 	collections::hash_set::HashSet,
@@ -341,7 +343,6 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 		};
 		
 		match strukt {
-			// TODO binary 系も Calc で置き換える
 			NodeStructure::Calc { node_factory, args } => {
 				// TODO Result が絡んでるときも map できれいに書きたい
 				let mut arg_nodes = vec![];
@@ -349,7 +350,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 					arg_nodes.push(recurse!(arg, input) ?);
 				}
 
-				create_calc_node(Some(track), nodes, arg_nodes, &node_factory)
+				create_calc_node(Some(track), nodes, arg_nodes, node_factory.borrow())
 			},
 
 			NodeStructure::Connect(lhs, rhs) => {
@@ -357,20 +358,6 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 				let l_node = recurse!(lhs, input) ?;
 				recurse!(rhs, l_node)
 			},
-			NodeStructure::Power(lhs, rhs) => binary!(power, lhs, rhs),
-			NodeStructure::Multiply(lhs, rhs) => binary!(multiply, lhs, rhs),
-			NodeStructure::Divide(lhs, rhs) => binary!(divide, lhs, rhs),
-			NodeStructure::Remainder(lhs, rhs) => binary!(remainder, lhs, rhs),
-			NodeStructure::Add(lhs, rhs) => binary!(add, lhs, rhs),
-			NodeStructure::Subtract(lhs, rhs) => binary!(subtract, lhs, rhs),
-			NodeStructure::Less(lhs, rhs) => binary!(less, lhs, rhs),
-			NodeStructure::LessOrEqual(lhs, rhs) => binary!(less_or_equal, lhs, rhs),
-			NodeStructure::Equal(lhs, rhs) => binary!(equal, lhs, rhs),
-			NodeStructure::NotEqual(lhs, rhs) => binary!(not_equal, lhs, rhs),
-			NodeStructure::Greater(lhs, rhs) => binary!(greater, lhs, rhs),
-			NodeStructure::GreaterOrEqual(lhs, rhs) => binary!(greater_or_equal, lhs, rhs),
-			NodeStructure::And(lhs, rhs) => binary!(and, lhs, rhs),
-			NodeStructure::Or(lhs, rhs) => binary!(or, lhs, rhs),
 
 			NodeStructure::Lambda { input_param, body } => {
 				placeholders.push_clone();
@@ -499,7 +486,7 @@ fn create_calc_node(
 	track: Option<&str>,
 	nodes: &mut NodeHost,
 	arg_nodes: Vec<ChanneledNodeIndex>,
-	node_factory: &Rc<dyn CalcNodeFactoryTrait>,
+	node_factory: &dyn CalcNodeFactoryTrait,
 ) -> ModdlResult<ChanneledNodeIndex> {
 	// TODO 共通化
 	macro_rules! add_node {
@@ -545,65 +532,25 @@ fn create_calc_node(
 	}
 }
 
-fn binary<M: 'static + Node, S: 'static + Node>(
-	track: Option<&str>,
-	nodes: &mut NodeHost,
-	l_node: ChanneledNodeIndex,
-	r_node: ChanneledNodeIndex,
-	create_mono: fn (MonoNodeIndex, MonoNodeIndex) -> M,
-	create_stereo: fn (StereoNodeIndex, StereoNodeIndex) -> S,
-) -> ModdlResult<ChanneledNodeIndex> {
-	// TODO 共通化
-	macro_rules! add_node {
-		// トラックに属する node は全てトラック名のタグをつける
-		($new_node: expr) => {
-			Ok(match track {
-				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
-				None => nodes.add($new_node),
-			})
-		}
-	}
-	match (l_node.channels(), r_node.channels()) {
-		(1, 1) => {
-			add_node!(Box::new(create_mono(l_node.as_mono(), r_node.as_mono())))
-		},
-		// 以下ステレオ対応
-		// 現状ステレオまでしか対応していないが、任意のチャンネル数に拡張できるはず
-		// （両者同数の場合はそれぞれで演算する。一方がモノラルの場合はそっちを拡張する。それ以外はエラー）
-		(1, 2) => {
-			let lhs_stereo: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(MonoToStereo::new(l_node.as_mono())));
-			add_node!(Box::new(create_stereo(lhs_stereo?.as_stereo(), r_node.as_stereo())))
-		},
-		(2, 1) => {
-			let rhs_stereo: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(MonoToStereo::new(r_node.as_mono())));
-			add_node!(Box::new(create_stereo(l_node.as_stereo(), rhs_stereo?.as_stereo())))
-		},
-		(2, 2) => {
-			add_node!(Box::new(create_stereo(l_node.as_stereo(), r_node.as_stereo())))
-		},
-		_ => Err(Error::ChannelMismatch),
-	}
-}
-
 macro_rules! binary {
-	($name: ident, $mono_ctor: path, $stereo_ctor: path) => {
+	($name: ident, $calc: ident) => {
 		fn $name(track: Option<&str>, nodes: &mut NodeHost,
 			l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-				binary(track, nodes, l_node, r_node, $mono_ctor, $stereo_ctor)
+				create_calc_node(track, nodes, vec![l_node, r_node], &CalcNodeFactory::<$calc>::new())
 		}
 	};
 }
-binary!(add, Add::new, StereoAdd::new);
-binary!(multiply, Mul::new, StereoMul::new);
-binary!(subtract, Sub::new, StereoSub::new);
-binary!(divide, Div::new, StereoDiv::new);
-binary!(remainder, Rem::new, StereoRem::new);
-binary!(power, Pow::new, StereoPow::new);
-binary!(less, Less::new, StereoLess::new);
-binary!(less_or_equal, LessOrEqual::new, StereoLessOrEqual::new);
-binary!(equal, Equal::new, StereoEqual::new);
-binary!(not_equal, NotEqual::new, StereoNotEqual::new);
-binary!(greater, Greater::new, StereoGreater::new);
-binary!(greater_or_equal, GreaterOrEqual::new, StereoGreaterOrEqual::new);
-binary!(and, And::new, StereoAnd::new);
-binary!(or, Or::new, StereoOr::new);
+binary!(add, AddCalc);
+binary!(multiply, MulCalc);
+binary!(subtract, SubCalc);
+binary!(divide, DivCalc);
+binary!(remainder, RemCalc);
+binary!(power, PowCalc);
+binary!(less, LtCalc);
+binary!(less_or_equal, LeCalc);
+binary!(equal, EqCalc);
+binary!(not_equal, NeCalc);
+binary!(greater, GtCalc);
+binary!(greater_or_equal, GeCalc);
+binary!(and, AndCalc);
+binary!(or, OrCalc);

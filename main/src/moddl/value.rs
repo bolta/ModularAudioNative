@@ -39,23 +39,7 @@ impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 #[derive(Clone)]
 pub enum NodeStructure {
 	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<NodeStructure>> },
-
-	// TODO 演算子ごとに分けず、全て Calc にする
 	Connect(Box<NodeStructure>, Box<NodeStructure>),
-	Power(Box<NodeStructure>, Box<NodeStructure>),
-	Multiply(Box<NodeStructure>, Box<NodeStructure>),
-	Divide(Box<NodeStructure>, Box<NodeStructure>),
-	Remainder(Box<NodeStructure>, Box<NodeStructure>),
-	Add(Box<NodeStructure>, Box<NodeStructure>),
-	Subtract(Box<NodeStructure>, Box<NodeStructure>),
-	Less(Box<NodeStructure>, Box<NodeStructure>),
-	LessOrEqual(Box<NodeStructure>, Box<NodeStructure>),
-	Equal(Box<NodeStructure>, Box<NodeStructure>),
-	NotEqual(Box<NodeStructure>, Box<NodeStructure>),
-	Greater(Box<NodeStructure>, Box<NodeStructure>),
-	GreaterOrEqual(Box<NodeStructure>, Box<NodeStructure>),
-	And(Box<NodeStructure>, Box<NodeStructure>),
-	Or(Box<NodeStructure>, Box<NodeStructure>),
 	Lambda { input_param: String, body: Box<NodeStructure> },
 	NodeWithArgs {
 		factory: Box<NodeStructure>,

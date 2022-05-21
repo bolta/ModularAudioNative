@@ -15,27 +15,33 @@ use crate::{
 use std::{
 	any::TypeId,
 	collections::hash_map::HashMap,
+	rc::Rc,
 };
 
 pub type VarStack = Stack<HashMap<String, Value>>;
 
 pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 	match expr {
-		Expr::Connect { lhs, rhs } => evaluate_binary_structure::<NoneOp>(lhs, rhs, vars, NodeStructure::Connect),
-		Expr::Power { lhs, rhs } => evaluate_binary_structure::<PowOp>(lhs, rhs, vars, NodeStructure::Power),
-		Expr::Multiply { lhs, rhs } => evaluate_binary_structure::<MulOp>(lhs, rhs, vars, NodeStructure::Multiply),
-		Expr::Divide { lhs, rhs } => evaluate_binary_structure::<DivOp>(lhs, rhs, vars, NodeStructure::Divide),
-		Expr::Remainder { lhs, rhs } => evaluate_binary_structure::<RemOp>(lhs, rhs, vars, NodeStructure::Remainder),
-		Expr::Add { lhs, rhs } => evaluate_binary_structure::<AddOp>(lhs, rhs, vars, NodeStructure::Add),
-		Expr::Subtract { lhs, rhs } => evaluate_binary_structure::<SubOp>(lhs, rhs, vars, NodeStructure::Subtract),
-		Expr::Less { lhs, rhs } => evaluate_binary_structure::<LeOp>(lhs, rhs, vars, NodeStructure::Less),
-		Expr::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeOp>(lhs, rhs, vars, NodeStructure::LessOrEqual),
-		Expr::Equal { lhs, rhs } => evaluate_binary_structure::<EqOp>(lhs, rhs, vars, NodeStructure::Equal),
-		Expr::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeOp>(lhs, rhs, vars, NodeStructure::NotEqual),
-		Expr::Greater { lhs, rhs } => evaluate_binary_structure::<GtOp>(lhs, rhs, vars, NodeStructure::Greater),
-		Expr::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeOp>(lhs, rhs, vars, NodeStructure::GreaterOrEqual),
-		Expr::And { lhs, rhs } => evaluate_binary_structure::<AndOp>(lhs, rhs, vars, NodeStructure::And),
-		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrOp>(lhs, rhs, vars, NodeStructure::Or),
+		Expr::Connect { lhs, rhs } => {
+			let l_str = evaluate_as_node_structure(lhs, vars) ?;
+			let r_str = evaluate_as_node_structure(rhs, vars) ?;
+			Ok(Value::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
+		},
+
+		Expr::Power { lhs, rhs } => evaluate_binary_structure::<PowCalc>(lhs, rhs, vars),
+		Expr::Multiply { lhs, rhs } => evaluate_binary_structure::<MulCalc>(lhs, rhs, vars),
+		Expr::Divide { lhs, rhs } => evaluate_binary_structure::<DivCalc>(lhs, rhs, vars),
+		Expr::Remainder { lhs, rhs } => evaluate_binary_structure::<RemCalc>(lhs, rhs, vars),
+		Expr::Add { lhs, rhs } => evaluate_binary_structure::<AddCalc>(lhs, rhs, vars),
+		Expr::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars),
+		Expr::Less { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars),
+		Expr::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars),
+		Expr::Equal { lhs, rhs } => evaluate_binary_structure::<EqCalc>(lhs, rhs, vars),
+		Expr::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeCalc>(lhs, rhs, vars),
+		Expr::Greater { lhs, rhs } => evaluate_binary_structure::<GtCalc>(lhs, rhs, vars),
+		Expr::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeCalc>(lhs, rhs, vars),
+		Expr::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars),
+		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars),
 
 		Expr::Identifier(id) => {
 			let val = vars.top().get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
@@ -94,26 +100,20 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 	}
 }
 
-// 定数畳み込みに対応しない演算子に与えるダミーの演算
-struct NoneOp { }
-impl BinaryOp for NoneOp { fn oper(_lhs: Sample, _rhs: Sample) -> Sample { unreachable!() } }
-
-fn evaluate_binary_structure<Op: BinaryOp + 'static>(
+fn evaluate_binary_structure<C: Calc + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
 	vars: &mut VarStack,
-	make_structure: fn(Box<NodeStructure>, Box<NodeStructure>) -> NodeStructure,
 ) -> ModdlResult<Value> {
 	let l_val = evaluate(lhs, vars) ?;
 	let r_val = evaluate(rhs, vars) ?;
 
-	// 定数はコンパイル時に計算
-	if TypeId::of::<Op>() != TypeId::of::<NoneOp>()
-			// ラベルがついているときは設定の対象になるため最適化しない
-			&& l_val.label().is_none() && r_val.label().is_none() {
+	// 定数はコンパイル時に計算する。
+	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
+	if l_val.label().is_none() && r_val.label().is_none() {
 		match (l_val.as_float(), r_val.as_float()) {
 			(Some(l_float), Some(r_float)) => {
-				return Ok(Value::Float(Op::oper(l_float, r_float)));
+				return Ok(Value::Float(C::calc(&vec![l_float, r_float])));
 			}
 			_ => { }
 		}
@@ -121,7 +121,10 @@ fn evaluate_binary_structure<Op: BinaryOp + 'static>(
 
 	let l_str = as_node_structure(&l_val) ?;
 	let r_str = as_node_structure(&r_val) ?;
-	Ok(Value::NodeStructure(make_structure(Box::new(l_str), Box::new(r_str))))
+	Ok(Value::NodeStructure(NodeStructure::Calc {
+		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
+		args: vec![Box::new(l_str), Box::new(r_str)],
+	}))
 }
 
 fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {

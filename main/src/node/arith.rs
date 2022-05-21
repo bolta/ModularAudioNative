@@ -52,35 +52,6 @@ impl <Op: BinaryOp> Node for StereoBinary<Op> {
 	}
 }
 
-pub type Add = MonoBinary<AddOp>;
-pub type StereoAdd = StereoBinary<AddOp>;
-pub type Sub = MonoBinary<SubOp>;
-pub type StereoSub = StereoBinary<SubOp>;
-pub type Mul = MonoBinary<MulOp>;
-pub type StereoMul = StereoBinary<MulOp>;
-pub type Div = MonoBinary<DivOp>;
-pub type StereoDiv = StereoBinary<DivOp>;
-pub type Rem = MonoBinary<RemOp>;
-pub type StereoRem = StereoBinary<RemOp>;
-pub type Pow = MonoBinary<PowOp>;
-pub type StereoPow = StereoBinary<PowOp>;
-pub type Less = MonoBinary<LtOp>;
-pub type StereoLess = StereoBinary<LtOp>;
-pub type LessOrEqual = MonoBinary<LeOp>;
-pub type StereoLessOrEqual = StereoBinary<LeOp>;
-pub type Equal = MonoBinary<EqOp>;
-pub type StereoEqual = StereoBinary<EqOp>;
-pub type NotEqual = MonoBinary<NeOp>;
-pub type StereoNotEqual = StereoBinary<NeOp>;
-pub type Greater = MonoBinary<GtOp>;
-pub type StereoGreater = StereoBinary<GtOp>;
-pub type GreaterOrEqual = MonoBinary<GeOp>;
-pub type StereoGreaterOrEqual = StereoBinary<GeOp>;
-pub type And = MonoBinary<AndOp>;
-pub type StereoAnd = StereoBinary<AndOp>;
-pub type Or = MonoBinary<OrOp>;
-pub type StereoOr = StereoBinary<OrOp>;
-
 pub struct Limit {
 	signal: MonoNodeIndex,
 	min: MonoNodeIndex,
