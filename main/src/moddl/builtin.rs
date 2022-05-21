@@ -92,7 +92,7 @@ impl Function for NesFreq {
 }
 
 
-use crate::operator::*;
+use crate::calc::*;
 pub struct Log { }
 impl Function for Log {
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {

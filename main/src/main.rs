@@ -7,11 +7,11 @@
 #[macro_use]
 mod common;
 
+mod calc;
 mod core;
 mod mml;
 mod moddl;
 mod node;
-mod operator;
 mod seq;
 mod wave;
 

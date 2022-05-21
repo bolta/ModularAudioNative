@@ -7,9 +7,8 @@ extern crate parser;
 use parser::moddl::ast::*;
 
 use crate::{
+	calc::*,
 	common::stack::*,
-	core::common::*,
-	operator::*,
 };
 
 use std::{

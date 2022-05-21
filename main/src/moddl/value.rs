@@ -9,9 +9,9 @@ use crate::{
 use std::rc::Rc;
 
 // TODO 仮置き
+use crate::calc::*;
 use crate::core::common::*;
 use crate::core::node::Node;
-use crate::operator::*;
 use crate::node::arith::*;
 use std::marker::PhantomData;
 pub trait CalcNodeFactoryTrait {
