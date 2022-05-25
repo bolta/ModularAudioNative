@@ -65,3 +65,7 @@ binary_calc!(OrCalc, |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs || rhs));
 //// functions
 
 unary_calc!(LogCalc, |arg: Sample| arg.ln());
+unary_calc!(Log10Calc, |arg: Sample| arg.log(10f32));
+unary_calc!(SinCalc, |arg: Sample| arg.sin());
+unary_calc!(CosCalc, |arg: Sample| arg.cos());
+unary_calc!(TanCalc, |arg: Sample| arg.tan());
