@@ -5,6 +5,7 @@ pub mod event_scheduler;
 pub mod filter;
 pub mod freq;
 pub mod lofi;
+pub mod noise;
 pub mod osc;
 pub mod prim;
 pub mod stereo;

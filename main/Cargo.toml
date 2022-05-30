@@ -13,6 +13,7 @@ parser = { path = "../parser" }
 mopa = "*"
 nom = { version = "*", features = ["regexp"] }
 portaudio = "*"
+rand = "*"
 regex = "^1"
 ringbuf = "*"
 wav = "*"

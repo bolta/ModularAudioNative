@@ -16,6 +16,7 @@ use crate::{
 		filter::*,
 		freq::*,
 		lofi::*,
+		noise::*,
 		osc::*,
 		transit::*,
 		wave::*,
@@ -47,6 +48,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("triangleOsc", TriangleOscFactory { });
 	add_node_factory!("sawOsc", SawOscFactory { });
 	add_node_factory!("pulseOsc", PulseOscFactory { });
+	add_node_factory!("uniformNoise", UniformNoiseFactory { });
 	add_node_factory!("expEnv", ExpEnvFactory { });
 	add_node_factory!("adsrEnv", AdsrEnvFactory { });
 	add_node_factory!("limit", LimitFactory { });

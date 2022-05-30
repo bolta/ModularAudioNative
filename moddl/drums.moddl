@@ -1,0 +1,20 @@
+@tempo 124
+//@solo ^s
+
+
+@let `kBoost`, 2.5
+@instrument ^k, (50 + 120 * adsrEnv { decay: 0.1, sustain: 0} ^ 2) | sineOsc | limit { min: -1 / kBoost, max: 1 / kBoost } * kBoost * adsrEnv { decay: 0.2, sustain: 0 }
+
+@let `sBoost`, 3.5
+@instrument ^s, ((190 | triangleOsc * (37 - 35 * adsrEnv { decay: 0.07, sustain: 0 }) | triangleOsc) * adsrEnv { decay: 0.07, sustain: 0 } + uniformNoise | lpf {cutoff: 10000, q: 1} * adsrEnv { decay: 0.2, sustain: 0 } * 0.2) | limit { min: -1 / sBoost, max: 1 / sBoost } * sBoost
+
+@instrument ^h, uniformNoise | hpf { cutoff: 8000, q: 4 } * adsrEnv { decay: 0.25, sustain: 0, release: 0.2 }
+
+
+k l4v15
+s l16v12
+h l8q4v13
+
+k [0 cccc]
+s [0 r4c8.cr4c4]
+h [0 rcrcrcrc]
