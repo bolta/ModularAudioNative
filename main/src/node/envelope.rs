@@ -127,7 +127,7 @@ impl Node for AdsrEnv {
 				this.amplitude = 1f32;
 				this.state = AdsrEnvState::Decay;
 			}
-		};;
+		};
 		match self.state {
 			AdsrEnvState::Idle => {
 				// nop: waiting for NoteOn
