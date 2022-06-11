@@ -41,7 +41,7 @@ impl Node for Glide {
 		let ratio_per_smp = 1f32 - 2f32.powf(-1f32 / (context.sample_rate_f32() * halflife));
 
 		let result = match self.actual {
-			None => { dbg!(signal); signal },
+			None => signal,
 			Some(actual) => (1f32 - ratio_per_smp) * actual + ratio_per_smp * signal,
 		};
 		self.actual = Some(result);

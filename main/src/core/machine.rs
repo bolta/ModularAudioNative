@@ -52,7 +52,6 @@ impl Machine {
 				max_channels = max_channels.max(chs as usize);
 				if chs <= 0 { continue; }
 				value_offsets.insert(NodeIndex(i), next_val);
-// println!("{:?} -> {:?}", NodeIndex(i), next_val);
 				next_val.0 += chs as usize;
 			}
 			(value_offsets, next_val, max_channels)
