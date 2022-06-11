@@ -42,7 +42,7 @@ impl WaveformPlayer {
 impl Node for WaveformPlayer {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, env: &mut Environment) {
 		match self.state {
 			WaveformPlayerState::Note => {
 				let waveform = self.waveform(env);

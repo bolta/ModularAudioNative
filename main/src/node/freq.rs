@@ -30,7 +30,7 @@ impl Node for NesFreq {
 	fn upstreams(&self) -> Upstreams { vec![
 		self.freq.channeled(),
 	] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let freq = inputs[0];
 		// 周波数を一旦 2A03 のレジスタの値に変換し、また周波数に戻すことで、周波数分解能を 2A03 相当にする
 		// https://wikiwiki.jp/mck/周波数とレジスタの関係

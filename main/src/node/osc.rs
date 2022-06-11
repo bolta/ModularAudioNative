@@ -23,7 +23,7 @@ macro_rules! simple_osc {
 			fn channels(&self) -> i32 { 1 }
 			fn initialize(&mut self, _context: &Context, _env: &mut Environment) { self.phase = 0f32; }
 			fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
-			fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+			fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 				// TODO クロージャを呼び出すことでオーバーヘッドが乗ったりしないか？　検証
 				output_mono(output, $expr(self.phase));
 			}
@@ -77,7 +77,7 @@ impl Node for PulseOsc {
 	fn channels(&self) -> i32 { 1 }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { self.phase = 0f32; }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled(), self.duty.channeled()] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let duty = inputs[1];
 		output_mono(output, if self.phase % TWO_PI < TWO_PI * duty {
 			1f32 
@@ -119,7 +119,7 @@ impl Node for StereoTestOsc {
 	fn channels(&self) -> i32 { 2 }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_stereo(output, self.phase_l.sin(), self.phase_r.sin());
 	}
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {

@@ -18,7 +18,7 @@ impl Var {
 impl Node for Var {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.value);
 	}
 

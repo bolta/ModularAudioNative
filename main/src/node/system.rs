@@ -27,7 +27,7 @@ impl Terminator {
 impl Node for Terminator {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		// TODO 無音検知
 	}
 	fn process_event(&mut self, event: &dyn Event, _context: &Context, env: &mut Environment) {

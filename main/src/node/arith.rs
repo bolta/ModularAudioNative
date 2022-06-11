@@ -28,7 +28,7 @@ impl <Op: BinaryOp> MonoBinary<Op> {
 impl <Op: BinaryOp> Node for MonoBinary<Op> {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, Op::oper(inputs[0], inputs[1]));
 	}
 }
@@ -47,7 +47,7 @@ impl <Op: BinaryOp> StereoBinary<Op> {
 impl <Op: BinaryOp> Node for StereoBinary<Op> {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.lhs.channeled(), self.rhs.channeled()] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_stereo(output, Op::oper(inputs[0], inputs[2]), Op::oper(inputs[1], inputs[3]));
 	}
 }
@@ -66,7 +66,7 @@ impl Limit {
 impl Node for Limit {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.signal.channeled(), self.min.channeled(), self.max.channeled()] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let sig = inputs[0];
 		let min = inputs[1];
 		let max = inputs[2];
@@ -105,7 +105,7 @@ impl <C: Calc> MonoCalc<C> {
 impl <C: Calc> Node for MonoCalc<C> {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, C::calc(inputs));
 	}
 }
@@ -132,7 +132,7 @@ impl <C: Calc> StereoCalc<C> {
 impl <C: Calc> Node for StereoCalc<C> {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { self.args.iter().map(|a| a.channeled()).collect() }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		for i in 0 .. C::arg_count() as usize {
 			self.inputs_l[i] = inputs[2 * i];
 			self.inputs_r[i] = inputs[2 * i + 1];

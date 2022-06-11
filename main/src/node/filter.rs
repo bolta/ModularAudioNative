@@ -32,7 +32,7 @@ macro_rules! bi_quad_filter {
 				self.cutoff.channeled(),
 				self.q.channeled(),
 			] }
-			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, _env: &mut Environment) {
+			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 				let in_value = inputs[0];
 				let cutoff = inputs[1];
 				let q = inputs[2];

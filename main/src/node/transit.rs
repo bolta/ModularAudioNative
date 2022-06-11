@@ -33,7 +33,7 @@ impl Node for Glide {
 		self.signal.channeled(),
 		self.halflife.channeled(),
 	] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut Vec<Sample>, context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let halflife = inputs[1];
 		// 			var ratioPerSample = halflife_sec.AsFloat().Select(h => (float) (1 - Math.Pow(2, -1 / (ModuleSpace.SampleRate * h))));

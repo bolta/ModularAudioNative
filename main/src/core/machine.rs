@@ -57,13 +57,13 @@ impl Machine {
 			(value_offsets, next_val, max_channels)
 		};
 
-		let mut state = State {
-			values: vec_with_length(value_count.0),
-			inputs: vec_with_length(upstreams.iter().map(|us| {
-				us.iter().map(|u| u.channels()).sum::<i32>()
-			}).max().unwrap() as usize),
-			output: vec_with_length(max_channels),
-		};
+		// 各ノードの出力値。複数個所から参照される可能性があるのでキャッシュする
+		let mut values = vec_with_length(value_count.0);
+		// 各ノードの入力値
+		let mut inputs =  vec_with_length(upstreams.iter().map(|us| {
+			us.iter().map(|u| u.channels()).sum::<i32>()
+		}).max().unwrap() as usize);
+
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
@@ -86,7 +86,7 @@ impl Machine {
 			}
 
 			for instrc in &instructions {
-				self.do_instruction(nodes, &instrc, &mut state, context, &mut env);
+				self.do_instruction(nodes, &instrc, &mut values, &mut inputs, context, &mut env);
 			}
 
 			context.sample_elapsed();
@@ -120,18 +120,8 @@ impl Machine {
 			let node = & nodes[node_idx];
 			loads
 					.chain(if node.implements_execute() {
-						vec![Instruction::Execute(node_idx)]
+						vec![Instruction::Execute { node_idx, output: value_offsets.get(&node_idx).map(|o| *o) }]
 					} else {
-						vec![]
-					})
-					.chain(if let Some(value_idx) = value_offsets.get(&node_idx) {
-						// vec![Instruction::Store { to: *value_idx, count: nodes[node_idx].channels() as usize }]
-						(0 .. nodes[node_idx].channels() as usize).map(|ch| Instruction::Store {
-							to: ValueIndex(value_idx.0 + ch),
-							from: OutputIndex(ch),
-						}).collect()
-					} else {
-						// 出力がないので Store しない
 						vec![]
 					})
 					.chain(if node.implements_update() {
@@ -171,27 +161,25 @@ impl Machine {
 		}
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, state: &mut State, context: &Context, env: &mut Environment) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
 		match instrc {
 			Instruction::Load { to, from } => {
-				state.inputs[to.0] = state.values[from.0];
+				inputs[to.0] = values[from.0];
 				// let to_slice = &mut state.inputs[to.0 .. to.0 + count];
 				// let from_slice = &state.values[from.0 .. from.0 + count];
 				// to_slice.copy_from_slice(from_slice);
 			}
-			Instruction::Store { to, from } => {
-				state.values[to.0] = state.output[from.0];
-				// let to_slice = &mut state.values[to.0 .. to.0 + count];
-				// let from_slice = &state.output[0_usize .. *count];
-				// to_slice.copy_from_slice(from_slice);
-			}
-			Instruction::Execute(node_idx) => {
+			Instruction::Execute{ node_idx, output } => {
 				let node = &mut nodes[*node_idx];
-				// state.outputs = node.execute(&state.inputs, context, env);
-				node.execute(&state.inputs, &mut state.output, context, env);
+				let output_slice = match output {
+					// TODO 終端の指定はデバッグ目的でしか意味がないのでリリースビルドでは外したい
+					Some(o) => &mut values[o.0 .. o.0 + node.channels() as usize],
+					None => &mut values[0 .. 0], // 出力なし
+				};
+				node.execute(&inputs, output_slice, context, env);
 			}
 			Instruction::Update(node_idx) => {
-				nodes[*node_idx].update(&state.inputs, context, env);
+				nodes[*node_idx].update(&inputs, context, env);
 			}
 		}
 	}
@@ -223,21 +211,8 @@ struct InputIndex(pub usize);
 enum Instruction {
 	/// 計算済みの値を次の計算のための入力値にコピー
 	Load { to: InputIndex, from: ValueIndex },
-	/// 計算された値を計算済みの値としてとっておく
-	Store { to: ValueIndex, from: OutputIndex, },
-	Execute(NodeIndex),
+	Execute { node_idx: NodeIndex, output: Option<ValueIndex> },
 	Update(NodeIndex),
-}
-
-struct State {
-	/// 各ノードの出力値。複数個所から参照される可能性があるのでキャッシュする
-	/// 添字は NodeIndex
-	values: Vec<Sample>,
-	/// 各ノードの入力値
-	inputs: Vec<Sample>,
-	// output: Sample,
-	output: Vec<Sample>,
-	// elapsed_samples: SampleCount,
 }
 
 // TODO ちゃんと名前空間を規定する
