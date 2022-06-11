@@ -70,13 +70,19 @@ pub fn play_file(moddl_path: &str) -> ModdlResult<()> {
 #[derive(PartialEq)]
 enum MuteSolo { Mute, Solo }
 
+enum TrackSpec {
+	Instrument(NodeStructure),
+	Effect(HashSet<String>, NodeStructure),
+}
+
 struct PlayerContext {
 	tempo: f32,
 	ticks_per_bar: i32,
-	// トラックごとの instrument を保持
-	// （イベントの発行順序が曖昧にならないよう BTreeMap で辞書順を保証）
-	// let mut instruments = HashMap::<String, &Expr>::new();
-	instruments: HashMap<String, NodeStructure>,
+	// トラックごとの instrument/effect
+	// （書かれた順序を保持するため Vec で持つ）
+	track_specs: Vec<(String, TrackSpec)>,
+	// effect に接続されていない、「末端」であるトラック。master でミックスする対象
+	terminal_tracks: HashSet<String>,
 	// トラックごとの MML を蓄積
 	mmls: BTreeMap<String, String>,
 	waveforms: WaveformHost,
@@ -84,6 +90,24 @@ struct PlayerContext {
 	mute_solo_tracks: HashSet<String>,
 	vars: VarStack,
 }
+impl PlayerContext {
+	fn get_track_spec(&self, track: &String) -> Option<&TrackSpec> {
+		self.track_specs.iter().find(|&elem| elem.0 == *track)
+				.map(|elem| &elem.1)
+	}
+	fn add_track_spec(&mut self, track: &String, spec: TrackSpec) -> ModdlResult<()> {
+		match self.get_track_spec(track) {
+			None => {
+				self.track_specs.push((track.clone(), spec));
+				Ok(())
+			}
+			Some(_) => {
+				Err(Error::DirectiveDuplicate { msg: track.clone() })
+			}
+		}
+	}
+}
+
 
 pub fn play(moddl: &str) -> ModdlResult<()> {
 	// TODO パーズエラーをちゃんと処理
@@ -92,7 +116,8 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut pctx = PlayerContext {
 		tempo: 120f32,
 		ticks_per_bar: 384,
-		instruments: HashMap::<String, NodeStructure>::new(),
+		track_specs: vec![],
+		terminal_tracks: HashSet::<String>::new(),
 		mmls: BTreeMap::<String, String>::new(),
 		waveforms: WaveformHost::new(),
 		mute_solo: MuteSolo::Mute,
@@ -109,26 +134,45 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let tempo = nodes.add_with_tag("#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
 	nodes.add(Box::new(Tick::new(tempo.as_mono(), pctx.ticks_per_bar, TAG_SEQUENCER.to_string())));
 
-	let mut output_nodes = Vec::<ChanneledNodeIndex>::new();
+	let mut output_nodes = HashMap::<String, ChanneledNodeIndex>::new();
 
-	for (track, mml) in &pctx.mmls {
-		// @mute で指定されているか、@solo で指定されていなければ、除外
-		if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) { continue; }
-
-		let instrm = pctx.instruments.get(track)
-				.ok_or_else(|| Error::InstrumentNotFound { track: track.clone() }) ?;
-		build_nodes_by_mml(track.as_str(), instrm, mml.as_str(), pctx.ticks_per_bar, &mut nodes, &mut output_nodes) ?;
+	// for (track, mml) in &pctx.mmls {
+	for (track, spec) in &pctx.track_specs {
+		let mml = &pctx.mmls.get(track).map(|mml| mml.as_str()).unwrap_or("");
+		let output_node = {
+			// @mute で指定されているか、@solo で指定されていなければ、ミュート対象
+			if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) {
+				nodes.add(Box::new(Constant::new(0f32)))
+			} else {
+				match spec {
+					TrackSpec::Instrument(structure) => {
+							build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &mut nodes/* , &mut output_nodes */,
+									&mut PlaceholderStack::init(HashMap::new())) ?
+					}
+					TrackSpec::Effect(source_tracks, structure) => {
+						let mut placeholders = PlaceholderStack::init(HashMap::new());
+						source_tracks.iter().for_each(|track| {
+							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
+						});
+						build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &mut nodes,
+								&mut placeholders) ?
+					}
+				}
+			}
+		};
+		output_nodes.insert(track.clone(), output_node);
 	}
 
-	let mut context = Context::new(44100); // TODO 値を外から渡せるように
-
+	let mut terminal_tracks: Vec<&String> = pctx.terminal_tracks.iter().collect();
+	terminal_tracks.sort_unstable();
+	let terminal_nodes: Vec<ChanneledNodeIndex> = terminal_tracks.iter().map(|t| output_nodes[*t]).collect();
 	let mix = {
-		if output_nodes.is_empty() {
+		if terminal_nodes.is_empty() {
 			nodes.add(Box::new(Constant::new(0f32)))
 		} else {
 			// FIXME Result が絡むときの fold をきれいに書く方法
-			let head = *output_nodes.first().unwrap();
-			let tail = &output_nodes[1..];
+			let head = *terminal_nodes.first().unwrap();
+			let tail = &terminal_nodes[1..];
 			let mut sum = head;
 			for t in tail {
 				sum = add(None, &mut nodes, sum, *t) ?;
@@ -143,6 +187,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
 	// nodes.add(Box::new(Print::new(master)));
 
+	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms);
 
 	Ok(())
@@ -162,12 +207,34 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					// let instrm = & args[1];
 					for track in tracks {
 						let instrm = evaluate_arg(&args, 1, &mut pctx.vars)?.as_node_structure()
-								.ok_or_else(|| { dbg!("boke"); Error::DirectiveArgTypeMismatch }) ?;
-						if pctx.instruments.get(&track).is_some() {
-							return Err(Error::DirectiveDuplicate { msg: format!("@instrument ^{}", &track) });
-						}
-						pctx.instruments.insert(track, instrm);
+								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+						pctx.add_track_spec(&track, TrackSpec::Instrument(instrm)) ?;
+						pctx.terminal_tracks.insert(track);
 					}
+				}
+				"effect" => {
+					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let source_tracks = evaluate_arg(&args, 1, &mut pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
+
+					// 定義を評価する際、source_tracks の各々を placeholder として定義しておく。
+					pctx.vars.push_clone();
+					for source_track in &source_tracks {
+						pctx.vars.top_mut().insert(source_track.clone(),
+								Value::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() }));
+						pctx.terminal_tracks.remove(source_track);
+					}
+
+					let effect = evaluate_arg(&args, 2, &mut pctx.vars)?.as_node_structure()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					for track in tracks {
+						pctx.add_track_spec(&track, TrackSpec::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone())) ?;
+						pctx.terminal_tracks.insert(track);
+					}
+					// TODO finally にする
+					pctx.vars.pop();
 				}
 				"let" => {
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
@@ -242,8 +309,8 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &mut VarStack) -> ModdlRes
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost, output_nodes: &mut Vec<ChanneledNodeIndex>)
-		-> ModdlResult<()> {
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost/* , output_nodes: &mut Vec<ChanneledNodeIndex> */, placeholders: &mut PlaceholderStack)
+		-> ModdlResult<ChanneledNodeIndex> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
 
@@ -264,10 +331,10 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	let detune_oct = divide(Some(track), nodes, detune, cents_per_oct) ?; // 必ず成功するはず
 	let const_2 = nodes.add(Box::new(Constant::new(2f32)));
 	let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
-	let freq_detuned = multiply(Some(track), nodes, freq, freq_ratio) ?; // 必ず成功するはず
 
+	let freq_detuned = multiply(Some(track), nodes, freq, freq_ratio) ?; // 必ず成功するはず
 	// デチューンを使う場合、入力が freq から freq_detuned に変わる
-	let instrm = build_instrument(track, instrm_def, nodes, /* freq */freq_detuned) ?;
+	let instrm = build_instrument(track, instrm_def, nodes, /* freq */freq_detuned, placeholders) ?;
 	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
 	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
 	let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
@@ -277,16 +344,12 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	let vol = nodes.add_with_tag(format!("{}.#volume", &track), Box::new(Var::new(1f32)));
 	let instrm_vel_vol = multiply(Some(track), nodes, instrm_vel, vol) ?; // 必ず成功するはず
 
-	output_nodes.push(instrm_vel_vol);
-
-	Ok(())
+	Ok(instrm_vel_vol)
 }
 
 pub type PlaceholderStack = Stack<HashMap<String, ChanneledNodeIndex>>;
 
-fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-	let mut placeholders = PlaceholderStack::init(HashMap::new());
-
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
 	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
@@ -405,7 +468,7 @@ fn build_instrument/* <'a> */(track: &/* 'a */ str, instrm_def: &NodeStructure, 
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, freq, None, &mut placeholders)
+	visit_struct(track, instrm_def, nodes, freq, None, placeholders)
 }
 
 fn coerce_input(
