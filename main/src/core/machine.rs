@@ -117,8 +117,13 @@ impl Machine {
 			});
 
 			let node_idx = NodeIndex(i);
+			let node = & nodes[node_idx];
 			loads
-					.chain(vec![Instruction::Execute(node_idx)])
+					.chain(if node.implements_execute() {
+						vec![Instruction::Execute(node_idx)]
+					} else {
+						vec![]
+					})
 					.chain(if let Some(value_idx) = value_offsets.get(&node_idx) {
 						// vec![Instruction::Store { to: *value_idx, count: nodes[node_idx].channels() as usize }]
 						(0 .. nodes[node_idx].channels() as usize).map(|ch| Instruction::Store {
@@ -129,7 +134,11 @@ impl Machine {
 						// 出力がないので Store しない
 						vec![]
 					})
-					.chain(vec![Instruction::Update(node_idx)])
+					.chain(if node.implements_update() {
+						vec![Instruction::Update(node_idx)]
+					} else {
+						vec![]
+					})
 		}).collect()
 	}
 
