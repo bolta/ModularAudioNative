@@ -33,6 +33,7 @@ impl Node for Glide {
 		self.signal.channeled(),
 		self.halflife.channeled(),
 	] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let halflife = inputs[1];

@@ -14,6 +14,7 @@ mopafy!(Event);
 // 	pub fn new(target_id: String) -> Self { Self { target_id } }
 // }
 
+#[derive(Clone)]
 pub enum EventTarget {
 	Machine,
 	Tag(String),

@@ -64,6 +64,9 @@ impl Machine {
 			us.iter().map(|u| u.channels()).sum::<i32>()
 		}).max().unwrap() as usize);
 
+		// TODO 結果的に active, evential になるノードと、evential なノードがどの変数に依存するかを求める
+		// 
+
 		let instructions = self.compile(nodes, &upstreams, &value_offsets);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
@@ -165,9 +168,6 @@ impl Machine {
 		match instrc {
 			Instruction::Load { to, from } => {
 				inputs[to.0] = values[from.0];
-				// let to_slice = &mut state.inputs[to.0 .. to.0 + count];
-				// let from_slice = &state.values[from.0 .. from.0 + count];
-				// to_slice.copy_from_slice(from_slice);
 			}
 			Instruction::Execute{ node_idx, output } => {
 				let node = &mut nodes[*node_idx];

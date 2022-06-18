@@ -18,6 +18,7 @@ impl Node for Print {
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	// TODO ステレオ対応
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute<'a>(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		// TODO ステレオ対応
 		println!("{}", inputs[0]);
@@ -34,6 +35,7 @@ impl NullOut {
 impl Node for NullOut {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
+	fn activeness(&self) -> Activeness { Activeness::Static }
 	fn execute<'a>(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		// do nothing
 	}
@@ -52,6 +54,7 @@ impl <'a> MemoryOut<'a> {
 impl <'a> Node for MemoryOut<'a> {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		self.output.push(inputs[0]);
 	}

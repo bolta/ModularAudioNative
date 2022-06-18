@@ -32,6 +32,7 @@ macro_rules! bi_quad_filter {
 				self.cutoff.channeled(),
 				self.q.channeled(),
 			] }
+			fn activeness(&self) -> Activeness { Activeness::Active }
 			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 				let in_value = inputs[0];
 				let cutoff = inputs[1];

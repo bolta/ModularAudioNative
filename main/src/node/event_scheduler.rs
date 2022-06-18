@@ -57,6 +57,7 @@ impl EventScheduler {
 impl Node for EventScheduler {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![] }
+	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいのかな？
 	fn initialize(&mut self, _context: &Context, env: &mut Environment) {
 		self.process_events(0, env.events_mut());
 	}

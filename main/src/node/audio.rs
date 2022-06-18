@@ -38,6 +38,7 @@ impl PortAudioOut {
 impl Node for PortAudioOut {
 	// ノードグラフ上で出力するチャンネル数は 0
 	fn channels(&self) -> i32 { 0 }
+	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいのかな
 	// TODO ↓これ抽象クラス的なものに括り出したい
 	fn initialize(&mut self, context: &Context, _env: &mut Environment) {
 		let pa = pa::PortAudio::new().expect("error");

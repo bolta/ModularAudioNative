@@ -31,6 +31,7 @@ impl Tick {
 impl Node for Tick {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.tempo.channeled()] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn initialize(&mut self, _context: &Context, env: &mut Environment) {
 		// TODO 各サンプルの直前にイベントを投げれる機会を設けた方がいい。
 		// 同じ処理を 2 回書いたりサンプル数に +1 したりしなくてよくなるように

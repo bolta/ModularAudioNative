@@ -28,6 +28,7 @@ impl Node for UniformNoise {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![
 	] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, 2f32 * self.gen.gen::<f32>() - 1f32);
 	}

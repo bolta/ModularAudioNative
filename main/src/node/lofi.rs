@@ -30,6 +30,7 @@ impl Node for QuantCrush {
 		self.min.channeled(),
 		self.max.channeled(),
 	] }
+	fn activeness(&self) -> Activeness { Activeness::Passive }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let resolution = inputs[1];

@@ -56,6 +56,9 @@ impl NodeHost {
 	pub fn nodes_mut(&mut self) -> &mut Vec<Box<dyn Node>> {
 		&mut self.nodes
 	}
+	pub fn tags(&self) -> &HashMap<String, Vec<NodeIndex>> {
+		&self.tags
+	}
 
 	// TODO Vec を作らずに参照で返した方がよさそう
 	pub fn resolve_tag(&self, tag: &String) -> Vec<NodeIndex> {
