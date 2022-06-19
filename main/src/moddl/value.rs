@@ -114,7 +114,7 @@ impl Value {
 		// Value から直接 Node に変換しようとすると NodeHost が必要になったり、
 		// Node をタグ付きで生成したいときに困ったりとよろしくないことが多いので、
 		// Node への変換は提供しない。
-		// 代わりに、Node の一歩手前というか、Node の生成における仕様となる NodeStructure を提供し、
+		// 代わりに、Node の一歩手前というか、ノードグラフの設計図となる NodeStructure を提供し、
 		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
 		// 数値や変数参照から Node への暗黙の変換もここで提供する
 		match self.value() {
