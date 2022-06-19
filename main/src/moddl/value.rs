@@ -82,10 +82,7 @@ impl Value {
 		}
 	}
 	pub fn as_boolean(&self) -> Option<bool> {
-		match self.value() {
-			Self::Float(value) => Some(*value > 0f32),
-			_ => None,
-		}
+		self.as_float().map(|v| v > 0f32)
 	}
 	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
 		match self.value() {
