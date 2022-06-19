@@ -2,6 +2,7 @@ pub mod arith;
 pub mod audio;
 pub mod envelope;
 pub mod event_scheduler;
+pub mod file;
 pub mod filter;
 pub mod freq;
 pub mod lofi;
