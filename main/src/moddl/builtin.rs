@@ -78,6 +78,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
+	fn signature(&self) -> FunctionSignature { vec!["waveform"] }
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
@@ -89,6 +90,7 @@ impl Function for WaveformPlayer {
 
 pub struct NesFreq { }
 impl Function for NesFreq {
+	fn signature(&self) -> FunctionSignature { vec!["triangle"] }
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
 		let triangle = triangle_val.as_boolean().ok_or_else(|| Error::TypeMismatch) ?;
@@ -104,6 +106,7 @@ macro_rules! unary_math_func {
 	($name: ident, $calc_type: ty) => {
 		pub struct $name { }
 		impl Function for $name {
+			fn signature(&self) -> FunctionSignature { vec!["arg"] }
 			fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 				let arg = args.get(& "arg".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 				if let Some(val) = arg.as_float() {

@@ -66,9 +66,11 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		Expr::FunctionCall { function, args } => {
 			let function = evaluate(function, vars)?.as_function().ok_or_else(|| Error::TypeMismatch) ?;
 
-			// TODO unnamed_args も使う
-			let mut value_args = HashMap::<String, Value>::new();
-			for (name, expr) in &args.named {
+			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
+			let resolved_args = resolve_args(&arg_names, args) ?;
+			let mut value_args = HashMap::new();
+			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
+			for (name, expr) in &resolved_args {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 

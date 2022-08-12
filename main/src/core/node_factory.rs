@@ -18,7 +18,7 @@ use std::collections::hash_map::HashMap;
 type Error = String;
 
 pub struct NodeArgSpec {
-	pub name: String,
+	pub name: String, // TODO &'static str ではだめか？
 	pub channels: i32,
 	pub default: Option<Sample>,
 }
