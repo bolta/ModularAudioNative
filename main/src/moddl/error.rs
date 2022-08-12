@@ -22,6 +22,8 @@ pub enum Error/* <'a> */ {
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
 	TypeMismatch,
+	EntryDuplicate { name: String },
+	TooManyUnnamedArgs,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,

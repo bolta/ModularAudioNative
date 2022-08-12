@@ -12,6 +12,12 @@ pub enum Statement {
 pub type AssocArray = Vec<(String, Box<Expr>)>;
 
 #[derive(Debug)]
+pub struct Args {
+	pub unnamed: Vec<Box<Expr>>,
+	pub named: AssocArray,
+}
+
+#[derive(Debug)]
 pub enum Expr {
 	Connect { lhs: Box<Expr>, rhs: Box<Expr> },
 	Power { lhs: Box<Expr>, rhs: Box<Expr> },
@@ -30,8 +36,8 @@ pub enum Expr {
 	Or { lhs: Box<Expr>, rhs: Box<Expr> },
 	Identifier(String),
 	Lambda { input_param: String, body: Box<Expr> },
-	FunctionCall { function: Box<Expr>, unnamed_args: Vec<Box<Expr>>, named_args: AssocArray },
-	NodeWithArgs { node_def: Box<Expr>, label: String, args: AssocArray /* ctor_params: AssocArray, signal_params: AssocArray */ },
+	FunctionCall { function: Box<Expr>, args: Args },
+	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },
 
 	FloatLiteral(f32),
 	TrackSetLiteral(Vec<String>),

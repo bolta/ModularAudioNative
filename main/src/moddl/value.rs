@@ -6,7 +6,10 @@ use crate::{
 	wave::waveform_host::WaveformIndex,
 };
 
-use std::rc::Rc;
+use std::{
+	collections::HashMap,
+	rc::Rc,
+};
 
 // TODO 仮置き
 use crate::calc::*;
@@ -44,7 +47,7 @@ pub enum NodeStructure {
 	NodeWithArgs {
 		factory: Box<NodeStructure>,
 		label: String,
-		args: Vec<(String, Value)>,
+		args: HashMap<String, Value>,
 	},
 	NodeFactory(Rc<dyn NodeFactory>),
 	// Constant(f32),

@@ -194,33 +194,36 @@ parser![assoc_array_literal, Box<Expr>, {
 	)
 }];
 
-parser![function_args, (Vec<Box<Expr>>, AssocArray), {
-	alt((
-		map_res(
-			ss!(separated_list1(ss!(char(',')), ss!(named_entry()))),
-			|named_args| ok((vec![], named_args)),
-		),
-		map_res(
-			tuple((
-				separated_list0(
-					ss!(char(',')),
-					// 識別子はそれだけ見ても式（unnamed_args の一部）なのか引数名（named_args の一部）なのか
-					// 区別できないので、直後に : があるかどうか（あれば引数名）で判別する
-					ss!(terminated(
-						expr(),
-						peek(not(char(':'))),
-					)),
-				),
-				opt(
-					preceded(
+parser![args, Args, {
+	terminated(
+		alt((
+			map_res(
+				ss!(separated_list1(ss!(char(',')), ss!(named_entry()))),
+				|named| ok(Args { unnamed: vec![], named }),
+			),
+			map_res(
+				tuple((
+					separated_list0(
 						ss!(char(',')),
-						separated_list1(ss!(char(',')), ss!(named_entry())),
-					)
-				),
-			)),
-			|(unnamed_args, named_args)| ok((unnamed_args, named_args.unwrap_or_else(|| vec![]))),
-		),
-	))
+						// 識別子はそれだけ見ても式（unnamed_args の一部）なのか引数名（named_args の一部）なのか
+						// 区別できないので、直後に : があるかどうか（あれば引数名）で判別する
+						ss!(terminated(
+							expr(),
+							peek(not(char(':'))),
+						)),
+					),
+					opt(
+						preceded(
+							ss!(char(',')),
+							separated_list1(ss!(char(',')), ss!(named_entry())),
+						)
+					),
+				)),
+				|(unnamed, named)| ok(Args { unnamed, named: named.unwrap_or_else(|| vec![]) }),
+			),
+		)),
+		opt(ss!(char(','))),
+	)
 }];
 
 parser![function_call, Box<Expr>, {
@@ -229,20 +232,16 @@ parser![function_call, Box<Expr>, {
 			si!(labeled_expr()),
 			opt(delimited(
 				ss!(char('(')),
-				ss!(function_args()),
-				tuple((
-					opt(ss!(char(','))),
-					si!(char(')')),
-				)),
+				ss!(args()),
+				si!(char(')')),
 			)),
 		)),
 		|(x, args)| ok(match args {
 			None => x,
-			Some((unnamed_args, named_args)) => {
+			Some(args) => {
 				Box::new(Expr::FunctionCall {
 					function: x,
-					unnamed_args,
-					named_args,
+					args,
 				})
 			},
 		}),
@@ -251,24 +250,27 @@ parser![function_call, Box<Expr>, {
 
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
-			tuple((
-				si!(function_call()),
-				opt(si!(assoc_array_literal())),
-			)),
-			|(x, assoc)| ok(match assoc {
-				None => x,
-				Some(assoc) => {
-					let args = match *assoc {
-						Expr::AssocArrayLiteral(args) => args,
-						_ => unreachable!(),
-					};
-					Box::new(Expr::NodeWithArgs {
-						node_def: x,
-						label: "".to_string(), // 未使用
-						args
-					})
-				},
-			}))
+		tuple((
+			si!(function_call()),
+			opt(
+				delimited(
+					ss!(char('{')),
+					si!(args()),
+					si!(char('}')),
+				)
+			),
+		)),
+		|(x, args)| ok(match args {
+			None => x,
+			Some(args) => {
+				Box::new(Expr::NodeWithArgs {
+					node_def: x,
+					label: "".to_string(), // 未使用
+					args,
+				})
+			},
+		}),
+	)
 }];
 
 binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| Expr::Connect { lhs, rhs }];
@@ -402,4 +404,13 @@ abc o4l8v15 cde
 ";
 	assert!(compilation_unit()(moddl).is_ok());
 	
+}
+
+// TODO ちゃんとテストする
+#[cfg(test)]
+#[test]
+fn test_args() {
+	let moddl = r"foo: 42, bar: a";
+	let result = args()(moddl);
+	assert!(result.is_ok());
 }

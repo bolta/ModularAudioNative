@@ -183,12 +183,18 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 	nodes.add(Box::new(PortAudioOut::new(master)));
+	// nodes.add(Box::new(crate::node::file::WavFileOut::new(master, "out.wav".to_string())));
+	// nodes.add(Box::new(NullOut::new(master)));
 	// TODO タグ名共通化
 	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
 	// nodes.add(Box::new(Print::new(master)));
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
+
+	let start = std::time::Instant::now();
 	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms);
+	let end = std::time::Instant::now();
+	println!("{:?}", end.duration_since(start));
 
 	Ok(())
 }
@@ -373,12 +379,12 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
-		let mut make_node_args = |args: &Vec<(String, Value)>, fact: &Rc<dyn NodeFactory>/* , label: String */|
+		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
 				-> ModdlResult<HashMap<String, ChanneledNodeIndex>> {
 			let specs = fact.node_arg_specs();
 			let mut node_args = NodeArgs::new();
 			for NodeArgSpec { name, channels, default } in specs {
-				let arg_val = args.iter().find(|(n, _)| *n == *name );
+				let arg_val = args.iter().find(|(n, _)| **n == *name );
 				let strukt = if let Some(arg_val) = arg_val {
 					arg_val.1.as_node_structure()
 							// node_args に指定された引数なのに NodeStructure に変換できない
@@ -437,7 +443,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			NodeStructure::NodeFactory(fact) => {
-				let node_args = make_node_args(&vec![], fact) ?;
+				let node_args = make_node_args(&HashMap::new(), fact) ?;
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
 			NodeStructure::NodeWithArgs { factory, label, args } => {

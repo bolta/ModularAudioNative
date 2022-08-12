@@ -63,26 +63,33 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		Expr::TrackSetLiteral(tracks) => Ok(Value::TrackSet(tracks.clone())),
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
-		Expr::FunctionCall { function, unnamed_args, named_args } => {
+		Expr::FunctionCall { function, args } => {
 			let function = evaluate(function, vars)?.as_function().ok_or_else(|| Error::TypeMismatch) ?;
 
 			// TODO unnamed_args も使う
 			let mut value_args = HashMap::<String, Value>::new();
-			for (name, expr) in named_args {
+			for (name, expr) in &args.named {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
 			function.call(&value_args)
 		},
 		Expr::NodeWithArgs { node_def, label, args } => {
+			let factory = evaluate_as_node_structure(node_def, vars) ?;
+			let arg_names = match &factory {
+				NodeStructure::NodeFactory(factory) => factory.node_arg_specs(),
+				_ => return Err(Error::TypeMismatch),
+			}.iter().map(|spec| spec.name.clone()).collect();
+			let resolved_args = resolve_args(&arg_names, args) ?;
+
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
-			let mut value_args = vec![];
-			for (name, expr) in args {
-				value_args.push((name.clone(), evaluate(expr, vars) ?));
+			let mut value_args = HashMap::new();
+			for (name, expr) in &resolved_args {
+				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
 			Ok(Value::NodeStructure(NodeStructure::NodeWithArgs {
-				factory: Box::new(evaluate_as_node_structure(node_def, vars) ?),
+				factory: Box::new(factory),
 				label: label.clone(),
 				args: value_args,
 			}))
@@ -132,4 +139,27 @@ fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
 }
 fn evaluate_as_node_structure(expr: &Expr, vars: &mut VarStack) -> ModdlResult<NodeStructure> {
 	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
+}
+
+/**
+ * 引数名を省略した実引数を、要求された引数リストと照合して解決することで、全ての引数を「引数名」と「式」の対応関係にする。
+ * 引数の重複もチェックする（引数名が省略されていても解決してからチェックする）
+ */
+fn resolve_args<'a>(arg_names: &'a Vec<String>, args: &'a Args) -> ModdlResult<HashMap<String, &'a Box<Expr>>> {
+	let mut result = HashMap::<String, &'a Box<Expr>>::new();
+	let mut add = |name: &String, expr: &'a Box<Expr>| -> ModdlResult<()> {
+		if result.contains_key(name) { return Err(Error::EntryDuplicate { name: name.clone() }); }
+
+		result.insert(name.clone(), expr);
+		Ok(())
+	};
+
+	// TODO 無名引数の過剰チェックをするなら未知の引数もエラーにする。しないならしない。で統一する
+	// if args.unnamed.len() > arg_names.len() { return Err(Error::TooManyUnnamedArgs) };
+
+	let mut unnamed_args = arg_names.iter().zip(& args.unnamed);
+	unnamed_args.try_for_each(|(name, arg)| add(name, arg)) ?;
+	args.named.iter().try_for_each(|(name, arg)| add(name, arg)) ?;
+
+	Ok(result)
 }
