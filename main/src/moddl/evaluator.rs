@@ -48,6 +48,7 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		},
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
 		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
+		Expr::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
 		Expr::Lambda { input_param, body } => {
 			vars.push_clone();
 			vars.top_mut().insert(input_param.clone(), Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }));
@@ -123,7 +124,7 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 			(Some(l_float), Some(r_float)) => {
 				return Ok(Value::Float(C::calc(&vec![l_float, r_float])));
 			}
-			_ => { }
+			_ => { } // 下へ
 		}
 	}
 
@@ -132,6 +133,34 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	Ok(Value::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
+	}))
+}
+
+fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
+	let cond_val = evaluate(cond, vars) ?;
+	let then_val = evaluate(then, vars) ?;
+	let else_val = evaluate(els, vars) ?;
+
+	// 定数はコンパイル時に計算する。
+	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
+	// TODO まだ最適化の余地あり：3 つとも定数でなくても、cond さえ定数であれば（かつラベルがなければ）
+	// TODO   どちらになるかはコンパイル時に決めれるはず。追々作り込む
+	if cond_val.label().is_none() && then_val.label().is_none() && else_val.label().is_none() {
+		match (cond_val.as_boolean(), then_val.as_float(), else_val.as_float()) {
+			(Some(cond_bool), Some(then_float), Some(else_float)) => {
+				return Ok(Value::Float(if cond_bool { then_float } else { else_float }));
+			}
+			_ => { } // 下へ
+		}
+	}
+
+	let cond_str = as_node_structure(&cond_val) ?;
+	let then_str = as_node_structure(&then_val) ?;
+	let else_str = as_node_structure(&else_val) ?;
+	Ok(Value::NodeStructure(NodeStructure::Condition {
+		cond: Box::new(cond_str),
+		then: Box::new(then_str),
+		els: Box::new(else_str),
 	}))
 }
 

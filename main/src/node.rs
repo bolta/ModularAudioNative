@@ -1,5 +1,6 @@
 pub mod arith;
 pub mod audio;
+pub mod cond;
 pub mod envelope;
 pub mod event_scheduler;
 pub mod file;

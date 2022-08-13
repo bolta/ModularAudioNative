@@ -426,6 +426,16 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				recurse!(rhs, l_node)
 			},
 
+			NodeStructure::Condition { cond, then, els } => {
+				let cond_result = recurse!(cond, input) ?;
+				let then_result = recurse!(then, input) ?;
+				let else_result = recurse!(els, input) ?;
+
+				// TODO ステレオ対応（入力のどれかがステレオならステレオに拡張する）
+				add_node!(Box::new(Condition::new(
+						cond_result.as_mono(), then_result.as_mono(), else_result.as_mono())))
+			},
+
 			NodeStructure::Lambda { input_param, body } => {
 				placeholders.push_clone();
 				placeholders.top_mut().insert(input_param.clone(), input);

@@ -43,6 +43,7 @@ impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 pub enum NodeStructure {
 	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<NodeStructure>> },
 	Connect(Box<NodeStructure>, Box<NodeStructure>),
+	Condition { cond: Box<NodeStructure>, then: Box<NodeStructure>, els: Box<NodeStructure> },
 	Lambda { input_param: String, body: Box<NodeStructure> },
 	NodeWithArgs {
 		factory: Box<NodeStructure>,

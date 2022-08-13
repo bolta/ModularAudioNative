@@ -35,6 +35,7 @@ pub enum Expr {
 	And { lhs: Box<Expr>, rhs: Box<Expr> },
 	Or { lhs: Box<Expr>, rhs: Box<Expr> },
 	Identifier(String),
+	Condition { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
 	Lambda { input_param: String, body: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
 	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },

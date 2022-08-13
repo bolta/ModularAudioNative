@@ -1,0 +1,6 @@
+@tempo 120
+
+@instrument ^a, (if 1@cond then sawOsc else pulseOsc) * adsrEnv { 0, 0.5, 0, 0 }
+
+a o4l8v15
+a cdefg ycond,-1 cdefg

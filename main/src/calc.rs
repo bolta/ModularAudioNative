@@ -10,7 +10,7 @@ pub trait Calc {
 
 // TODO 定数を ModDL と共通化
 fn bool_to_sample(b: bool) -> Sample { if b { 1f32 } else { -1f32 } }
-fn sample_to_bool(s: Sample) -> bool { s > 0f32 }
+pub fn sample_to_bool(s: Sample) -> bool { s > 0f32 }
 fn bool_binary(lhs: Sample, rhs: Sample, op: fn (lhs: bool, rhs: bool) -> bool) -> Sample {
 	bool_to_sample(op(sample_to_bool(lhs), sample_to_bool(rhs)))
 }

@@ -60,6 +60,27 @@ parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
 }];
+// 専用の構文は必要なかったかも…短絡評価は不要なので、関数で if(cond, then, else) でもよかったかも
+// （括弧を減らせるのはメリットと思われるけど）
+parser![conditional_expr, Box<Expr>, {
+	map_res(
+		tuple((
+			preceded(
+				ss!(tag("if")),
+				ss!(expr()),
+			),
+			preceded(
+				ss!(tag("then")),
+				ss!(expr()),
+			),
+			preceded(
+				ss!(tag("else")),
+				ss!(expr()),
+			),
+		)),
+		|(cond, then, els)| ok(Box::new(Expr::Condition { cond, then, els })),
+	)
+}];
 parser![lambda_expr, Box<Expr>, {
 	map_res(
 		preceded(
@@ -102,6 +123,7 @@ parser![primary_expr, Box<Expr>, {
 		track_set_literal(),
 		identifier_literal(),
 		string_literal(),
+		conditional_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		lambda_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		identifier_expr(),
 		parenthesized_expr(),
