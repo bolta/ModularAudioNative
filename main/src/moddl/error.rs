@@ -25,6 +25,7 @@ pub enum Error/* <'a> */ {
 	EntryDuplicate { name: String },
 	TooManyUnnamedArgs,
 	TooManyTracks,
+	GrooveTargetDuplicate { track: String },
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,

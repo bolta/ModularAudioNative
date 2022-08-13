@@ -19,6 +19,7 @@ use crate::{
 	},
 	node::{
 		audio::*,
+		cond::*,
 		prim::*,
 		stereo::*,
 		system::*,
@@ -73,6 +74,7 @@ enum MuteSolo { Mute, Solo }
 enum TrackSpec {
 	Instrument(NodeStructure),
 	Effect(HashSet<String>, NodeStructure),
+	Groove { id: String, target_tracks: HashSet<String>, body: NodeStructure },
 }
 
 struct PlayerContext {
@@ -83,6 +85,8 @@ struct PlayerContext {
 	track_specs: Vec<(String, TrackSpec)>,
 	// effect に接続されていない、「末端」であるトラック。master でミックスする対象
 	terminal_tracks: HashSet<String>,
+	grooves: HashMap<String, String>, // トラックに対する Tick のタグ名
+	groove_cycle: i32,
 	// トラックごとの MML を蓄積
 	mmls: BTreeMap<String, String>,
 	waveforms: WaveformHost,
@@ -117,11 +121,13 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		tempo: 120f32,
 		ticks_per_bar: 384,
 		track_specs: vec![],
-		terminal_tracks: HashSet::<String>::new(),
-		mmls: BTreeMap::<String, String>::new(),
+		terminal_tracks: HashSet::new(),
+		grooves: HashMap::new(),
+		groove_cycle: 384,
+		mmls: BTreeMap::new(),
 		waveforms: WaveformHost::new(),
 		mute_solo: MuteSolo::Mute,
-		mute_solo_tracks: HashSet::<String>::new(),
+		mute_solo_tracks: HashSet::new(),
 		vars: VarStack::init(builtin_vars()),
 	};
 
@@ -132,7 +138,14 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut nodes = NodeHost::new();
 	// TODO タグ名を sequence_generator と共通化
 	let tempo = nodes.add_with_tag("#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
-	nodes.add(Box::new(Tick::new(tempo.as_mono(), pctx.ticks_per_bar, TAG_SEQUENCER.to_string())));
+	let cycle = 384/8;
+	let timer = nodes.add(Box::new(TickTimer::new(tempo.as_mono(), pctx.ticks_per_bar, cycle))).as_mono();
+
+	// let groove = nodes.add(Box::new(ExperGroove::new(timer.as_mono())));
+	// nodes.add(Box::new(Tick::new(groove.as_mono(), cycle, TAG_SEQUENCER.to_string())));
+
+	// TODO even groove を誰も使わない場合は省略
+	nodes.add(Box::new(Tick::new(timer, cycle, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = HashMap::<String, ChanneledNodeIndex>::new();
 
@@ -142,25 +155,35 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		let output_node = {
 			// @mute で指定されているか、@solo で指定されていなければ、ミュート対象
 			if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) {
-				nodes.add(Box::new(Constant::new(0f32)))
+				Some(nodes.add(Box::new(Constant::new(0f32))))
 			} else {
+				let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
 				match spec {
 					TrackSpec::Instrument(structure) => {
-							build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &mut nodes/* , &mut output_nodes */,
-									&mut PlaceholderStack::init(HashMap::new())) ?
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes/* , &mut output_nodes */,
+								&mut PlaceholderStack::init(HashMap::new()), None) ?)
 					}
 					TrackSpec::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
-						build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &mut nodes,
-								&mut placeholders) ?
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes,
+								&mut placeholders, None) ?)
+					}
+					TrackSpec::Groove { id, target_tracks, body } => {
+						let groovy_timer = build_nodes_by_mml(track.as_str(), body, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
+						nodes.add(Box::new(Tick::new(groovy_timer, cycle, seq_tag.clone())));
+
+						None
 					}
 				}
 			}
 		};
-		output_nodes.insert(track.clone(), output_node);
+		match output_node {
+			Some(node) => { output_nodes.insert(track.clone(), node); },
+			None => { },
+		};
 	}
 
 	let mut terminal_tracks: Vec<&String> = pctx.terminal_tracks.iter().collect();
@@ -242,6 +265,31 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					// TODO finally にする
 					pctx.vars.pop();
 				}
+				"grooveCycle" => {
+					(*pctx).groove_cycle = evaluate_arg(&args, 0, &mut pctx.vars)?.as_float()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ? as i32;
+				},
+				"groove" => {
+					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					if tracks.len() != 1 { return Err(Error::TooManyTracks); }
+					let control_track = &tracks[0];
+					let target_tracks = evaluate_arg(&args, 1, &mut pctx.vars)?.as_track_set()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let body = evaluate_arg(&args, 2, &mut pctx.vars)?.as_node_structure()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					pctx.add_track_spec(control_track, TrackSpec::Groove {
+						id: control_track.clone(),
+						target_tracks: target_tracks.iter().map(|t| t.clone()).collect(),
+						body,
+					} ) ?;
+					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
+					pctx.grooves.insert(control_track.clone(), make_seq_id(Some(&control_track)));
+					for track in &target_tracks {
+						if pctx.grooves.contains_key(track) { return Err(Error::GrooveTargetDuplicate { track: track.clone() }); }
+						pctx.grooves.insert(track.clone(), make_seq_id(Some(&control_track)));
+					}
+				}
 				"let" => {
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
@@ -298,6 +346,12 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 
 	Ok(())
 }
+fn make_seq_id(track: Option<&String>) -> String {
+	match track {
+		None => "#seq".to_string(),
+		Some(track) => format!("#seq_{}", track),
+	}
+}
 
 fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerContext) {
 	(*pctx).mute_solo = mute_solo;
@@ -315,7 +369,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &mut VarStack) -> ModdlRes
 	}
 }
 
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, nodes: &mut NodeHost/* , output_nodes: &mut Vec<ChanneledNodeIndex> */, placeholders: &mut PlaceholderStack)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut NodeHost/* , output_nodes: &mut Vec<ChanneledNodeIndex> */, placeholders: &mut PlaceholderStack, override_input: Option<MonoNodeIndex>)
 		-> ModdlResult<ChanneledNodeIndex> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
@@ -325,9 +379,12 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		note: track.to_string(),
 	};
 	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
-	let _seqr = nodes.add_with_tag(TAG_SEQUENCER.to_string(), Box::new(Sequencer::new(seqs)));
+	let _seqr = nodes.add_with_tag(seq_tag.to_string(), Box::new(Sequencer::new(seqs)));
 
-	let freq = nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32)));
+	let input = match override_input {
+		Some(input) => input.channeled(),
+		None => nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32))),
+	};
 
 	// セント単位のデチューン
 	// freq_detuned = freq * 2 ^ (detune / 1200)
@@ -338,7 +395,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	let const_2 = nodes.add(Box::new(Constant::new(2f32)));
 	let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
 
-	let freq_detuned = multiply(Some(track), nodes, freq, freq_ratio) ?; // 必ず成功するはず
+	let freq_detuned = multiply(Some(track), nodes, input, freq_ratio) ?; // 必ず成功するはず
 	// デチューンを使う場合、入力が freq から freq_detuned に変わる
 	let instrm = build_instrument(track, instrm_def, nodes, /* freq */freq_detuned, placeholders) ?;
 	// TODO タグ名は feature requirements として generate_sequences の際に受け取る

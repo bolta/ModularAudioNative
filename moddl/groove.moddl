@@ -1,0 +1,28 @@
+@tempo 124
+
+@let `ticksPerBar`, 384
+@ticksPerBar ticksPerBar
+@grooveCycle ticksPerBar / 8
+
+// ハイハットだけ跳ね（c16c16 → c12c24）、キックとスネアはイーブンのまま
+@groove ^G, ^h, node (x) if x < ticksPerBar / 16
+		then x * (ticksPerBar / 24) / (ticksPerBar / 16)
+		else x * (ticksPerBar / 12) / (ticksPerBar / 16) - ticksPerBar / 24
+
+@let `bBoost`, 2.5
+@let `sBoost`, 3.5
+@instrument ^h, uniformNoise | hpf { cutoff: 8000, q: 4 } * adsrEnv { decay: 0.15, sustain: 0, release: 0.2 } ^ 2
+@instrument ^s, ((190 | triangleOsc * (37 - 35 * adsrEnv { decay: 0.07, sustain: 0 }) | triangleOsc) * adsrEnv { decay: 0.07, sustain: 0 } + uniformNoise | lpf {cutoff: 10000, q: 1} * adsrEnv { decay: 0.2, sustain: 0 } * 0.2) | limit { min: -1 / sBoost, max: 1 / sBoost } * sBoost
+@instrument ^b, (50 + 120 * adsrEnv { decay: 0.1, sustain: 0} ^ 2) | sineOsc | limit { min: -1 / bBoost, max: 1 / bBoost } * bBoost * adsrEnv { decay: 0.2, sustain: 0 }
+
+
+// TODO 何か「演奏」しないと job starting が大量に出る。実害はないのかもだが
+G [0 c1^1^1^1^1^1^1^1]
+
+h l8q4v13
+s l16v12
+b l4v15
+
+h l16[0 ccc8c8c8c8ccc8c8]
+s l16[0 r4cc8.r4cc8.]
+b l16[0 c8cc^8.c^cc8^8.c]
