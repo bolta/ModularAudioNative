@@ -75,7 +75,7 @@ parser![conditional_expr, Box<Expr>, {
 			),
 			preceded(
 				ss!(tag("else")),
-				ss!(expr()),
+				si!(expr()),
 			),
 		)),
 		|(cond, then, els)| ok(Box::new(Expr::Condition { cond, then, els })),
