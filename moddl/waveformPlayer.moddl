@@ -1,10 +1,7 @@
 @tempo 132
 
-// TODO 元の音からやけに音質が変わる…なぜだろう
-//@waveform `melo`, "H:/Dropbox/sounds/roland/C3ELGPNO.WAV"
-
-// 他の音色だとそうでもないんだけど
-@waveform `melo`, "H:/Dropbox/sounds/roland/C3RHDPNO.WAV"
+@waveform `melo`, "d:/Dropbox/sounds/roland/C3ELGPNO.WAV"
+//@waveform `melo`, "d:/Dropbox/sounds/roland/C3RHDPNO.WAV"
 
 @instrument ^ab, waveformPlayer(waveform: melo) { }
 

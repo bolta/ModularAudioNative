@@ -45,19 +45,19 @@ fn convert_data(wav_data: &BitDepth) -> Vec<Sample> {
 			let src_min = u8::MIN as f32 + 1f32; // TODO MIN と MIN + 1 は同一視、でいい？
 			let src_range = u8::MAX as f32 + 1f32 - src_min; // TODO 上端の処理これでいいか？
 
-			wav_data.iter().map(|w| ((*w as f32 - src_min) as f32 * dest_range / src_range).max(dest_min).min(dest_max)).collect()
+			wav_data.iter().map(|w| ((*w as f32 - src_min) as f32 * dest_range / src_range + dest_min).max(dest_min).min(dest_max)).collect()
 		}
 		BitDepth::Sixteen(wav_data) => {
 			let src_min = i16::MIN as f32 + 1f32; // TODO MIN と MIN + 1 は同一視、でいい？
 			let src_range = i16::MAX as f32 + 1f32 - src_min; // TODO 上端の処理これでいいか？
 
-			wav_data.iter().map(|w| ((*w as f32 - src_min) as f32 * dest_range / src_range).max(dest_min).min(dest_max)).collect()
+			wav_data.iter().map(|w| (((*w as f32) - src_min) as f32 * dest_range / src_range + dest_min).max(dest_min).min(dest_max)).collect()
 		}
 		BitDepth::TwentyFour(wav_data) => {
 			let src_min = i32::MIN as f32 + 1f32; // TODO MIN と MIN + 1 は同一視、でいい？
 			let src_range = i32::MAX as f32 + 1f32 - src_min; // TODO 上端の処理これでいいか？
 
-			wav_data.iter().map(|w| ((*w as f32 - src_min) as f32 * dest_range / src_range).max(dest_min).min(dest_max)).collect()
+			wav_data.iter().map(|w| ((*w as f32 - src_min) as f32 * dest_range / src_range + dest_min).max(dest_min).min(dest_max)).collect()
 		}
 		BitDepth::ThirtyTwoFloat(wav_data) => {
 			// > 浮動小数点数で格納される場合、慣習からデータ値の範囲は-1.0から+1.0に限られる
