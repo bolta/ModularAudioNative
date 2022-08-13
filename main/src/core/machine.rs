@@ -43,7 +43,8 @@ impl Machine {
 				.map(|node| node.upstreams())
 				.collect();
 
-		let (value_offsets, value_count, max_channels) = {
+		// TODO max_channels 不要？
+		let (value_offsets, value_count, _max_channels) = {
 			let mut value_offsets = HashMap::<NodeIndex, ValueIndex>::new();
 			let mut next_val = ValueIndex(0_usize);
 			let mut max_channels = 0_usize;

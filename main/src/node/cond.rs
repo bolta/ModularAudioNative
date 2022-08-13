@@ -3,10 +3,8 @@ use crate::{
 	core::{
 		common::*,
 		context::*,
-		event::*,
 		machine::*,
 		node::*,
-		node_factory::*,
 	},
 };
 use node_macro::node_impl;
@@ -33,7 +31,7 @@ impl Node for Condition {
 		let cond = sample_to_bool(inputs[0]);
 		let then = inputs[1];
 		let els = inputs[2];
-		output_mono(output, if (cond) { then } else { els });
+		output_mono(output, if cond { then } else { els });
 	}
 }
 // pub struct ConditionFactory { }

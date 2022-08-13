@@ -12,7 +12,6 @@ use crate::{
 };
 
 use std::{
-	any::TypeId,
 	collections::hash_map::HashMap,
 	rc::Rc,
 };

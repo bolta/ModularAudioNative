@@ -39,7 +39,7 @@ impl Node for Tick {
 		// 同じ処理を 2 回書いたりサンプル数に +1 したりしなくてよくなるように
 		self.tick(env);
 	}
-	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn update(&mut self, inputs: &Vec<Sample>, _context: &Context, env: &mut Environment) {
 		let timer = inputs[0].floor();
 		while self.prev_tick_no < timer {
 			self.tick(env);
@@ -73,9 +73,8 @@ impl Node for TickTimer {
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.timer);
 	}
-	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
 		let tempo = inputs[0];
-// dbg!(self.timer);
 		self.timer = self.timer % self.cycle + tempo * self.ticks_per_bar as f32 / 240f32 / context.sample_rate_f32();
 	}
 }

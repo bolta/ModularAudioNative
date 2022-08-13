@@ -421,15 +421,6 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 			// トラックに属する node は全てトラック名のタグをつける
 			($new_node: expr) => { Ok(nodes.add_with_tag(track.to_string(), $new_node)) }
 		}
-		macro_rules! binary {
-			($create_node: ident, $lhs: expr, $rhs: expr) => {
-				{
-					let l_node = recurse!($lhs, input) ?;
-					let r_node = recurse!($rhs, input) ?;
-					$create_node(Some(track), nodes, l_node, r_node)
-				}
-			}
-		}
 
 		// ノードの引数をデフォルトを考慮して解決する
 		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
@@ -509,7 +500,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				let node_args = make_node_args(&HashMap::new(), fact) ?;
 				apply_input(Some(track), nodes, fact, &node_args, input)
 			},
-			NodeStructure::NodeWithArgs { factory, label, args } => {
+			NodeStructure::NodeWithArgs { factory, label: _, args } => {
 				// 引数ありのノード生成
 				let fact = match &**factory {
 					NodeStructure::NodeFactory(fact) => Ok(fact),
@@ -631,7 +622,7 @@ fn create_calc_node(
 
 	// 引数にモノラルとステレオが混在していたらモノラルをステレオに拡張
 	// TODO モノラル以外動作確認が不十分…
-	enum ChannelCombination { AllMono, AllStereo, MonoAndStereo, Other };
+	enum ChannelCombination { AllMono, AllStereo, MonoAndStereo, Other }
 	let any_mono = arg_nodes.iter().any(|n| n.channels() == 1);
 	let any_stereo = arg_nodes.iter().any(|n| n.channels() == 2);
 	let any_unknown = arg_nodes.iter().any(|n| n.channels() != 1 && n.channels() != 2);

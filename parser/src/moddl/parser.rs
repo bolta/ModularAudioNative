@@ -199,22 +199,22 @@ parser![named_entry, (String, Box<Expr>), {
 	)
 }];
 
-parser![assoc_array_literal, Box<Expr>, {
-	map_res(
-			// 連想配列の中は改行を許す（これだけだと式の中で改行できないので不完全だが…）
-			preceded(
-				ss!(char('{')),
-				terminated(
-					separated_list0(ss!(char(',')), ss!(named_entry())),
-					tuple((
-						opt(ss!(char(','))),
-						si!(char('}')),
-					))
-				)
-			),
-			|entries| ok(Box::new(Expr::AssocArrayLiteral(entries)))
-	)
-}];
+// parser![assoc_array_literal, Box<Expr>, {
+// 	map_res(
+// 			// 連想配列の中は改行を許す（これだけだと式の中で改行できないので不完全だが…）
+// 			preceded(
+// 				ss!(char('{')),
+// 				terminated(
+// 					separated_list0(ss!(char(',')), ss!(named_entry())),
+// 					tuple((
+// 						opt(ss!(char(','))),
+// 						si!(char('}')),
+// 					))
+// 				)
+// 			),
+// 			|entries| ok(Box::new(Expr::AssocArrayLiteral(entries)))
+// 	)
+// }];
 
 parser![args, Args, {
 	terminated(
