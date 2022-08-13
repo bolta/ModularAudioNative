@@ -1,0 +1,11 @@
+@tempo 120
+
+@let `thres`, 0.5@thres
+@instrument ^a, sineOsc | (node (x)
+		if x < -1*thres then -1*thres // -thres と書けない…
+		else if thres < x then thres
+		else x) / thres * adsrEnv
+
+a o4l8v15
+a cdefg
+a ythres,0.1 cdefg
