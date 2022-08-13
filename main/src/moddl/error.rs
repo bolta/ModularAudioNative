@@ -24,6 +24,7 @@ pub enum Error/* <'a> */ {
 	TypeMismatch,
 	EntryDuplicate { name: String },
 	TooManyUnnamedArgs,
+	TooManyTracks,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,
