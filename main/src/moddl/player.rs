@@ -74,7 +74,7 @@ enum MuteSolo { Mute, Solo }
 enum TrackSpec {
 	Instrument(NodeStructure),
 	Effect(HashSet<String>, NodeStructure),
-	Groove { id: String, target_tracks: HashSet<String>, body: NodeStructure },
+	Groove(NodeStructure),
 }
 
 struct PlayerContext {
@@ -171,8 +171,8 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes,
 								&mut placeholders, None) ?)
 					}
-					TrackSpec::Groove { id, target_tracks, body } => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), body, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
+					TrackSpec::Groove(structure) => {
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
 						nodes.add(Box::new(Tick::new(groovy_timer, cycle, seq_tag.clone())));
 
 						None
@@ -278,11 +278,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let body = evaluate_arg(&args, 2, &mut pctx.vars)?.as_node_structure()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					pctx.add_track_spec(control_track, TrackSpec::Groove {
-						id: control_track.clone(),
-						target_tracks: target_tracks.iter().map(|t| t.clone()).collect(),
-						body,
-					} ) ?;
+					pctx.add_track_spec(control_track, TrackSpec::Groove(body)) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
 					pctx.grooves.insert(control_track.clone(), make_seq_id(Some(&control_track)));
 					for track in &target_tracks {
