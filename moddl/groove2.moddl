@@ -1,0 +1,28 @@
+@tempo 124
+
+@let `ticksPerBar`, 384
+@ticksPerBar ticksPerBar
+@grooveCycle ticksPerBar / 8
+// 8 分音符を ratio : 1 - ratio で跳ねさせる
+@let `ratio`, 0.5@ratio
+@let `bounce`, node (x) if x < ticksPerBar / 16
+		then 2 * (1 - ratio) * x
+		else 2 * ratio * x + (1 - 2 * ratio) * (ticksPerBar / 8)
+
+@groove ^G, ^bsh, bounce
+
+@let `bBoost`, 2.5
+@let `sBoost`, 3.5
+@instrument ^h, uniformNoise | hpf { cutoff: 8000, q: 4 } * adsrEnv { decay: 0.15, sustain: 0, release: 0.2 } ^ 2
+@instrument ^s, ((190 | triangleOsc * (37 - 35 * adsrEnv { decay: 0.07, sustain: 0 }) | triangleOsc) * adsrEnv { decay: 0.07, sustain: 0 } + uniformNoise | lpf {cutoff: 10000, q: 1} * adsrEnv { decay: 0.2, sustain: 0 } * 0.2) | limit { min: -1 / sBoost, max: 1 / sBoost } * sBoost
+@instrument ^b, (50 + 120 * adsrEnv { decay: 0.1, sustain: 0} ^ 2) | sineOsc | limit { min: -1 / bBoost, max: 1 / bBoost } * bBoost * adsrEnv { decay: 0.2, sustain: 0 }
+
+G [0 r1 yratio,0.67 r1 yratio,0.9 r1 yratio,0.33 r1 yratio,0.5 ]
+
+h l8q4v13
+s l16v12
+b l4v15
+
+h l16[0 ccc8c8c8c8ccc8c8]
+s l16[0 r4cc8.r4cc8.]
+b l16[0 c8cc^8.c^cc8^8.c]
