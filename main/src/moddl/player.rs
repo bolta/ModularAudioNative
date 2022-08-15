@@ -138,14 +138,10 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let mut nodes = NodeHost::new();
 	// TODO タグ名を sequence_generator と共通化
 	let tempo = nodes.add_with_tag("#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
-	let cycle = 384/8;
-	let timer = nodes.add(Box::new(TickTimer::new(tempo.as_mono(), pctx.ticks_per_bar, cycle))).as_mono();
-
-	// let groove = nodes.add(Box::new(ExperGroove::new(timer.as_mono())));
-	// nodes.add(Box::new(Tick::new(groove.as_mono(), cycle, TAG_SEQUENCER.to_string())));
+	let timer = nodes.add(Box::new(TickTimer::new(tempo.as_mono(), pctx.ticks_per_bar, pctx.groove_cycle))).as_mono();
 
 	// TODO even groove を誰も使わない場合は省略
-	nodes.add(Box::new(Tick::new(timer, cycle, TAG_SEQUENCER.to_string())));
+	nodes.add(Box::new(Tick::new(timer, pctx.groove_cycle, TAG_SEQUENCER.to_string())));
 
 	let mut output_nodes = HashMap::<String, ChanneledNodeIndex>::new();
 
@@ -173,7 +169,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 					}
 					TrackSpec::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
-						nodes.add(Box::new(Tick::new(groovy_timer, cycle, seq_tag.clone())));
+						nodes.add(Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
 						None
 					}
