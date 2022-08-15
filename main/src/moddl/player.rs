@@ -15,6 +15,7 @@ use crate::{
 		node_host::*,
 	},
 	mml::default::{
+		feature::*,
 		sequence_generator::*,
 	},
 	node::{
@@ -370,36 +371,45 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
+	let (seqs, features) = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
 	let _seqr = nodes.add_with_tag(seq_tag.to_string(), Box::new(Sequencer::new(seqs)));
 
-	let input = match override_input {
+	let mut input = match override_input {
 		Some(input) => input.channeled(),
 		None => nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32))),
 	};
+	if features.contains(&Feature::Detune) {
+		// セント単位のデチューン
+		// freq_detuned = freq * 2 ^ (detune / 1200)
+		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+		let detune = nodes.add_with_tag(format!("{}.#detune", &track), Box::new(Var::new(0f32)));
+		let cents_per_oct = nodes.add(Box::new(Constant::new(1200f32)));
+		let detune_oct = divide(Some(track), nodes, detune, cents_per_oct) ?; // 必ず成功するはず
+		let const_2 = nodes.add(Box::new(Constant::new(2f32)));
+		let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
+		let freq_detuned = multiply(Some(track), nodes, input, freq_ratio) ?; // 必ず成功するはず
+		input = freq_detuned;
+	}
+	
+	let instrm = build_instrument(track, instrm_def, nodes, /* freq */input, placeholders) ?;
 
-	// セント単位のデチューン
-	// freq_detuned = freq * 2 ^ (detune / 1200)
-	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-	let detune = nodes.add_with_tag(format!("{}.#detune", &track), Box::new(Var::new(0f32)));
-	let cents_per_oct = nodes.add(Box::new(Constant::new(1200f32)));
-	let detune_oct = divide(Some(track), nodes, detune, cents_per_oct) ?; // 必ず成功するはず
-	let const_2 = nodes.add(Box::new(Constant::new(2f32)));
-	let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
+	let mut output = instrm;
+	if features.contains(&Feature::Velocity) {
+		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
+		let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
+		let output_vel = multiply(Some(track), nodes, output, vel) ?; // 必ず成功するはず
+		output = output_vel;
+	}
+	if features.contains(&Feature::Volume) {
+		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
+		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
+		let vol = nodes.add_with_tag(format!("{}.#volume", &track), Box::new(Var::new(1f32)));
+		let output_vol = multiply(Some(track), nodes, output, vol) ?; // 必ず成功するはず
+		output = output_vol;
+	}
 
-	let freq_detuned = multiply(Some(track), nodes, input, freq_ratio) ?; // 必ず成功するはず
-	// デチューンを使う場合、入力が freq から freq_detuned に変わる
-	let instrm = build_instrument(track, instrm_def, nodes, /* freq */freq_detuned, placeholders) ?;
-	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-	let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
-	let instrm_vel = multiply(Some(track), nodes, instrm, vel) ?; // 必ず成功するはず
-	// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-	// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-	let vol = nodes.add_with_tag(format!("{}.#volume", &track), Box::new(Var::new(1f32)));
-	let instrm_vel_vol = multiply(Some(track), nodes, instrm_vel, vol) ?; // 必ず成功するはず
-
-	Ok(instrm_vel_vol)
+	Ok(output)
 }
 
 pub type PlaceholderStack = Stack<HashMap<String, ChanneledNodeIndex>>;

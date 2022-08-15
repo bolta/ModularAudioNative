@@ -7,12 +7,16 @@ use crate::{
 		instruction::*,
 		sequence::*,
 	},
+	mml::default::feature::*,
 };
 extern crate parser;
 use parser::mml::ast::*;
 
 use std::{
-	collections::hash_map::HashMap,
+	collections::{
+		hash_map::HashMap,
+		hash_set::HashSet,
+	},
 };
 
 pub struct TagSet {
@@ -35,16 +39,17 @@ pub fn generate_sequences(
 	ticks_per_bar: i32,
 	tag_set: &TagSet,
 	param_prefix: &str,
-) -> HashMap<String, Sequence> {
+) -> (HashMap<String, Sequence>, HashSet<Feature>) {
 	let mut stack = init_stack();
 	let mut var_seq = 0;
 	let mut seq_seq = 0;
-	let mut result = HashMap::<String, Sequence>::new();
+	let mut sequences = HashMap::new();
+	let mut features = HashSet::new();
 
-	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut result,
+	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences, &mut features,
 			param_prefix);
 
-	return result;
+	return (sequences, features);
 }
 
 fn make_name(prefix: &str, count: &mut i32) -> String {
@@ -61,7 +66,8 @@ fn generate_sequence(
 	stack: &mut Stack,
 	var_seq: &mut i32,
 	seq_seq: &mut i32,
-	result: &mut HashMap<String, Sequence>,
+	sequences: &mut HashMap<String, Sequence>,
+	features: &mut HashSet<Feature>,
 	param_prefix: &str,
 ) {
 	let mut seq = vec![];
@@ -106,12 +112,15 @@ fn generate_sequence(
 			}
 			Command::Volume(value) => {
 				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VOLUME, *value / MAX_VOLUME));
+				features.insert(Feature::Volume);
 			}
 			Command::Velocity(value) => {
 				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VELOCITY, *value / MAX_VELOCITY));
+				features.insert(Feature::Velocity);
 			}
 			Command::Detune(value) => {
 				seq.push(make_param_instrc(param_prefix, PARAM_NAME_DETUNE, *value));
+				features.insert(Feature::Detune);
 			}
 			Command::Tempo(value) => {
 				seq.push(make_param_instrc("" /* global */, PARAM_NAME_TEMPO, *value));
@@ -143,7 +152,7 @@ fn generate_sequence(
 				let loop_start = seq.len();
 				stack.push_clone();
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -159,7 +168,7 @@ fn generate_sequence(
 
 					// context1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
@@ -183,7 +192,7 @@ fn generate_sequence(
 				stack.push_clone();
 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
 				let content_name = make_name("seq", seq_seq);
-				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, result, param_prefix);
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
 				seq.push(Instruction::Call { seq_name: content_name });
 				stack.pop();
 			}
@@ -192,7 +201,7 @@ fn generate_sequence(
 	}
 
 println!("{}: {:?}", seq_name.to_string(), &seq);
-	result.insert(seq_name.to_string(), seq);
+	sequences.insert(seq_name.to_string(), seq);
 }
 
 fn make_param_instrc(param_prefix: &str, name: &str, value: f32) -> Instruction {
