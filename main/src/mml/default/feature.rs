@@ -4,5 +4,4 @@ pub enum Feature {
 	Volume,
 	Velocity,
 	Detune,
-	Skip,
 }

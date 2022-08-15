@@ -38,7 +38,13 @@ impl Machine {
 	}
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
-	pub fn play(&mut self, context: &mut Context, nodes: &mut NodeHost, waveforms: &mut WaveformHost) {
+	pub fn play(
+		&mut self,
+		context: &mut Context,
+		nodes: &mut NodeHost,
+		waveforms: &mut WaveformHost,
+		skip_mode_events: Option<Box<dyn Fn () -> Vec<Box<dyn Event>>>>,
+	) {
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
@@ -78,15 +84,40 @@ impl Machine {
 		for node in nodes.nodes_mut().iter_mut() { node.initialize(context, &mut env); }
 
 		println!("playing...");
+		let mut skip = false;
 		'play: loop {
 			'do_events: loop {
 				match events_cons.pop() {
 					None => { break 'do_events; }
 					Some(event) => {
-						let terminate = self.consume_event(event, nodes, context, &mut env);
-						if terminate { break 'play; }
+						let machine_event = self.consume_event(event, nodes, context, &mut env);
+						if let Some(typ) = machine_event {
+							match typ.as_str() {
+								EVENT_TYPE_TERMINATE => break 'play,
+								EVENT_TYPE_ENTER_SKIP_MODE => skip = true,
+								EVENT_TYPE_EXIT_SKIP_MODE => skip = false,
+								_ => println!("unknown machine event: {}", &typ),
+							}
+						}
 					}
 				}
+			}
+
+			// スキップ中の場合はサンプルごとのノードの処理を飛ばす。
+			// ただし状態を先に進めるのに必要なイベントも発行されなくなるので、別途供給を受ける
+			// （必要なイベントとは TickEvent を想定している。Tick が止まると Sequencer が止まり、
+			// スキップから抜けられなくなる）
+			if skip {
+				match skip_mode_events {
+					Some(ref generate_events) => {
+						let events = generate_events();
+						for event in events {
+							env.post_event(event);
+						}
+					},
+					None => panic!("skip mode used but skip mode events not provided"),
+				}
+				continue;
 			}
 
 			for instrc in &instructions {
@@ -136,20 +167,11 @@ impl Machine {
 		}).collect()
 	}
 
-	/// terminate する場合 true
-	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost, context: &Context, env: &mut Environment) -> bool {
+	/// マシン対象のイベントの場合、その名前を返す
+	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost, context: &Context, env: &mut Environment) -> Option<String> {
 		match event.target() {
 			EventTarget::Machine => {
-				let typ = event.event_type();
-				match typ {
-					// TODO 各種イベントの処理
-					EVENT_TYPE_TERMINATE => true,
-		
-					_ => {
-						println!("unknown event type: {}", typ);
-						false
-					}
-				}
+				Some(event.event_type().to_string())
 			}
 			EventTarget::Tag(tag) => {
 				let idxs = nodes.resolve_tag(&tag);
@@ -160,7 +182,7 @@ impl Machine {
 						// }
 				}
 
-				false
+				None
 			}
 		}
 	}
@@ -221,6 +243,18 @@ const EVENT_TYPE_TERMINATE: &str = "Machine::Terminate";
 pub struct TerminateEvent { }
 impl Event for TerminateEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_TERMINATE }
+	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+}
+const EVENT_TYPE_ENTER_SKIP_MODE: &str = "Machine::EnterSkipMode";
+pub struct EnterSkipModeEvent { }
+impl Event for EnterSkipModeEvent {
+	fn event_type(&self) -> &str { EVENT_TYPE_ENTER_SKIP_MODE }
+	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+}
+const EVENT_TYPE_EXIT_SKIP_MODE: &str = "Machine::ExitSkipMode";
+pub struct ExitSkipModeEvent { }
+impl Event for ExitSkipModeEvent {
+	fn event_type(&self) -> &str { EVENT_TYPE_EXIT_SKIP_MODE }
 	fn target(&self) -> &EventTarget { &EventTarget::Machine }
 }
 

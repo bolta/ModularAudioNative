@@ -10,6 +10,7 @@ use crate::{
 	core::{
 		common::*,
 		context::*,
+		event::*,
 		machine::*,
 		node_factory::*,
 		node_host::*,
@@ -94,6 +95,7 @@ struct PlayerContext {
 	mute_solo: MuteSolo,
 	mute_solo_tracks: HashSet<String>,
 	vars: VarStack,
+	seq_tags: HashSet<String>,
 }
 impl PlayerContext {
 	fn get_track_spec(&self, track: &String) -> Option<&TrackSpec> {
@@ -130,6 +132,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		mute_solo: MuteSolo::Mute,
 		mute_solo_tracks: HashSet::new(),
 		vars: VarStack::init(builtin_vars()),
+		seq_tags: HashSet::new(),
 	};
 
 	for stmt in &statements {
@@ -142,7 +145,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let timer = nodes.add(Box::new(TickTimer::new(tempo.as_mono(), pctx.ticks_per_bar, pctx.groove_cycle))).as_mono();
 
 	// TODO even groove を誰も使わない場合は省略
-	nodes.add(Box::new(Tick::new(timer, pctx.groove_cycle, TAG_SEQUENCER.to_string())));
+	nodes.add(Box::new(Tick::new(timer, pctx.groove_cycle, make_seq_tag(None, &mut pctx.seq_tags))));
 
 	let mut output_nodes = HashMap::<String, ChanneledNodeIndex>::new();
 
@@ -154,7 +157,11 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 			if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) {
 				Some(nodes.add(Box::new(Constant::new(0f32))))
 			} else {
-				let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
+				// let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
+				let seq_tag = match pctx.grooves.get(track) {
+					Some(g) => g.clone(),
+					None => make_seq_tag(None, &mut pctx.seq_tags),
+				};
 				match spec {
 					TrackSpec::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes/* , &mut output_nodes */,
@@ -211,8 +218,21 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 
+	let seq_tags = pctx.seq_tags.clone(); // TODO 本来 clone 不要のはず
+	// skip 時にメインループの代わりに tick を提供する関数
+	let skip_mode_events: Box<dyn Fn () -> Vec<Box<dyn Event>>> = Box::new(move || {
+		// 型がうまく合わないのでやむを得ずループで書く
+		//  seq_tags.iter().map(|tag| Box::<dyn Event>::new(TickEvent::new(EventTarget::Tag(tag.clone())))).collect::<Vec<Box<dyn Event>>>()
+		let mut events: Vec<Box<dyn Event>> = vec![];
+		for tag in &seq_tags {
+			let target = EventTarget::Tag(tag.clone());
+			events.push(Box::new(TickEvent::new(target)));
+		}
+		events
+	});
+
 	let start = std::time::Instant::now();
-	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms);
+	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms, Some(skip_mode_events));
 	let end = std::time::Instant::now();
 	println!("{:?}", end.duration_since(start));
 
@@ -277,10 +297,10 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					pctx.add_track_spec(control_track, TrackSpec::Groove(body)) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-					pctx.grooves.insert(control_track.clone(), make_seq_id(Some(&control_track)));
+					pctx.grooves.insert(control_track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
 					for track in &target_tracks {
 						if pctx.grooves.contains_key(track) { return Err(Error::GrooveTargetDuplicate { track: track.clone() }); }
-						pctx.grooves.insert(track.clone(), make_seq_id(Some(&control_track)));
+						pctx.grooves.insert(track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
 					}
 				}
 				"let" => {
@@ -339,11 +359,15 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 
 	Ok(())
 }
-fn make_seq_id(track: Option<&String>) -> String {
-	match track {
+/// シーケンサのタグ名を生成する。また生成したタグ名を記録する
+fn make_seq_tag(track: Option<&String>, tags: &mut HashSet<String>) -> String {
+	let tag = match track {
 		None => "#seq".to_string(),
 		Some(track) => format!("#seq_{}", track),
-	}
+	};
+	tags.insert(tag.clone());
+
+	tag
 }
 
 fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerContext) {
@@ -361,6 +385,15 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &mut VarStack) -> ModdlRes
 		Err(Error::DirectiveArgNotFound)
 	}
 }
+
+struct EventIter {
+
+}
+impl Iterator for EventIter {
+	type Item = Box<dyn crate::core::event::Event>;
+	fn next(&mut self) -> Option<Box<dyn crate::core::event::Event>> { None }
+}
+
 
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut NodeHost/* , output_nodes: &mut Vec<ChanneledNodeIndex> */, placeholders: &mut PlaceholderStack, override_input: Option<MonoNodeIndex>)
 		-> ModdlResult<ChanneledNodeIndex> {

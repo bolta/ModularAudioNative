@@ -10,7 +10,7 @@ extern crate nom;
 //use nom::regexp::str::*;
 use nom::{
 	branch::alt,	
-//	bytes::complete::*,
+	bytes::complete::*,
 	character::complete::*,
 	combinator::*,
 	IResult,
@@ -131,6 +131,12 @@ parser![stack_command, Command, {
 		Ok((input, Command::Stack { content }))
 	}
 }];
+parser![skip_command, Command, {
+	map_res(
+		ss!(tag("***")),
+		|_| ok(Command::Skip),
+	)
+}];
 
 parser![command, Command, {
 	alt((
@@ -148,6 +154,7 @@ parser![command, Command, {
 		unary_command!(char('t'), float(), Command::Tempo),
 		loop_command(),
 		stack_command(),
+		skip_command(),
 	))
 }];
 

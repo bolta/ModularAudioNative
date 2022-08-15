@@ -45,9 +45,13 @@ pub fn generate_sequences(
 	let mut seq_seq = 0;
 	let mut sequences = HashMap::new();
 	let mut features = HashSet::new();
+	let mut used_skip = false;
 
 	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences, &mut features,
-			param_prefix);
+			&mut used_skip, param_prefix);
+	if used_skip {
+		sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
+	}
 
 	return (sequences, features);
 }
@@ -68,6 +72,7 @@ fn generate_sequence(
 	seq_seq: &mut i32,
 	sequences: &mut HashMap<String, Sequence>,
 	features: &mut HashSet<Feature>,
+	used_skip: &mut bool,
 	param_prefix: &str,
 ) {
 	let mut seq = vec![];
@@ -152,7 +157,7 @@ fn generate_sequence(
 				let loop_start = seq.len();
 				stack.push_clone();
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -160,7 +165,7 @@ fn generate_sequence(
 						let cur_idx = seq.len();
 						seq.push(Instruction::If0 {
 							var: var_name.clone(),
-							then: Box::new(Instruction::Jump { seq_name: None, pos: InstructionIndex(cur_idx + 5) }),
+							then: Box::new(Instruction::JumpRel { offset: 5 }),
 						});
 					} else {
 						// TODO 無限ループに : が含まれている。エラーにする
@@ -168,20 +173,21 @@ fn generate_sequence(
 
 					// context1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
 					let cur_idx = seq.len();
 					seq.push(Instruction::If0 {
 						var: var_name.clone(),
-						then: Box::new(Instruction::Jump { seq_name: None, pos: InstructionIndex(cur_idx + 3) }),
+						then: Box::new(Instruction::JumpRel { offset: 3 }),
 					});
 				}
 				if let Some(var_name) = &var_name {
 					seq.push(Instruction::DecrVar { name: var_name.clone() });
 				}
-				seq.push(Instruction::Jump { seq_name: None, pos: InstructionIndex(loop_start) });
+				let cur_idx = seq.len();
+				seq.push(Instruction::JumpRel { offset: -((cur_idx - loop_start) as i32) });
 				// TODO : で脱出したときは 5 つ前が Jump であることを assert する
 				if let Some(var_name) = &var_name {
 					seq.push(Instruction::DeleteVar { name: var_name.clone() });
@@ -192,9 +198,13 @@ fn generate_sequence(
 				stack.push_clone();
 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
 				let content_name = make_name("seq", seq_seq);
-				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, param_prefix);
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content_name });
 				stack.pop();
+			}
+			Command::Skip => {
+				seq.push(Instruction::ExitSkipMode);
+				*used_skip = true;
 			}
 			Command::ExpandMacro { name: _ } => unimplemented!(),
 		}
