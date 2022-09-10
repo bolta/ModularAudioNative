@@ -111,6 +111,9 @@ impl Context {
 
 	fn process_instruction(&mut self, instrc: &Instruction, env: &mut Environment) {
 		match instrc {
+			Instruction::Nop => {
+				// nop
+			}
 			Instruction::Note { tag, note_on } => {
 				env.post_event(Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
 			}

@@ -8,6 +8,7 @@ use crate::core::{
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
+	Nop,
 	// TODO tag は intern した文字列にする
 	Note { tag: String, note_on: bool },
 	Value { tag: String, value: Sample },

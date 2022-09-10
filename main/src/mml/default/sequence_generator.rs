@@ -210,7 +210,10 @@ fn generate_sequence(
 		}
 	}
 
-println!("{}: {:?}", seq_name.to_string(), &seq);
+	// 始点と終点が一致すると問題になるケースがあるので、空のシーケンスは作らない
+	if seq.is_empty() {
+		seq.push(Instruction::Nop);
+	}
 	sequences.insert(seq_name.to_string(), seq);
 }
 
