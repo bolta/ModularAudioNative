@@ -10,6 +10,7 @@ edition = "2018"
 node_macro = { path = "../node_macro" }
 parser = { path = "../parser" }
 
+itertools = "0.10.3"
 mopa = "*"
 nom = { version = "*", features = ["regexp"] }
 portaudio = "*"

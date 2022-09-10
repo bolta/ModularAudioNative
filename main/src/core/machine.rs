@@ -4,7 +4,9 @@ use super::{
 	common::*,
 	context::*,
 	event::*,
+	node::*,
 	node_host::*,
+	util::*,
 };
 
 use crate::{
@@ -13,7 +15,10 @@ use crate::{
 
 use std::{
 	collections::hash_map::HashMap,
+	collections::hash_set::HashSet,
 };
+
+use itertools::Itertools; // for into_group_map_by
 
 use ringbuf::{
 	Consumer,
@@ -28,6 +33,9 @@ struct ValueIndex(pub usize);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct OutputIndex(pub usize);
+
+static mut EXECUTE_COUNT: i32 = 0;
+static mut UPDATE_COUNT: i32 = 0;
 
 pub struct Machine {
 }
@@ -64,6 +72,10 @@ impl Machine {
 			(value_offsets, next_val, max_channels)
 		};
 
+		let activenesses = compute_activenesses(nodes);
+// dbg!(&activenesses);
+		let mut update_flags = make_update_flags(&activenesses);
+// dbg!(&update_flags);
 		// 各ノードの出力値。複数個所から参照される可能性があるのでキャッシュする
 		let mut values = vec_with_length(value_count.0);
 		// 各ノードの入力値
@@ -79,7 +91,9 @@ impl Machine {
 		let (mut events_prod, mut events_cons) = events.split();
 
 		let mut env = Environment::new(&mut events_prod, waveforms);
-	
+
+		let start = std::time::Instant::now();
+
 		println!("initializing...");
 		for node in nodes.nodes_mut().iter_mut() { node.initialize(context, &mut env); }
 
@@ -90,7 +104,7 @@ impl Machine {
 				match events_cons.pop() {
 					None => { break 'do_events; }
 					Some(event) => {
-						let machine_event = self.consume_event(event, nodes, context, &mut env);
+						let machine_event = self.consume_event(event, nodes, context, &mut env, &mut update_flags);
 						if let Some(typ) = machine_event {
 							match typ.as_str() {
 								EVENT_TYPE_TERMINATE => break 'play,
@@ -121,14 +135,22 @@ impl Machine {
 			}
 
 			for instrc in &instructions {
-				self.do_instruction(nodes, &instrc, &mut values, &mut inputs, context, &mut env);
+				self.do_instruction(nodes, &instrc, &mut values, &mut inputs, context, &mut env, &update_flags);
 			}
 
+			update_flags.init();
 			context.sample_elapsed();
 		}
 
 		println!("finalizing...");
 		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
+
+		let end = std::time::Instant::now();
+		println!("{:?}", end.duration_since(start));
+		unsafe {
+			println!("execute: {}", EXECUTE_COUNT);
+			println!("update: {}", UPDATE_COUNT);
+		}
 	}
 
 	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<ChanneledNodeIndex>>,
@@ -168,7 +190,7 @@ impl Machine {
 	}
 
 	/// マシン対象のイベントの場合、その名前を返す
-	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost, context: &Context, env: &mut Environment) -> Option<String> {
+	fn consume_event(&mut self, event: Box<dyn Event>, nodes: &mut NodeHost, context: &Context, env: &mut Environment, update_flags: &mut UpdateFlags) -> Option<String> {
 		match event.target() {
 			EventTarget::Machine => {
 				Some(event.event_type().to_string())
@@ -177,9 +199,9 @@ impl Machine {
 				let idxs = nodes.resolve_tag(&tag);
 				for idx in idxs {
 					nodes[idx].process_event(&*event, context, env);
-						// None => {
-						// 	println!("unknown node id: {}", &id);
-						// }
+					if event.event_type() == "Var::Set" {
+						update_flags.apply_event(&tag);
+					}
 				}
 
 				None
@@ -187,12 +209,18 @@ impl Machine {
 		}
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
 		match instrc {
 			Instruction::Load { to, from } => {
 				inputs[to.0] = values[from.0];
 			}
 			Instruction::Execute{ node_idx, output } => {
+				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
+// println!("{:?}: skipping Execute", node_idx);
+					return;
+				}
+// println!("{:?}: executing Execute", node_idx);
+
 				let node = &mut nodes[*node_idx];
 				let output_slice = match output {
 					// TODO 終端の指定はデバッグ目的でしか意味がないのでリリースビルドでは外したい
@@ -200,12 +228,67 @@ impl Machine {
 					None => &mut values[0 .. 0], // 出力なし
 				};
 				node.execute(&inputs, output_slice, context, env);
+				unsafe { EXECUTE_COUNT += 1; }
 			}
 			Instruction::Update(node_idx) => {
+				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
+// println!("{:?}: skipping Update", node_idx);
+					return;
+				}
+// println!("{:?}: executing Update", node_idx);
+					
 				nodes[*node_idx].update(&inputs, context, env);
+				unsafe { UPDATE_COUNT += 1; }
 			}
 		}
 	}
+}
+
+#[derive(Debug)]
+enum ComputedActiveness {
+	ComputedEvential(HashSet<String>),
+	ComputedActive,
+}
+
+fn compute_activenesses(nodes: &NodeHost) -> Vec<ComputedActiveness> {
+	// 各ノードから任意個のタグへの対応関係（NodeHost::nodes() の逆引き）を作る
+	let node_to_tags: HashMap<NodeIndex, HashSet<String>> = nodes.tags()
+			.iter().flat_map(|(tag, nodes)| nodes.iter().map(move |node| (*node, tag.clone())))
+			.into_group_map_by(|(node, _)| *node) // ここまでで HashMap<NodeIndex, Vec<(&NodeIndex, &String)>>
+			.iter().map(|(node, nodes_and_tags)| {
+				(*node, nodes_and_tags.iter().map(|(_, tag)| tag.clone()).collect()) // HashMap の値（Vec）を掃除しつつ HashSet に変換
+			}).collect();
+
+	let mut result =  vec![];
+	// Passive の処理では他のノードの計算結果を使う必要があるので、for_each で回して result に詰めていく形をとる
+	nodes.nodes().iter().enumerate().for_each(|(i, node)| {
+		debug_assert!(result.len() == i);
+		let computed = match node.activeness() {
+			Activeness::Static => ComputedActiveness::ComputedEvential(HashSet::new()),
+			Activeness::Passive => {
+				node.upstreams().iter().fold(ComputedActiveness::ComputedEvential(HashSet::new()), |acc, up| {
+					match acc {
+						// 1 つでも ComputedActive があれば、それが勝つ
+						ComputedActiveness::ComputedActive => ComputedActiveness::ComputedActive,
+						ComputedActiveness::ComputedEvential(acc_tags) => match & result[up.unchanneled().0] {
+							// 1 つでも ComputedActive があれば、それが勝つ
+							ComputedActiveness::ComputedActive => ComputedActiveness::ComputedActive,
+							// 上流の ComputedEvential を全て合併
+							ComputedActiveness::ComputedEvential(up_tags) => ComputedActiveness::ComputedEvential({
+								acc_tags.union(&up_tags).map(|tag| tag.clone()).collect()
+							}),
+						},
+					}
+				})
+			},
+			Activeness::Evential => ComputedActiveness::ComputedEvential(node_to_tags.get(&NodeIndex(i))
+					.map(|labels| labels.clone()).unwrap_or_else(|| HashSet::new())),
+			Activeness::Active => ComputedActiveness::ComputedActive,
+		};
+		result.push(computed);
+	});
+
+	result
 }
 
 pub type EventProducer = Producer<Box<dyn Event>>;
@@ -258,8 +341,201 @@ impl Event for ExitSkipModeEvent {
 	fn target(&self) -> &EventTarget { &EventTarget::Machine }
 }
 
-fn vec_with_length(len: usize) -> Vec<Sample> {
-	let mut result = Vec::with_capacity(len);
-	for _ in 0 .. len { result.push(0f32); }
-	result
+#[derive(Debug)]
+struct UpdateFlags {
+	current: Vec<u128>,
+	init: Vec<u128>,
+	event_patterns: HashMap<String, Vec<u128>>,
+	event_occurred: bool,
+}
+impl UpdateFlags {
+	fn new(init: Vec<u128>, event_patterns: HashMap<String, Vec<u128>>) -> Self {
+		// TODO init と event_patterns の全ての値の長さが同じであることを assert
+		Self {
+			current: init.clone(),
+			init,//: vec![0,0,0,0],
+			event_patterns,
+			event_occurred: false,
+		}
+	}
+	fn init(&mut self) {
+		if ! self.event_occurred { return; }
+
+		self.current.clone_from_slice(& self.init[0 ..]);
+		self.event_occurred = false;
+	}
+	fn apply_event(&mut self, tag: &String) {
+		// 存在しない場合は考えない
+		let pattern = & self.event_patterns[tag];
+		self.current.iter_mut().enumerate().for_each(|(i, chunk)| {
+			*chunk |= pattern[i];
+		});
+		self.event_occurred = true;
+	}
+	fn at(&self, idx: NodeIndex) -> bool {
+		let result = (self.current[idx.0 / 128] >> (idx.0 % 128)) % 2 == 1;
+
+// dbg!(idx.0, result);
+		result
+	}
+}
+
+fn make_update_flags(activenesses: &Vec<ComputedActiveness>) -> UpdateFlags {
+	let size = (activenesses.len() + 127) / 128;
+
+	let mut init = vec![0; size];
+	let mut event_patterns = HashMap::new();
+	activenesses.iter().enumerate().for_each(|(i, a)| {
+		let (idx, bit) = (i / 128, i % 128);
+		let set_bit = |vec: &mut Vec<u128>| { vec[idx] |= 1 << bit; };
+
+		match a {
+			ComputedActiveness::ComputedActive => {
+				set_bit(&mut init);
+			},
+			ComputedActiveness::ComputedEvential(tags) => {
+				tags.iter().for_each(|tag| {
+					if ! event_patterns.contains_key(tag) {
+						event_patterns.insert(tag.clone(), vec![0; size]);
+					}
+					set_bit(event_patterns.get_mut(tag).unwrap());
+				})
+			}
+		}
+	});
+
+	UpdateFlags::new(init, event_patterns)
+}
+
+
+#[cfg(test)]
+mod tests {
+	use crate::core::{
+		machine::*,
+	};
+	
+	use std::{
+		collections::hash_map::HashMap,
+		collections::hash_set::HashSet,
+	};
+
+	#[test]
+	fn test_update_flags() {
+		let mut flags = UpdateFlags::new(
+			vec![0b0001],
+			HashMap::from([
+				("a".to_string(), vec![0b0110]),
+				("b".to_string(), vec![0b1100]),
+			]),
+		);
+		assert_eq!(true, flags.at(NodeIndex(0)));
+		assert_eq!(false, flags.at(NodeIndex(1)));
+		assert_eq!(false, flags.at(NodeIndex(2)));
+		assert_eq!(false, flags.at(NodeIndex(3)));
+
+		flags.apply_event(& "a".to_string());
+		assert_eq!(true, flags.at(NodeIndex(0)));
+		assert_eq!(true, flags.at(NodeIndex(1)));
+		assert_eq!(true, flags.at(NodeIndex(2)));
+		assert_eq!(false, flags.at(NodeIndex(3)));
+
+		flags.apply_event(& "b".to_string());
+		assert_eq!(true, flags.at(NodeIndex(0)));
+		assert_eq!(true, flags.at(NodeIndex(1)));
+		assert_eq!(true, flags.at(NodeIndex(2)));
+		assert_eq!(true, flags.at(NodeIndex(3)));
+
+		flags.init();
+		assert_eq!(true, flags.at(NodeIndex(0)));
+		assert_eq!(false, flags.at(NodeIndex(1)));
+		assert_eq!(false, flags.at(NodeIndex(2)));
+		assert_eq!(false, flags.at(NodeIndex(3)));
+	}
+
+	#[cfg(test)]
+	#[test]
+	fn test_make_update_flags() {
+		let activenesses = vec![
+			ComputedActiveness::ComputedActive,
+			ComputedActiveness::ComputedEvential(HashSet::from([
+				"a".to_string(),
+			])),
+			ComputedActiveness::ComputedEvential(HashSet::from([
+				"b".to_string(),
+			])),
+			ComputedActiveness::ComputedEvential(HashSet::from([
+				"a".to_string(),
+				"b".to_string(),
+			])),
+		]; // Vec<ComputedActiveness>
+		let flags = make_update_flags(&activenesses);
+		assert_eq!(flags.init, vec![0b0001]);
+		assert_eq!(flags.event_patterns[&"a".to_string()], vec![0b1010]);
+		assert_eq!(flags.event_patterns[&"b".to_string()], vec![0b1100]);
+	}
+
+	use crate::{
+		calc::*,
+		node::{
+			arith::*,
+			noise::*,
+			prim::*,
+			var::*,
+		},
+	};
+
+	#[test]
+	fn test_compute_activeness() {
+		let assert_active = |activeness: &ComputedActiveness| assert!(matches!(activeness, ComputedActiveness::ComputedActive));
+		let assert_evential = |activeness: &ComputedActiveness, expected_content: &HashSet<String>| assert!(match activeness {
+			ComputedActiveness::ComputedEvential(tags) => { *tags == *expected_content },
+			_ => false,
+		});
+
+		{
+			let mut nodes = NodeHost::new();
+			// 定数は static なので、タグをつけてても ComputedEvential として収集されない
+			let a = nodes.add_with_tag("a".to_string(), Box::new(Constant::new(42f32))).as_mono();
+			let b = nodes.add_with_tag("b".to_string(), Box::new(Constant::new(42f32))).as_mono();
+			nodes.add(Box::new(MonoCalc::<AddCalc>::new(vec![a, b])));
+
+			let activenesses = compute_activenesses(&nodes);
+			assert_evential(&activenesses[0], &HashSet::from([]));
+			assert_evential(&activenesses[1], &HashSet::from([]));
+			assert_evential(&activenesses[2], &HashSet::from([]));
+		}
+		{
+			let mut nodes = NodeHost::new();
+			let a = nodes.add_with_tag("a".to_string(), Box::new(Var::new(42f32))).as_mono();
+			let b = nodes.add_with_tag("b".to_string(), Box::new(Var::new(42f32))).as_mono();
+			nodes.add(Box::new(MonoCalc::<AddCalc>::new(vec![a, b])));
+
+			let activenesses = compute_activenesses(&nodes);
+			assert_evential(&activenesses[0], &HashSet::from(["a".to_string()]));
+			assert_evential(&activenesses[1], &HashSet::from(["b".to_string()]));
+			assert_evential(&activenesses[2], &HashSet::from(["a".to_string(), "b".to_string()]));
+		}
+		{
+			let mut nodes = NodeHost::new();
+			let a = nodes.add_with_tag("a".to_string(), Box::new(UniformNoise::new())).as_mono(); // Active
+			let b = nodes.add_with_tag("b".to_string(), Box::new(Constant::new(42f32))).as_mono(); // Static
+			nodes.add(Box::new(MonoCalc::<AddCalc>::new(vec![a, b])));
+
+			let activenesses = compute_activenesses(&nodes);
+			assert_active(&activenesses[0]);
+			assert_evential(&activenesses[1], &HashSet::from([]));
+			assert_active(&activenesses[2]);
+		}
+		{
+			let mut nodes = NodeHost::new();
+			let a = nodes.add_with_tag("a".to_string(), Box::new(UniformNoise::new())).as_mono(); // Active
+			let b = nodes.add_with_tag("b".to_string(), Box::new(Var::new(42f32))).as_mono(); // Evential
+			nodes.add(Box::new(MonoCalc::<AddCalc>::new(vec![a, b])));
+
+			let activenesses = compute_activenesses(&nodes);
+			assert_active(&activenesses[0]);
+			assert_evential(&activenesses[1], &HashSet::from(["b".to_string()]));
+			assert_active(&activenesses[2]);
+		}
+	}
 }

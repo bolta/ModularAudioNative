@@ -231,10 +231,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		events
 	});
 
-	let start = std::time::Instant::now();
 	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms, Some(skip_mode_events));
-	let end = std::time::Instant::now();
-	println!("{:?}", end.duration_since(start));
 
 	Ok(())
 }
