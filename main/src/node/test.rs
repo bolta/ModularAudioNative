@@ -45,7 +45,7 @@ fn play_test<MakeNode: Fn (&mut NodeHost) -> ChanneledNodeIndex>(make_node: Make
 
 	let mut waveforms = WaveformHost::new();
 	let mut machine = Machine::new();
-	machine.play(&mut context, &mut nodes, &mut waveforms);
+	machine.play(&mut context, &mut nodes, &mut waveforms, None);
 
 	result
 }
