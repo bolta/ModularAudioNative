@@ -210,11 +210,27 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 	nodes.add(Box::new(PortAudioOut::new(master)));
+
+	// wav ファイルに出力
+	// TODO コマンドオプションで指定できるように
 	// nodes.add(Box::new(crate::node::file::WavFileOut::new(master, "out.wav".to_string())));
+
+	// stdout に出力
+	// TODO コマンドオプションで指定できるように
+	// nodes.add(Box::new(Print::new(master)));
+
+	// 出力しない（パフォーマンス計測用）
+	// TODO コマンドオプションで指定できるように
 	// nodes.add(Box::new(NullOut::new(master)));
+
 	// TODO タグ名共通化
 	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
-	// nodes.add(Box::new(Print::new(master)));
+
+	// 一定時間で終了
+	// TODO コマンドオプションで指定できるように
+	// let mut sched = crate::node::event_scheduler::EventScheduler::new();
+	// sched.add_event(60 * 44100, Box::new(TerminateEvent { }));
+	// nodes.add(Box::new(sched));
 
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 
