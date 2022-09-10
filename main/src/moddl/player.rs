@@ -117,6 +117,8 @@ impl PlayerContext {
 
 
 pub fn play(moddl: &str) -> ModdlResult<()> {
+	let mut context = Context::new(44100); // TODO 値を外から渡せるように
+
 	// TODO パーズエラーをちゃんと処理
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
@@ -131,7 +133,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		waveforms: WaveformHost::new(),
 		mute_solo: MuteSolo::Mute,
 		mute_solo_tracks: HashSet::new(),
-		vars: VarStack::init(builtin_vars()),
+		vars: VarStack::init(builtin_vars(context.sample_rate())),
 		seq_tags: HashSet::new(),
 	};
 
@@ -231,8 +233,6 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 	// let mut sched = crate::node::event_scheduler::EventScheduler::new();
 	// sched.add_event(60 * 44100, Box::new(TerminateEvent { }));
 	// nodes.add(Box::new(sched));
-
-	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 
 	let seq_tags = pctx.seq_tags.clone(); // TODO 本来 clone 不要のはず
 	// skip 時にメインループの代わりに tick を提供する関数

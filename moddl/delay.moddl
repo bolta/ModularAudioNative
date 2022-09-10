@@ -1,0 +1,12 @@
+@let `tempo`, 126
+@tempo tempo
+
+@let `delayTime`, 240 / tempo * 3 / 16 // 8.
+// @let `delayTime1`, 240 / tempo * 2 / 16 // 16
+// @let `delayTime2`, 240 / tempo * 4 / 16 // 4
+
+@instrument ^a, (pulseOsc * adsrEnv) | delay(delayTime) { feedback: 0.75 }
+
+a o4l1 q0.125
+
+a cdefgab>c r1^1^1^1 q0c

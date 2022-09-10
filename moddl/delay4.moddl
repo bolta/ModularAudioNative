@@ -1,0 +1,23 @@
+@let `tempo`, 134
+@tempo tempo
+
+@let `delayTime`, 240 / tempo * 3 / 16 // 8.
+
+@instrument ^abc, (pulseOsc { duty: 0.20 } | lpf { 1000 + 6000 * adsrEnv { 0, 2, 0, 0 } ^ 4, 2 } * adsrEnv { 0, 2, 0, 0 } ^ 2 )
+@instrument ^d, triangleOsc * adsrEnv
+
+// パルス波のような非対称な波形にフィードバックをかけると、波形がどんどん偏っていってクリップしたりするが、
+// その場合は feedback を負の値にするとよい
+@effect ^D, ^abc, (a + b + c) | delay(delayTime) { feedback: -0.8, wet: 0.6 }
+
+abc o3l1 v12
+c <
+d o2l1 v12
+
+abcd [4
+	a g ^ >c<b-
+	b e-^  f^
+	c b-^ >d^
+
+	d e-^ d^
+abcd ]

@@ -1,0 +1,9 @@
+@let `tempo`, 126
+@tempo tempo
+
+// 最大長を超えるディレイタイムは最大長に切り詰められる
+@instrument ^a, (pulseOsc * adsrEnv) | delay(1) { 2, 0.75 }
+
+a o4l2 q0.125
+
+a c1 c1 c1 c1

@@ -1,0 +1,10 @@
+@let `tempo`, 126
+@tempo tempo
+
+// コーラス風
+@instrument ^a, (pulseOsc * adsrEnv) | delay(1) { 10 / 1000 + (1 / 1000) * 0.5 | sineOsc, 0.3 }
+//@instrument ^a, (pulseOsc * adsrEnv) | delay(1) { 3 / 1000 + (0.3 / 1000) * 0.5 | sineOsc, 0.3 }
+
+a o4l2
+
+a c1^1^1^1 cdefgab>c

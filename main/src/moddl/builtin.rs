@@ -13,6 +13,7 @@ use crate::{
 	node::{
 		arith::*,
 		envelope::*,
+		delay::*,
 		filter::*,
 		freq::*,
 		lofi::*,
@@ -28,7 +29,7 @@ use std::{
 	rc::Rc,
 };
 
-pub fn builtin_vars() -> HashMap<String, Value> {
+pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	let mut result = HashMap::<String, Value>::new();
 	macro_rules! add_node_factory {
 		($name: expr, $fact: expr) => {
@@ -60,6 +61,7 @@ pub fn builtin_vars() -> HashMap<String, Value> {
 	add_node_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 	add_function!("nesFreq", NesFreq { });
+	add_function!("delay", Delay::new(sample_rate));
 
 	add_function!("log", Log { });
 	add_function!("log10", Log10 { });
@@ -95,6 +97,23 @@ impl Function for NesFreq {
 		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
 		let triangle = triangle_val.as_boolean().ok_or_else(|| Error::TypeMismatch) ?;
 		let result = Rc::new(NesFreqFactory::new(triangle));
+
+		Ok(Value::NodeFactory(result))
+	}
+}
+
+pub struct Delay {
+	sample_rate: i32,
+}
+impl Delay {
+	pub fn new(sample_rate: i32) -> Self { Self { sample_rate } }
+}
+impl Function for Delay {
+	fn signature(&self) -> FunctionSignature { vec!["max_time"] }
+	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| Error::ArgMissing { name: "max_time".to_string() }) ?;
+		let max_time = max_time_val.as_float().ok_or_else(|| Error::TypeMismatch) ?;
+		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
 		Ok(Value::NodeFactory(result))
 	}

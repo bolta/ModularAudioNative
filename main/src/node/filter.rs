@@ -1,9 +1,12 @@
-use crate::core::{
-	common::*,
-	context::*,
-	machine::*,
-	node::*,
-	node_factory::*,
+use crate::{
+	core::{
+		common::*,
+		context::*,
+		machine::*,
+		node::*,
+		node_factory::*,
+	},
+	node::common::delay_buffer::*,
 };
 use node_macro::node_impl;
 
@@ -146,38 +149,4 @@ fn intermediate_vars(cutoff: Sample, q: Sample, sample_rate: Sample) -> BiQuadFi
 	let sin_w0 = w0.sin();
 	let alpha = sin_w0 / (2f32 * q);
 	BiQuadFilterIntermediateVars { w0, cos_w0, sin_w0, alpha }
-}
-
-// TODO DelayBuffer は汎用性が高いのでふさわしい場所へ移動
-
-use std::{
-	default::Default,
-	ops::Index,
-};
-
-struct DelayBuffer<T: Clone + Default> {
-	buffer: Vec<T>,
-	head: usize,
-}
-impl <T: Clone + Default> DelayBuffer<T> {
-	fn new(size: usize) -> Self {
-		Self {
-			buffer: vec![Default::default(); size],
-			head: 0usize,
-		}
-	}
-	fn push(&mut self, value: T) {
-		self.head = (self.head + 1) % self.buffer.len();
-		self.buffer[self.head] = value;
-	}
-}
-impl <T: Clone + Default> Index<i32> for DelayBuffer<T> {
-	type Output = T;
-	fn index(&self, offset: i32) -> &Self::Output {
-		if offset <= -(self.buffer.len() as i32) || 0 < offset {
-			panic!("offset must satisfy -size < offset <= 0");
-		}
-
-		return & self.buffer[(self.head + self.buffer.len() - (-offset as usize)) % self.buffer.len()];
-	}
 }
