@@ -23,6 +23,7 @@ pub enum Command {
 	Loop { times: Option<i32>, content1: Vec<Command>, content2: Option<Vec<Command>> },
 	// LoopBreak,
 	Stack { content: Vec<Command> },
+	MacroDef { name: String, content: Vec<Command> },
 	Skip,
 	ExpandMacro { name: String },
 }
