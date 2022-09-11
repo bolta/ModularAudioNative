@@ -165,6 +165,7 @@ parser![command, Command, {
 		unary_command!(char('r'), length(), Command::Rest),
 		parameter_command(),
 		unary_command!(char('t'), float(), Command::Tempo),
+		unary_command!(char('$'), identifier(), |name: &str| Command::MacroCall { name: name.to_string() }),
 		loop_command(),
 		stack_command(),
 		macro_def_command(),

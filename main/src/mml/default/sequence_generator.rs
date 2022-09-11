@@ -130,6 +130,17 @@ fn generate_sequence(
 			Command::Tempo(value) => {
 				seq.push(make_param_instrc("" /* global */, PARAM_NAME_TEMPO, *value));
 			}
+			Command::MacroCall { name } => {
+				stack.push_clone(); // TODO Some() の中で行いたいが借用のエラーになる
+				let seq_name = stack.macro_names().get(name);
+				match seq_name {
+					None => unimplemented!("macro not found"), // TODO エラーにする
+					Some(seq_name) => {
+						seq.push(Instruction::Call { seq_name: seq_name.clone() });
+					},
+				}
+				stack.pop();
+			}
 			Command::Loop { times, content1, content2 } => {
 				/*
 				content1, content2 をそれぞれ別個の sequence としてコンパイルする。
@@ -201,6 +212,13 @@ fn generate_sequence(
 				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content_name });
 				stack.pop();
+			}
+			Command::MacroDef { name, content } => {
+				stack.push_clone();
+				let seq_name = make_name("seq", seq_seq);
+				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
+				stack.pop();
+				stack.macro_names().insert(name.clone(), seq_name);
 			}
 			Command::Skip => {
 				seq.push(Instruction::ExitSkipMode);
@@ -287,16 +305,22 @@ impl MmlState {
 struct StackFrame {
 	mml_state: MmlState,
 	// TODO parameters
+	macro_names: HashMap<String, String>,
 }
 
 type Stack = stack::Stack<StackFrame>;
 
 fn init_stack() -> Stack {
-	Stack::init(StackFrame { mml_state: MmlState::init() })
+	Stack::init(StackFrame {
+		mml_state: MmlState::init(),
+		macro_names: HashMap::new(),
+	})
 }
 trait StackShortcut {
 	fn mml_state(&mut self) -> &mut MmlState;
+	fn macro_names(&mut self) -> &mut HashMap<String, String>;
 }
 impl StackShortcut for Stack {
 	fn mml_state(&mut self) -> &mut MmlState { &mut self.top_mut().mml_state }
+	fn macro_names(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
 }
