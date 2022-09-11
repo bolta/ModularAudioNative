@@ -1,0 +1,15 @@
+@tempo 126
+
+@instrument ^a, pulseOsc * adsrEnv
+
+a o4l16
+
+a @$ m1 [
+	a ceg>c
+a ]
+
+a $m1 cder [2
+	a @$ m2 [ef>ef]
+	a $m1 $m2 $m2 $m1
+a ] edcr
+// a $m2 // エラー：ループ内で定義したマクロはループ外で参照できない
