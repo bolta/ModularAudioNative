@@ -48,7 +48,7 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
 		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
 		Expr::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
-		Expr::Lambda { input_param, body } => {
+		Expr::LambdaNode { input_param, body } => {
 			vars.push_clone();
 			vars.top_mut().insert(input_param.clone(), Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }));
 			let result = Ok(Value::NodeStructure(NodeStructure::Lambda {

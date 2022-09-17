@@ -81,7 +81,38 @@ parser![conditional_expr, Box<Expr>, {
 		|(cond, then, els)| ok(Box::new(Expr::Condition { cond, then, els })),
 	)
 }];
-parser![lambda_expr, Box<Expr>, {
+parser![lambda_func_expr, Box<Expr>, {
+	map_res(
+		preceded(
+			ss!(tag("func")),
+			tuple((
+				delimited(
+					ss!(char('(')),
+					separated_list0(ss!(char(',')), tuple((
+						ss!(identifier()),
+						opt(
+							preceded(
+								ss!(char('=')),
+								ss!(expr()),
+							)
+						)
+					))),
+					ss!(char(')')),
+				),
+				si!(expr()),
+			)),
+		),
+		|(params, body)| { ok(Box::new(Expr::LambdaFunc {
+			params: params.into_iter().map(|(name, default)| FuncParam {
+				name: name.to_string(),
+				default,
+			}).collect(),
+			body,
+		})) },
+	)
+}];
+
+parser![lambda_node_expr, Box<Expr>, {
 	map_res(
 		preceded(
 			ss!(tag("node")),
@@ -94,7 +125,7 @@ parser![lambda_expr, Box<Expr>, {
 				si!(expr()),
 			)),
 		),
-		|(input_param, body)| { ok(Box::new(Expr::Lambda {
+		|(input_param, body)| { ok(Box::new(Expr::LambdaNode {
 			input_param: input_param.to_string(),
 			body,
 		})) },
@@ -123,8 +154,9 @@ parser![primary_expr, Box<Expr>, {
 		track_set_literal(),
 		identifier_literal(),
 		string_literal(),
-		conditional_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
-		lambda_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
+		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
+		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
+		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		identifier_expr(),
 		parenthesized_expr(),
 	))

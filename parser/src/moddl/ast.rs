@@ -18,6 +18,12 @@ pub struct Args {
 }
 
 #[derive(Debug)]
+pub  struct FuncParam {
+	pub name: String,
+	pub default: Option<Box<Expr>>,
+}
+
+#[derive(Debug)]
 pub enum Expr {
 	Connect { lhs: Box<Expr>, rhs: Box<Expr> },
 	Power { lhs: Box<Expr>, rhs: Box<Expr> },
@@ -36,7 +42,8 @@ pub enum Expr {
 	Or { lhs: Box<Expr>, rhs: Box<Expr> },
 	Identifier(String),
 	Condition { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
-	Lambda { input_param: String, body: Box<Expr> },
+	LambdaFunc { params: Vec<FuncParam>, body: Box<Expr> },
+	LambdaNode { input_param: String, body: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
 	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },
 
