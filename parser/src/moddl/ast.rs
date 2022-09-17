@@ -11,19 +11,19 @@ pub enum Statement {
 
 pub type AssocArray = Vec<(String, Box<Expr>)>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Args {
 	pub unnamed: Vec<Box<Expr>>,
 	pub named: AssocArray,
 }
 
-#[derive(Debug)]
-pub  struct FuncParam {
+#[derive(Clone, Debug)]
+pub struct FunctionParam {
 	pub name: String,
 	pub default: Option<Box<Expr>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expr {
 	Connect { lhs: Box<Expr>, rhs: Box<Expr> },
 	Power { lhs: Box<Expr>, rhs: Box<Expr> },
@@ -42,7 +42,7 @@ pub enum Expr {
 	Or { lhs: Box<Expr>, rhs: Box<Expr> },
 	Identifier(String),
 	Condition { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
-	LambdaFunc { params: Vec<FuncParam>, body: Box<Expr> },
+	LambdaFunction { params: Vec<FunctionParam>, body: Box<Expr> },
 	LambdaNode { input_param: String, body: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
 	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },

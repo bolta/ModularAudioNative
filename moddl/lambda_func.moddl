@@ -1,0 +1,9 @@
+@let `multiply`, func (x, y) x * y
+@let `two`, 2
+@let `twice`, func (x) multiply(x, two)
+@tempo twice(120)
+
+@instrument ^a, multiply(440 | sineOsc, 20 | sineOsc)
+
+a c1 // dummy
+

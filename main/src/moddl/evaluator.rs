@@ -1,5 +1,6 @@
 use super::{
 	error::*,
+	lambda_function::*,
 	value::*,
 };
 
@@ -48,6 +49,22 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
 		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
 		Expr::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
+		Expr::LambdaFunction { params, body } => {
+			let mut param_values: Vec<Param> = vec![];
+			params.iter().try_for_each(|param| {
+				param_values.push(Param {
+					name: param.name.clone(),
+					default: match &param.default { // param.default.map で書きたいがうまくいかず
+						None => None,
+						Some(default) => Some(evaluate(&*default, vars) ?),
+					},
+				});
+				ModdlResult::Ok(())
+			}) ?;
+			// Value 側で式を使う必要があるので、単純に式を clone して持たせておく。
+			// 何とかして参照した方が効率的だが
+			Ok(Value::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars.clone()))))
+		}
 		Expr::LambdaNode { input_param, body } => {
 			vars.push_clone();
 			vars.top_mut().insert(input_param.clone(), Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }));

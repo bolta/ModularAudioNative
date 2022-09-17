@@ -80,7 +80,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
-	fn signature(&self) -> FunctionSignature { vec!["waveform"] }
+	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
@@ -92,7 +92,7 @@ impl Function for WaveformPlayer {
 
 pub struct NesFreq { }
 impl Function for NesFreq {
-	fn signature(&self) -> FunctionSignature { vec!["triangle"] }
+	fn signature(&self) -> FunctionSignature { vec!["triangle".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
 		let triangle = triangle_val.as_boolean().ok_or_else(|| Error::TypeMismatch) ?;
@@ -109,7 +109,7 @@ impl Delay {
 	pub fn new(sample_rate: i32) -> Self { Self { sample_rate } }
 }
 impl Function for Delay {
-	fn signature(&self) -> FunctionSignature { vec!["max_time"] }
+	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| Error::ArgMissing { name: "max_time".to_string() }) ?;
 		let max_time = max_time_val.as_float().ok_or_else(|| Error::TypeMismatch) ?;
@@ -125,7 +125,7 @@ macro_rules! unary_math_func {
 	($name: ident, $calc_type: ty) => {
 		pub struct $name { }
 		impl Function for $name {
-			fn signature(&self) -> FunctionSignature { vec!["arg"] }
+			fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
 			fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
 				let arg = args.get(& "arg".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 				if let Some(val) = arg.as_float() {

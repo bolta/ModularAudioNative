@@ -102,8 +102,8 @@ parser![lambda_func_expr, Box<Expr>, {
 				si!(expr()),
 			)),
 		),
-		|(params, body)| { ok(Box::new(Expr::LambdaFunc {
-			params: params.into_iter().map(|(name, default)| FuncParam {
+		|(params, body)| { ok(Box::new(Expr::LambdaFunction {
+			params: params.into_iter().map(|(name, default)| FunctionParam {
 				name: name.to_string(),
 				default,
 			}).collect(),

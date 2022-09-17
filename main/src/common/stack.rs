@@ -1,6 +1,6 @@
 /// 言語処理系で使うためのスタック。
 /// 初期状態が必ずある
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Stack<T: Clone> {
 	stack: Vec<T>,
 }
