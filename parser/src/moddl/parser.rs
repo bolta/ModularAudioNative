@@ -284,20 +284,20 @@ parser![function_call, Box<Expr>, {
 	map_res(
 		tuple((
 			si!(labeled_expr()),
-			opt(delimited(
+			// 関数を返す関数では f(args)(args)... のような呼び出し方になるので全部処理
+			many0(delimited(
 				ss!(char('(')),
 				ss!(args()),
 				si!(char(')')),
 			)),
 		)),
-		|(x, args)| ok(match args {
-			None => x,
-			Some(args) => {
-				Box::new(Expr::FunctionCall {
-					function: x,
-					args,
-				})
-			},
+		|(x, lists_of_args)| ok(if lists_of_args.is_empty() {
+			x
+		} else {
+			lists_of_args.into_iter().fold(x, |lhs, rhs| Box::new(Expr::FunctionCall {
+				function: lhs,
+				args: rhs,
+			}))
 		}),
 	)
 }];
