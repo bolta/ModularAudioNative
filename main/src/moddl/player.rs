@@ -2,6 +2,7 @@ use super::{
 	builtin::*,
 	error::*,
 	evaluator::*,
+	scope::*,
 	value::*,
 };
 use crate::{
@@ -45,6 +46,7 @@ use parser::{
 
 use std::{
 	borrow::Borrow,
+	cell::RefCell,
 	collections::btree_map::BTreeMap,
 	collections::hash_map::HashMap,
 	collections::hash_set::HashSet,
@@ -94,7 +96,7 @@ struct PlayerContext {
 	waveforms: WaveformHost,
 	mute_solo: MuteSolo,
 	mute_solo_tracks: HashSet<String>,
-	vars: VarStack,
+	vars: Rc<RefCell<Scope>>,
 	seq_tags: HashSet<String>,
 }
 impl PlayerContext {
@@ -133,7 +135,7 @@ pub fn play(moddl: &str) -> ModdlResult<()> {
 		waveforms: WaveformHost::new(),
 		mute_solo: MuteSolo::Mute,
 		mute_solo_tracks: HashSet::new(),
-		vars: VarStack::init(builtin_vars(context.sample_rate())),
+		vars: Scope::root(builtin_vars(context.sample_rate())),
 		seq_tags: HashSet::new(),
 	};
 
@@ -279,21 +281,20 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
 					// 定義を評価する際、source_tracks の各々を placeholder として定義しておく。
-					pctx.vars.push_clone();
+					let vars = Scope::child_of(pctx.vars.clone());
+					
 					for source_track in &source_tracks {
-						pctx.vars.top_mut().insert(source_track.clone(),
-								Value::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() }));
+						pctx.vars.borrow_mut().set(source_track,
+								Value::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() })) ?;
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_arg(&args, 2, &mut pctx.vars)?.as_node_structure()
+					let effect = evaluate_arg(&args, 2, &vars)?.as_node_structure()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					for track in tracks {
 						pctx.add_track_spec(&track, TrackSpec::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone())) ?;
 						pctx.terminal_tracks.insert(track);
 					}
-					// TODO finally にする
-					pctx.vars.pop();
 				}
 				"grooveCycle" => {
 					(*pctx).groove_cycle = evaluate_arg(&args, 0, &mut pctx.vars)?.as_float()
@@ -320,7 +321,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					pctx.vars.top_mut().insert(name, value);
+					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
 				"waveform" => {
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
@@ -329,8 +330,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let path = value.as_string_literal().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO 読み込み失敗時のエラー処理
 					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
-					pctx.vars.top_mut().insert(name, Value::WaveformIndex(index));
-					// vars.insert(name, value);
+					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index));
 				}
 				"ticksPerBar" => {
 					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
@@ -391,7 +391,7 @@ fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerCon
 	});
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &mut VarStack) -> ModdlResult<Value> {
+fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 	if index < args.len() {
 		evaluate(&args[index], vars)
 	} else {

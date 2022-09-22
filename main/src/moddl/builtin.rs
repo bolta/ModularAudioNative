@@ -1,6 +1,7 @@
 /// ビルトイン変数を提供する。今後プラグインの読み込みなどをここでやる想定
 use super::{
 	function::*,
+	scope::*,
 	value::*,
 };
 use crate::{
@@ -25,6 +26,7 @@ use crate::{
 };
 
 use std::{
+	cell::RefCell,
 	collections::hash_map::HashMap,
 	rc::Rc,
 };
@@ -81,7 +83,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
 	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
@@ -93,7 +95,7 @@ impl Function for WaveformPlayer {
 pub struct NesFreq { }
 impl Function for NesFreq {
 	fn signature(&self) -> FunctionSignature { vec!["triangle".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
 		let triangle = triangle_val.as_boolean().ok_or_else(|| Error::TypeMismatch) ?;
 		let result = Rc::new(NesFreqFactory::new(triangle));
@@ -110,7 +112,7 @@ impl Delay {
 }
 impl Function for Delay {
 	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| Error::ArgMissing { name: "max_time".to_string() }) ?;
 		let max_time = max_time_val.as_float().ok_or_else(|| Error::TypeMismatch) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
@@ -126,7 +128,7 @@ macro_rules! unary_math_func {
 		pub struct $name { }
 		impl Function for $name {
 			fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
-			fn call(&self, args: &HashMap<String, Value>) -> ModdlResult<Value> {
+			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 				let arg = args.get(& "arg".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
 				if let Some(val) = arg.as_float() {
 					Ok(Value::Float(<$calc_type>::calc(&vec![val])))

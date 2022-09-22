@@ -4,4 +4,5 @@ pub mod evaluator;
 pub mod function;
 pub mod lambda_function;
 pub mod player;
+pub mod scope;
 pub mod value;

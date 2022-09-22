@@ -1,6 +1,7 @@
 use super::{
 	error::*,
 	lambda_function::*,
+	scope::*,
 	value::*,
 };
 
@@ -9,17 +10,15 @@ use parser::moddl::ast::*;
 
 use crate::{
 	calc::*,
-	common::stack::*,
 };
 
 use std::{
+	cell::RefCell,
 	collections::hash_map::HashMap,
 	rc::Rc,
 };
 
-pub type VarStack = Stack<HashMap<String, Value>>;
-
-pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
+pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 	match expr {
 		Expr::Connect { lhs, rhs } => {
 			let l_str = evaluate_as_node_structure(lhs, vars) ?;
@@ -43,7 +42,7 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars),
 
 		Expr::Identifier(id) => {
-			let val = vars.top().get(id.as_str()).ok_or_else(|| Error::VarNotFound { var: id.clone() }) ?;
+			let val = vars.borrow().lookup(id).ok_or_else(|| { Error::VarNotFound { var: id.clone() } }) ?;
 			Ok(val.clone())
 		},
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
@@ -63,16 +62,15 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 			}) ?;
 			// Value 側で式を使う必要があるので、単純に式を clone して持たせておく。
 			// 何とかして参照した方が効率的だが
-			Ok(Value::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars.clone()))))
+			Ok(Value::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars))))
 		}
 		Expr::LambdaNode { input_param, body } => {
-			vars.push_clone();
-			vars.top_mut().insert(input_param.clone(), Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }));
+			let vars = Scope::child_of(vars.clone());
+			vars.borrow_mut().set(input_param, Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() })) ?;
 			let result = Ok(Value::NodeStructure(NodeStructure::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, vars)?.as_node_structure().ok_or_else(|| Error::TypeMismatch) ?),
+				body: Box::new(evaluate(body, &vars)?.as_node_structure().ok_or_else(|| Error::TypeMismatch) ?),
 			}));
-			vars.pop();
 			result
 		},
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
@@ -91,7 +89,7 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
-			function.call(&value_args)
+			function.call(&value_args, &vars)
 		},
 		Expr::NodeWithArgs { node_def, label, args } => {
 			let factory = evaluate_as_node_structure(node_def, vars) ?;
@@ -128,7 +126,7 @@ pub fn evaluate(expr: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
 fn evaluate_binary_structure<C: Calc + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
-	vars: &mut VarStack,
+	vars: &Rc<RefCell<Scope>>,
 ) -> ModdlResult<Value> {
 	let l_val = evaluate(lhs, vars) ?;
 	let r_val = evaluate(rhs, vars) ?;
@@ -152,24 +150,24 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	}))
 }
 
-fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &mut VarStack) -> ModdlResult<Value> {
+fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+	// cond が定数式の場合は短絡評価する。
+	// 式全体が定数式になるかどうかは、評価する方の枝の評価結果が定数式になるかどうかに拠る
 	let cond_val = evaluate(cond, vars) ?;
-	let then_val = evaluate(then, vars) ?;
-	let else_val = evaluate(els, vars) ?;
-
-	// 定数はコンパイル時に計算する。
-	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
-	// TODO まだ最適化の余地あり：3 つとも定数でなくても、cond さえ定数であれば（かつラベルがなければ）
-	// TODO   どちらになるかはコンパイル時に決めれるはず。追々作り込む
-	if cond_val.label().is_none() && then_val.label().is_none() && else_val.label().is_none() {
-		match (cond_val.as_boolean(), then_val.as_float(), else_val.as_float()) {
-			(Some(cond_bool), Some(then_float), Some(else_float)) => {
-				return Ok(Value::Float(if cond_bool { then_float } else { else_float }));
-			}
-			_ => { } // 下へ
+	if cond_val.label().is_none() {
+		if let Some(cond_bool) = cond_val.as_boolean() {
+			return if cond_bool {
+				evaluate(then, vars)
+			} else {
+				evaluate(els, vars)
+			};
 		}
 	}
 
+	// cond が定数式でない場合は NodeStructure として演奏時に評価する。
+	// then と else も NodeStructure でなければならないので、定数式にはならない
+	let then_val = evaluate(then, vars) ?;
+	let else_val = evaluate(els, vars) ?;
 	let cond_str = as_node_structure(&cond_val) ?;
 	let then_str = as_node_structure(&then_val) ?;
 	let else_str = as_node_structure(&else_val) ?;
@@ -184,7 +182,7 @@ fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
 	Ok(val.as_node_structure().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?)
 }
-fn evaluate_as_node_structure(expr: &Expr, vars: &mut VarStack) -> ModdlResult<NodeStructure> {
+fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<NodeStructure> {
 	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
 }
 
