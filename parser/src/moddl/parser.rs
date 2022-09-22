@@ -88,6 +88,7 @@ parser![lambda_func_expr, Box<Expr>, {
 			tuple((
 				delimited(
 					ss!(char('(')),
+					// 引数が 1 つもない関数は禁止でもいいかも（純粋関数だと無意味なので）
 					separated_list0(ss!(char(',')), tuple((
 						ss!(identifier()),
 						opt(
