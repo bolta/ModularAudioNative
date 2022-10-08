@@ -3,6 +3,7 @@ pub mod error;
 pub mod evaluator;
 pub mod function;
 pub mod lambda_function;
+pub mod path;
 pub mod player;
 pub mod scope;
 pub mod value;

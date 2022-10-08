@@ -46,7 +46,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			Ok(val.clone())
 		},
 		Expr::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
-		Expr::StringLiteral(content) => Ok(Value::StringLiteral(content.clone())),
+		Expr::StringLiteral(content) => Ok(Value::String(content.clone())),
 		Expr::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
 		Expr::LambdaFunction { params, body } => {
 			let mut param_values: Vec<Param> = vec![];

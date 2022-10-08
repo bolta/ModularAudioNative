@@ -2,6 +2,7 @@ use super::{
 	builtin::*,
 	error::*,
 	evaluator::*,
+	path::*,
 	scope::*,
 	value::*,
 };
@@ -52,6 +53,7 @@ use std::{
 	collections::hash_set::HashSet,
 	fs::File,
 	io::Read,
+	path::Path,
 	rc::Rc,
 };
 
@@ -69,7 +71,7 @@ pub fn play_file(moddl_path: &str) -> ModdlResult<()> {
 	let mut moddl = String::new();
 	file.read_to_string(&mut moddl) ?;
 
-	play(moddl.as_str())
+	play(moddl.as_str(), moddl_path)
 }
 
 #[derive(PartialEq)]
@@ -82,6 +84,8 @@ enum TrackSpec {
 }
 
 struct PlayerContext {
+	moddl_path: String,
+	sample_rate: i32,
 	tempo: f32,
 	ticks_per_bar: i32,
 	// トラックごとの instrument/effect
@@ -100,6 +104,30 @@ struct PlayerContext {
 	seq_tags: HashSet<String>,
 }
 impl PlayerContext {
+	fn init(moddl_path: &str, sample_rate: i32) -> Self {
+		// ルートに直に書き込むと import したときにビルトインのエントリが衝突するので、1 階層切っておく
+		// TODO ルートは singleton にできるはず…
+		let root_vars = Scope::root(builtin_vars(sample_rate));
+		let vars = Scope::child_of(root_vars);
+
+		Self {
+			moddl_path: moddl_path.to_string(),
+			sample_rate,
+			tempo: 120f32,
+			ticks_per_bar: 384,
+			track_specs: vec![],
+			terminal_tracks: HashSet::new(),
+			grooves: HashMap::new(),
+			groove_cycle: 384,
+			mmls: BTreeMap::new(),
+			waveforms: WaveformHost::new(),
+			mute_solo: MuteSolo::Mute,
+			mute_solo_tracks: HashSet::new(),
+			vars,
+			seq_tags: HashSet::new(),
+		}
+	}
+
 	fn get_track_spec(&self, track: &String) -> Option<&TrackSpec> {
 		self.track_specs.iter().find(|&elem| elem.0 == *track)
 				.map(|elem| &elem.1)
@@ -117,31 +145,43 @@ impl PlayerContext {
 	}
 }
 
+pub fn import_file(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> ModdlResult<HashMap<String, Value>> {
+	let resolved_path = resolve_path(moddl_path, base_moddl_path);
+	// TODO resolved_path が valid unicode でない場合のエラー処理
+	let resolved_path_str = resolved_path.to_str().unwrap().to_string();
 
-pub fn play(moddl: &str) -> ModdlResult<()> {
-	let mut context = Context::new(44100); // TODO 値を外から渡せるように
+	let mut file = File::open(resolved_path) ?;
+	let mut moddl = String::new();
+	file.read_to_string(&mut moddl) ?;
+
+	import(moddl.as_str(), sample_rate, resolved_path_str.as_str())
+}
+
+fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<PlayerContext> {
+	let mut pctx = PlayerContext::init(moddl_path, sample_rate);
 
 	// TODO パーズエラーをちゃんと処理
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
-	let mut pctx = PlayerContext {
-		tempo: 120f32,
-		ticks_per_bar: 384,
-		track_specs: vec![],
-		terminal_tracks: HashSet::new(),
-		grooves: HashMap::new(),
-		groove_cycle: 384,
-		mmls: BTreeMap::new(),
-		waveforms: WaveformHost::new(),
-		mute_solo: MuteSolo::Mute,
-		mute_solo_tracks: HashSet::new(),
-		vars: Scope::root(builtin_vars(context.sample_rate())),
-		seq_tags: HashSet::new(),
-	};
-
 	for stmt in &statements {
 		process_statement(&stmt, &mut pctx) ?;
 	}
+
+	Ok(pctx)
+}
+
+pub fn import(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<HashMap<String, Value>> {
+	let pctx = process_statements(moddl, sample_rate, moddl_path) ?;
+
+	// pctx.vars.borrow() が通らない。こう書かないといけない
+	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
+	let vars = RefCell::<Scope>::borrow(&*pctx.vars);
+	Ok(vars.entries().clone())
+}
+
+pub fn play(moddl: &str, moddl_path: &str) -> ModdlResult<()> {
+	let mut context = Context::new(44100); // TODO 値を外から渡せるように
+	let mut pctx = process_statements(moddl, context.sample_rate(), moddl_path) ?;
 	
 	let mut nodes = NodeHost::new();
 	// TODO タグ名を sequence_generator と共通化
@@ -327,7 +367,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					let path = value.as_string_literal().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let path = value.as_string().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					// TODO 読み込み失敗時のエラー処理
 					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
 					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index));
@@ -353,6 +393,14 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
+				}
+				"import" => {
+					let path = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_string()
+							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let imported_vars = import_file(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
+					imported_vars.iter().try_for_each(|(name, value)| {
+						pctx.vars.borrow_mut().set(name, value.clone())
+					}) ?;
 				}
 				other => {
 					println!("unknown directive: {}", other);

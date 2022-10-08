@@ -65,7 +65,7 @@ pub enum Value {
 	WaveformIndex(WaveformIndex),
 	TrackSet(Vec<String>),
 	IdentifierLiteral(String),
-	StringLiteral(String),
+	String(String),
 	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
@@ -107,9 +107,9 @@ impl Value {
 		}
 	}
 
-	pub fn as_string_literal(&self) -> Option<String> {
+	pub fn as_string(&self) -> Option<String> {
 		match self.value() {
-			Self::StringLiteral(content) => Some(content.clone()),
+			Self::String(content) => Some(content.clone()),
 			_ => None,
 		}
 	}
