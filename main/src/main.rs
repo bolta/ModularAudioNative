@@ -36,7 +36,7 @@ fn main() {
 			exit(1);
 		}
 		Some(moddl_path) => {
-			if let Err(e) = player::play_file(moddl_path.as_str()) {
+			if let Err(e) = player::play(moddl_path.as_str()) {
 				eprintln!("An error occurred: {:?}", e);
 				exit(1);
 			}

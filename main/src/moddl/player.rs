@@ -66,14 +66,6 @@ const TAG_SEQUENCER: &str = "seq";
 // 	mml: String,
 // };
 
-pub fn play_file(moddl_path: &str) -> ModdlResult<()> {
-	let mut file = File::open(moddl_path) ?;
-	let mut moddl = String::new();
-	file.read_to_string(&mut moddl) ?;
-
-	play(moddl.as_str(), moddl_path)
-}
-
 #[derive(PartialEq)]
 enum MuteSolo { Mute, Solo }
 
@@ -145,18 +137,6 @@ impl PlayerContext {
 	}
 }
 
-pub fn import_file(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> ModdlResult<HashMap<String, Value>> {
-	let resolved_path = resolve_path(moddl_path, base_moddl_path);
-	// TODO resolved_path が valid unicode でない場合のエラー処理
-	let resolved_path_str = resolved_path.to_str().unwrap().to_string();
-
-	let mut file = File::open(resolved_path) ?;
-	let mut moddl = String::new();
-	file.read_to_string(&mut moddl) ?;
-
-	import(moddl.as_str(), sample_rate, resolved_path_str.as_str())
-}
-
 fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<PlayerContext> {
 	let mut pctx = PlayerContext::init(moddl_path, sample_rate);
 
@@ -170,18 +150,18 @@ fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlR
 	Ok(pctx)
 }
 
-pub fn import(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<HashMap<String, Value>> {
-	let pctx = process_statements(moddl, sample_rate, moddl_path) ?;
+fn read_file(path: &str) -> ModdlResult<String> {
+	let mut file = File::open(path) ?;
+	let mut moddl = String::new();
+	file.read_to_string(&mut moddl) ?;
 
-	// pctx.vars.borrow() が通らない。こう書かないといけない
-	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
-	let vars = RefCell::<Scope>::borrow(&*pctx.vars);
-	Ok(vars.entries().clone())
+	Ok(moddl)
 }
 
-pub fn play(moddl: &str, moddl_path: &str) -> ModdlResult<()> {
+pub fn play(moddl_path: &str) -> ModdlResult<()> {
+	let moddl = read_file(moddl_path) ?;
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
-	let mut pctx = process_statements(moddl, context.sample_rate(), moddl_path) ?;
+	let mut pctx = process_statements(moddl.as_str(), context.sample_rate(), moddl_path) ?;
 	
 	let mut nodes = NodeHost::new();
 	// TODO タグ名を sequence_generator と共通化
@@ -294,6 +274,19 @@ pub fn play(moddl: &str, moddl_path: &str) -> ModdlResult<()> {
 	Ok(())
 }
 
+pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> ModdlResult<HashMap<String, Value>> {
+	let resolved_path = resolve_path(moddl_path, base_moddl_path);
+	// TODO resolved_path が valid unicode でない場合のエラー処理
+	let resolved_path_str = resolved_path.to_str().unwrap();
+	let moddl = read_file(resolved_path_str) ?;
+	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path_str) ?;
+
+	// pctx.vars.borrow() が通らない。こう書かないといけない
+	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
+	let vars = RefCell::<Scope>::borrow(&*pctx.vars);
+	Ok(vars.entries().clone())
+}
+
 fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
@@ -397,7 +390,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 				"import" => {
 					let path = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_string()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let imported_vars = import_file(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
+					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;
