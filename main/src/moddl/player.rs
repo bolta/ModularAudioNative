@@ -3,6 +3,7 @@ use super::{
 	error::*,
 	evaluator::*,
 	path::*,
+	player_output::*,
 	scope::*,
 	value::*,
 };
@@ -27,6 +28,7 @@ use crate::{
 		prim::*,
 		stereo::*,
 		system::*,
+		util::*,
 		var::*,
 	},
 	seq::{
@@ -158,7 +160,7 @@ fn read_file(path: &str) -> ModdlResult<String> {
 	Ok(moddl)
 }
 
-pub fn play(moddl_path: &str) -> ModdlResult<()> {
+pub fn play(moddl_path: &str, output: PlayerOutput) -> ModdlResult<()> {
 	let moddl = read_file(moddl_path) ?;
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 	let mut pctx = process_statements(moddl.as_str(), context.sample_rate(), moddl_path) ?;
@@ -233,19 +235,24 @@ pub fn play(moddl_path: &str) -> ModdlResult<()> {
 	};
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
-	nodes.add(Box::new(PortAudioOut::new(master)));
 
-	// wav ファイルに出力
-	// TODO コマンドオプションで指定できるように
-	// nodes.add(Box::new(crate::node::file::WavFileOut::new(master, "out.wav".to_string())));
-
-	// stdout に出力
-	// TODO コマンドオプションで指定できるように
-	// nodes.add(Box::new(Print::new(master)));
-
-	// 出力しない（パフォーマンス計測用）
-	// TODO コマンドオプションで指定できるように
-	// nodes.add(Box::new(NullOut::new(master)));
+	match output {
+		PlayerOutput::Audio => {
+			nodes.add(Box::new(PortAudioOut::new(master)));
+		},
+		PlayerOutput::Wav { path } => {
+			// wav ファイルに出力
+			nodes.add(Box::new(crate::node::file::WavFileOut::new(master, path)));
+		},
+		PlayerOutput::Stdout => {
+			// stdout に出力
+			nodes.add(Box::new(Print::new(master)));
+		},
+		PlayerOutput::Null => {
+			// 出力しない（パフォーマンス計測用）
+			nodes.add(Box::new(NullOut::new(master)));
+		},
+	}
 
 	// TODO タグ名共通化
 	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));

@@ -17,6 +17,7 @@ mod wave;
 
 use crate::moddl::{
 	player,
+	player_output::*,
 };
 
 use std::{
@@ -36,7 +37,7 @@ fn main() {
 			exit(1);
 		}
 		Some(moddl_path) => {
-			if let Err(e) = player::play(moddl_path.as_str()) {
+			if let Err(e) = player::play(moddl_path.as_str(), PlayerOutput::Audio) {
 				eprintln!("An error occurred: {:?}", e);
 				exit(1);
 			}
