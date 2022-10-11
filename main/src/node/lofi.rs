@@ -66,3 +66,58 @@ impl NodeFactory for QuantCrushFactory {
 		Box::new(QuantCrush::new(signal, resolution, min, max))
 	}
 }
+
+ ////
+//// Sample Rate Crusher
+
+pub struct SampleCrush {
+	signal: MonoNodeIndex,
+	sample_rate: MonoNodeIndex,
+	accum: f32,
+	out_value: f32,
+}
+impl SampleCrush {
+	pub fn new(signal: MonoNodeIndex, sample_rate: MonoNodeIndex) -> Self {
+		Self { signal, sample_rate, accum: 0f32, out_value: 0f32 }
+	}
+}
+#[node_impl]
+impl Node for SampleCrush {
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { vec![
+		self.signal.channeled(),
+		self.sample_rate.channeled(),
+	] }
+	fn activeness(&self) -> Activeness { Activeness::Passive }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
+		let signal = inputs[0];
+		let sample_rate = inputs[1];
+
+		if self.accum >= context.sample_rate_f32() {
+			self.accum %= context.sample_rate_f32();
+			self.out_value = signal;
+		}
+		output_mono(output, self.out_value);
+		self.accum += sample_rate;
+	}
+}
+
+pub struct SampleCrushFactory {
+	default_sample_rate: i32,
+}
+impl SampleCrushFactory {
+	pub fn new(default_sample_rate: i32) -> Self {
+		Self { default_sample_rate }
+	} 
+}
+impl NodeFactory for SampleCrushFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
+		spec_with_default("sampleRate", 1, self.default_sample_rate as f32),
+	] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let signal = piped_upstream.as_mono();
+		let sample_rate = node_args.get("sampleRate").unwrap().as_mono(); 
+		Box::new(SampleCrush::new(signal, sample_rate))
+	}
+}

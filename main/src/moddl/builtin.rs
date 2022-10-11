@@ -59,6 +59,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_node_factory!("hpf", HighPassFilterFactory { });
 	add_node_factory!("bpf", BandPassFilterFactory { });
 	add_node_factory!("quantCrush", QuantCrushFactory { });
+	add_node_factory!("sampleCrush", SampleCrushFactory::new(sample_rate));
 	add_node_factory!("pan", PanFactory { });
 	add_node_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });

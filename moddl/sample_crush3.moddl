@@ -1,0 +1,6 @@
+@tempo 120
+
+@instrument ^a, sawOsc | lpf { 8000 + 7000 * uniformNoise | sampleCrush { 10 }, 30 } * adsrEnv
+
+a o4l8
+a c1^1^1^1

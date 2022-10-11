@@ -1,0 +1,12 @@
+@tempo 112
+
+@instrument ^a, sineOsc | sampleCrush * adsrEnv
+
+a o4l8
+a c4defgab>c4r4<
+a ysampleRate, 11025
+a c4defgab>c4r4<
+a ysampleRate, 5512.5
+a c4defgab>c4r4<
+a ysampleRate, 2756.25
+a c4defgab>c4r4<

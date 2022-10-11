@@ -1,0 +1,6 @@
+@tempo 112
+
+@instrument ^a, node (f) (f + 0.5 * f * uniformNoise | sampleCrush { 10 }) | sineOsc 
+
+a o4l8
+a c4defgab>c4r4<
