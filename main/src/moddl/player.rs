@@ -3,7 +3,7 @@ use super::{
 	error::*,
 	evaluator::*,
 	path::*,
-	player_output::*,
+	player_option::*,
 	scope::*,
 	value::*,
 };
@@ -160,7 +160,8 @@ fn read_file(path: &str) -> ModdlResult<String> {
 	Ok(moddl)
 }
 
-pub fn play(moddl_path: &str, output: PlayerOutput) -> ModdlResult<()> {
+pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
+	let moddl_path = options.moddl_path.as_str();
 	let moddl = read_file(moddl_path) ?;
 	let mut context = Context::new(44100); // TODO 値を外から渡せるように
 	let mut pctx = process_statements(moddl.as_str(), context.sample_rate(), moddl_path) ?;
@@ -236,13 +237,13 @@ pub fn play(moddl_path: &str, output: PlayerOutput) -> ModdlResult<()> {
 	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, mix, master_vol) ?;
 
-	match output {
+	match &options.output {
 		PlayerOutput::Audio => {
 			nodes.add(Box::new(PortAudioOut::new(master)));
 		},
 		PlayerOutput::Wav { path } => {
 			// wav ファイルに出力
-			nodes.add(Box::new(crate::node::file::WavFileOut::new(master, path)));
+			nodes.add(Box::new(crate::node::file::WavFileOut::new(master, path.clone())));
 		},
 		PlayerOutput::Stdout => {
 			// stdout に出力

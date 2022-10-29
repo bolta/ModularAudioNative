@@ -5,6 +5,6 @@ pub mod function;
 pub mod lambda_function;
 pub mod path;
 pub mod player;
-pub mod player_output;
+pub mod player_option;
 pub mod scope;
 pub mod value;
