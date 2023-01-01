@@ -15,9 +15,17 @@ use portaudio as pa;
 const FRAMES: u32 = 1000;
 const INTERLEAVED: bool = true;
 
+// #4 マルチマシン対応
+// PortAudio の Stream は生ポインタを持っている都合で Send にならないので、
+// ムリヤリ Send にするためのラッパーをかます。
+// https://users.rust-lang.org/t/workaround-missing-send-trait-for-the-ffi/30828/7
+// ノード生成時には初期化含めて一切触らず、別スレッドでの演奏開始時に初めて初期化するので問題はないはず
+struct SendWrapper(pa::Stream<pa::Blocking<pa::stream::Buffer>, pa::Output<Sample>>);
+unsafe impl Send for SendWrapper { }
+
 pub struct PortAudioOut {
 	input: ChanneledNodeIndex,
-	stream: Option<pa::Stream<pa::Blocking<pa::stream::Buffer>, pa::Output<Sample>>>,
+	stream: Option<SendWrapper>,
 	buffer: Vec<Sample>,
 	buffer_size: usize,
 }
@@ -63,11 +71,11 @@ impl Node for PortAudioOut {
 		let output_settings = pa::OutputStreamSettings::new(output_params, sample_rate as f64, FRAMES);
 
 		let stream = pa.open_blocking_stream(output_settings).expect("error");
-		self.stream = Some(stream);
+		self.stream = Some(SendWrapper(stream));
 
 		match &mut self.stream {
 			None => { }
-			Some(stream) => stream.start().expect("error")
+			Some(stream) => stream.0.start().expect("error")
 		}
 	}
 
@@ -81,7 +89,7 @@ impl Node for PortAudioOut {
 		match &mut self.stream {
 			None => { }
 			Some(stream) => {
-				stream.write(FRAMES as u32, |output| {
+				stream.0.write(FRAMES as u32, |output| {
 					for (i, sample) in b.iter().enumerate() {
 						output[i] = 0.5 * sample;
 					};
@@ -101,8 +109,8 @@ impl Node for PortAudioOut {
 		match &mut self.stream {
 			None => { }
 			Some(stream) => {
-				ignore_errors(stream.stop());
-				ignore_errors(stream.close());
+				ignore_errors(stream.0.stop());
+				ignore_errors(stream.0.close());
 			}
 		}
 		self.stream = None;

@@ -1,6 +1,6 @@
 use mopa::mopafy;
 
-pub trait Event: mopa::Any {
+pub trait Event: mopa::Any + Send {
 	// TODO 名前空間を規定する
 	fn event_type(&self) -> &str;
 	fn target(&self) -> &EventTarget;

@@ -57,6 +57,8 @@ use std::{
 	io::Read,
 	path::Path,
 	rc::Rc,
+	sync::Arc,
+	thread,
 };
 
 // TODO エラー処理を全体的にちゃんとする
@@ -163,26 +165,29 @@ fn read_file(path: &str) -> ModdlResult<String> {
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = options.moddl_path.as_str();
 	let moddl = read_file(moddl_path) ?;
-	let mut context = Context::new(44100); // TODO 値を外から渡せるように
-	let mut pctx = process_statements(moddl.as_str(), context.sample_rate(), moddl_path) ?;
+	let sample_rate = 44100; // TODO 値を外から渡せるように
+	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
 	
-	let mut nodes = NodeHost::new();
+	let mut nodes = AllNodes::new();
+
 	// TODO タグ名を sequence_generator と共通化
-	let tempo = nodes.add_with_tag("#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
-	let timer = nodes.add(Box::new(TickTimer::new(tempo.as_mono(), pctx.ticks_per_bar, pctx.groove_cycle))).as_mono();
+	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
+	let timer = nodes.add_node(MACHINE_MAIN, Box::new(TickTimer::new(tempo.node(MACHINE_MAIN).as_mono(), pctx.ticks_per_bar, pctx.groove_cycle)))/* .as_mono() */;
 
 	// TODO even groove を誰も使わない場合は省略
-	nodes.add(Box::new(Tick::new(timer, pctx.groove_cycle, make_seq_tag(None, &mut pctx.seq_tags))));
+	// TODO マルチマシン化に伴い削除
+	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(timer.node(MACHINE_MAIN).as_mono(), pctx.groove_cycle, make_seq_tag(None, &mut pctx.seq_tags))));
 
-	let mut output_nodes = HashMap::<String, ChanneledNodeIndex>::new();
+	let mut output_nodes = HashMap::<String, NodeId>::new();
 
 	// for (track, mml) in &pctx.mmls {
 	for (track, spec) in &pctx.track_specs {
+		let submachine_idx = nodes.add_submachine(track.clone());
 		let mml = &pctx.mmls.get(track).map(|mml| mml.as_str()).unwrap_or("");
 		let output_node = {
 			// @mute で指定されているか、@solo で指定されていなければ、ミュート対象
 			if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) {
-				Some(nodes.add(Box::new(Constant::new(0f32))))
+				Some(nodes.add_node(submachine_idx, Box::new(Constant::new(0f32))))
 			} else {
 				// let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
 				let seq_tag = match pctx.grooves.get(track) {
@@ -191,20 +196,21 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				};
 				match spec {
 					TrackSpec::Instrument(structure) => {
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes/* , &mut output_nodes */,
-								&mut PlaceholderStack::init(HashMap::new()), None) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
+								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle) ?)
 					}
 					TrackSpec::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes,
-								&mut placeholders, None) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
+								&mut placeholders, None, timer, pctx.groove_cycle) ?)
 					}
 					TrackSpec::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
-						nodes.add(Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
+						// TODO しくみから再考が必要
+						// let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
+						// nodes.add_node(submachine_idx, Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
 						None
 					}
@@ -219,44 +225,47 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	let mut terminal_tracks: Vec<&String> = pctx.terminal_tracks.iter().collect();
 	terminal_tracks.sort_unstable();
-	let terminal_nodes: Vec<ChanneledNodeIndex> = terminal_tracks.iter().map(|t| output_nodes[*t]).collect();
+	let terminal_nodes: Vec<NodeId> = terminal_tracks.iter().map(|t| output_nodes[*t]).collect();
+
+	let machine_mix = nodes.add_submachine("mix".to_string());
 	let mix = {
 		if terminal_nodes.is_empty() {
-			nodes.add(Box::new(Constant::new(0f32)))
+			nodes.add_node(machine_mix, Box::new(Constant::new(0f32)))
 		} else {
 			// FIXME Result が絡むときの fold をきれいに書く方法
 			let head = *terminal_nodes.first().unwrap();
 			let tail = &terminal_nodes[1..];
 			let mut sum = head;
 			for t in tail {
-				sum = add(None, &mut nodes, sum, *t) ?;
+				sum = add(None, &mut nodes, machine_mix, sum, *t) ?;
 			}
 			sum
 		}
 	};
-	let master_vol = nodes.add(Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
-	let master = multiply(None, &mut nodes, mix, master_vol) ?;
+	let master_vol = nodes.add_node(machine_mix, Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
+	let master = multiply(None, &mut nodes, machine_mix, mix, master_vol) ?;
+	let master_node = ensure_on_machine(&mut nodes, master, MACHINE_MAIN);
 
 	match &options.output {
 		PlayerOutput::Audio => {
-			nodes.add(Box::new(PortAudioOut::new(master)));
+			nodes.add_node(MACHINE_MAIN, Box::new(PortAudioOut::new(master_node)));
 		},
 		PlayerOutput::Wav { path } => {
 			// wav ファイルに出力
-			nodes.add(Box::new(crate::node::file::WavFileOut::new(master, path.clone())));
+			nodes.add_node(MACHINE_MAIN, Box::new(crate::node::file::WavFileOut::new(master_node, path.clone())));
 		},
 		PlayerOutput::Stdout => {
 			// stdout に出力
-			nodes.add(Box::new(Print::new(master)));
+			nodes.add_node(MACHINE_MAIN, Box::new(Print::new(master_node)));
 		},
 		PlayerOutput::Null => {
 			// 出力しない（パフォーマンス計測用）
-			nodes.add(Box::new(NullOut::new(master)));
+			nodes.add_node(MACHINE_MAIN, Box::new(NullOut::new(master_node)));
 		},
 	}
 
 	// TODO タグ名共通化
-	nodes.add_with_tag("terminator".to_string(), Box::new(Terminator::new(master)));
+	nodes.add_node_with_tag(MACHINE_MAIN, "terminator".to_string(), Box::new(Terminator::new(master_node)));
 
 	// 一定時間で終了
 	// TODO コマンドオプションで指定できるように
@@ -277,7 +286,17 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 		events
 	});
 
-	Machine::new().play(&mut context, &mut nodes, &mut pctx.waveforms, Some(skip_mode_events));
+	let waveforms = Arc::new(pctx.waveforms);
+	let joins: Vec<_> = nodes.result().into_iter().map(|mut machine_spec| {
+		let waveforms = Arc::clone(&waveforms);
+		thread::spawn(move || {
+			// TODO skip_mode_events が供給できていない
+			Machine::new(machine_spec.name).play(&mut Context::new(sample_rate), &mut machine_spec.nodes, &waveforms, None);
+		})
+	}).collect();
+	for j in joins {
+		j.join();
+	}
 
 	Ok(())
 }
@@ -456,9 +475,9 @@ impl Iterator for EventIter {
 	fn next(&mut self) -> Option<Box<dyn crate::core::event::Event>> { None }
 }
 
-
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut NodeHost/* , output_nodes: &mut Vec<ChanneledNodeIndex> */, placeholders: &mut PlaceholderStack, override_input: Option<MonoNodeIndex>)
-		-> ModdlResult<ChanneledNodeIndex> {
+// TODO 引数を整理できるか
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32)
+		-> ModdlResult<NodeId> {
 	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
 	let freq_tag = format!("{}_freq", track);
 
@@ -467,60 +486,63 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		note: track.to_string(),
 	};
 	let (seqs, features) = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
-	let _seqr = nodes.add_with_tag(seq_tag.to_string(), Box::new(Sequencer::new(seqs)));
+	let _seqr = nodes.add_node_with_tag(submachine_idx, seq_tag.to_string(), Box::new(Sequencer::new(seqs)));
 
 	let mut input = match override_input {
-		Some(input) => input.channeled(),
-		None => nodes.add_with_tag(freq_tag.clone(), Box::new(Var::new(0f32))),
+		Some(input) => input,
+		None => nodes.add_node_with_tag(submachine_idx, freq_tag.clone(), Box::new(Var::new(0f32))),
 	};
 	if features.contains(&Feature::Detune) {
 		// セント単位のデチューン
 		// freq_detuned = freq * 2 ^ (detune / 1200)
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let detune = nodes.add_with_tag(format!("{}.#detune", &track), Box::new(Var::new(0f32)));
-		let cents_per_oct = nodes.add(Box::new(Constant::new(1200f32)));
-		let detune_oct = divide(Some(track), nodes, detune, cents_per_oct) ?; // 必ず成功するはず
-		let const_2 = nodes.add(Box::new(Constant::new(2f32)));
-		let freq_ratio = power(Some(track), nodes, const_2, detune_oct) ?; // 必ず成功するはず
-		let freq_detuned = multiply(Some(track), nodes, input, freq_ratio) ?; // 必ず成功するはず
+		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(0f32)));
+		let cents_per_oct = nodes.add_node(submachine_idx, Box::new(Constant::new(1200f32)));
+		let detune_oct = divide(Some(track), nodes, submachine_idx, detune, cents_per_oct) ?; // 必ず成功するはず
+		let const_2 = nodes.add_node(submachine_idx, Box::new(Constant::new(2f32)));
+		let freq_ratio = power(Some(track), nodes, submachine_idx, const_2, detune_oct) ?; // 必ず成功するはず
+		let freq_detuned = multiply(Some(track), nodes, submachine_idx, input, freq_ratio) ?; // 必ず成功するはず
 		input = freq_detuned;
 	}
 	
-	let instrm = build_instrument(track, instrm_def, nodes, /* freq */input, placeholders) ?;
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders) ?;
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
 		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vel = nodes.add_with_tag(format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
-		let output_vel = multiply(Some(track), nodes, output, vel) ?; // 必ず成功するはず
+		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(1f32)));
+		let output_vel = multiply(Some(track), nodes, submachine_idx, output, vel) ?; // 必ず成功するはず
 		output = output_vel;
 	}
 	if features.contains(&Feature::Volume) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
 		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vol = nodes.add_with_tag(format!("{}.#volume", &track), Box::new(Var::new(1f32)));
-		let output_vol = multiply(Some(track), nodes, output, vol) ?; // 必ず成功するはず
+		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(1f32)));
+		let output_vol = multiply(Some(track), nodes, submachine_idx, output, vol) ?; // 必ず成功するはず
 		output = output_vol;
 	}
+
+	let t = ensure_on_machine(nodes, timer, submachine_idx).as_mono();
+	nodes.add_node(submachine_idx, Box::new(Tick::new(t, groove_cycle, seq_tag.clone())));
 
 	Ok(output)
 }
 
-pub type PlaceholderStack = Stack<HashMap<String, ChanneledNodeIndex>>;
+pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHost, freq: ChanneledNodeIndex, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut NodeHost, input: ChanneledNodeIndex, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<ChanneledNodeIndex> {
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, $input, Some($const_tag), placeholders) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, $input, None, placeholders) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, Some($const_tag), placeholders) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
 			// トラックに属する node は全てトラック名のタグをつける
-			($new_node: expr) => { Ok(nodes.add_with_tag(track.to_string(), $new_node)) }
+			($new_node: expr) => { Ok(nodes.add_node_with_tag(submachine_idx, track.to_string(), $new_node)) }
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
@@ -543,13 +565,13 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				// ラベルが明示されていればそちらを使う
 				let arg_name = arg_val.map(|(_, value)| value.label()).flatten().unwrap_or(name.clone());
 				let arg_node = recurse!(&strukt, input, arg_name) ?;
-				let coerced_arg_node = match coerce_input(Some(track), nodes, arg_node, channels) {
+				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
 					// モノラルであるべき node_arg にステレオが与えられた場合、
 					// 勝手にモノラルに変換するとロスが発生するのでエラーにする
 					None => Err(Error::ChannelMismatch),
 				} ?;
-				node_args.insert(name.clone(), coerced_arg_node);
+				node_args.insert(name.clone(), ensure_on_machine(nodes, coerced_arg_node, submachine_idx));
 			}
 			Ok(node_args)
 		};
@@ -562,7 +584,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 					arg_nodes.push(recurse!(arg, input) ?);
 				}
 
-				create_calc_node(Some(track), nodes, arg_nodes, node_factory.borrow())
+				create_calc_node(Some(track), nodes, submachine_idx, arg_nodes, node_factory.borrow())
 			},
 
 			NodeStructure::Connect(lhs, rhs) => {
@@ -577,8 +599,10 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				let else_result = recurse!(els, input) ?;
 
 				// TODO ステレオ対応（入力のどれかがステレオならステレオに拡張する）
-				add_node!(Box::new(Condition::new(
-						cond_result.as_mono(), then_result.as_mono(), else_result.as_mono())))
+				let mut to_mono = |node| ensure_on_machine(nodes, node, submachine_idx).as_mono();
+				let node = Box::new(Condition::new(
+					to_mono(cond_result), to_mono(then_result), to_mono(else_result)));
+				add_node!(node)
 			},
 
 			NodeStructure::Lambda { input_param, body } => {
@@ -599,7 +623,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 			// },
 			NodeStructure::NodeFactory(fact) => {
 				let node_args = make_node_args(&HashMap::new(), fact) ?;
-				apply_input(Some(track), nodes, fact, &node_args, input)
+				apply_input(Some(track), nodes, submachine_idx, fact, &node_args, input)
 			},
 			NodeStructure::NodeWithArgs { factory, label: _, args } => {
 				// 引数ありのノード生成
@@ -609,7 +633,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				} ?;
 				let node_args = make_node_args(args, fact/* , &label */) ?;
 
-				apply_input(Some(track), nodes, fact, &node_args, input)
+				apply_input(Some(track), nodes, submachine_idx, fact, &node_args, input)
 			},
 			NodeStructure::Constant { value, label } => {
 				let node = Box::new(Var::new(*value));
@@ -617,7 +641,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
-					Some(tag) => Ok(nodes.add_with_tags(vec![track.to_string(), tag], node)),
+					Some(tag) => Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node)),
 					None => add_node!(node),
 				}
 				
@@ -629,28 +653,29 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut NodeHos
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, freq, None, placeholders)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders)
 }
 
 fn coerce_input(
 	track: Option<&str>,
-	nodes: &mut NodeHost,
-	input: ChanneledNodeIndex,
+	nodes: &mut AllNodes,
+	submachine_idx: MachineIndex,
+	input: NodeId,
 	expected_channels: i32
-) -> Option<ModdlResult<ChanneledNodeIndex>> {
+) -> Option<ModdlResult<NodeId>> {
 	// TODO 共通化
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
 		($new_node: expr) => {
 			Ok(match track {
-				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
-				None => nodes.add($new_node),
+				Some(track) => nodes.add_node_with_tag(submachine_idx, track.to_string(), $new_node),
+				None => nodes.add_node(submachine_idx, $new_node),
 			})
 		}
 	}
 	match (input.channels(), expected_channels) {
 		(1, 1) => Some(Ok(input)),
-		(1, 2) => Some(add_node!(Box::new(MonoToStereo::new(input.as_mono())))),
+		(1, 2) => Some(add_node!(Box::new(MonoToStereo::new(input.node(submachine_idx).as_mono())))),
 		(2, 1) => None, // ステレオの入力をモノラルに入れる場合、状況によってすべきことが異なるので、呼び出し元に任せる
 		(2, 2) => Some(Ok(input)),
 		_ => Some(Err(Error::ChannelMismatch)),
@@ -660,63 +685,162 @@ fn coerce_input(
 
 fn apply_input(
 	track: Option<&str>,
-	nodes: &mut NodeHost,
+	nodes: &mut AllNodes,
+	submachine_idx: MachineIndex,
 	fact: &Rc<dyn NodeFactory>,
 	node_args: &NodeArgs,
-	input: ChanneledNodeIndex
-) -> ModdlResult<ChanneledNodeIndex> {
+	input: NodeId,
+) -> ModdlResult<NodeId> {
 	// TODO 共通化
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
 		($new_node: expr) => {
 			Ok(match track {
-				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
-				None => nodes.add($new_node),
+				Some(track) => nodes.add_node_with_tag(submachine_idx, track.to_string(), $new_node),
+				None => nodes.add_node(submachine_idx, $new_node),
 			})
 		}
 	}
 
-	match coerce_input(track, nodes, input, fact.input_channels()) {
+	match coerce_input(track, nodes, submachine_idx, input, fact.input_channels()) {
 		Some(result) => {
 			let coerced_input = result ?;
-			add_node!(fact.create_node(node_args, coerced_input))
+			// add_node!(fact.create_node(node_args, coerced_input.node(submachine_idx)))
+			let node_id = ensure_on_machine(nodes, coerced_input, submachine_idx);
+			add_node!(fact.create_node(node_args, node_id))
 		},
 		None => {
 			// 一旦型を明記した変数に取らないとなぜか E0282 になる
 			let input_l = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(Split::new(input.as_stereo(), 0)));
+				let result: ModdlResult<NodeId> = add_node!(Box::new(Split::new(input.node(submachine_idx).as_stereo(), 0)));
 				result ?
 			};
 			let input_r = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(Box::new(Split::new(input.as_stereo(), 1)));
+				let result: ModdlResult<NodeId> = add_node!(Box::new(Split::new(input.node(submachine_idx).as_stereo(), 1)));
 				result ?
 			};
 			let result_l = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(node_args, input_l));
+				let result: ModdlResult<NodeId> = add_node!(fact.create_node(node_args, input_l.node(submachine_idx)));
 				result ?
 			};
 			let result_r = {
-				let result: ModdlResult<ChanneledNodeIndex> = add_node!(fact.create_node(node_args, input_r));
+				let result: ModdlResult<NodeId> = add_node!(fact.create_node(node_args, input_r.node(submachine_idx)));
 				result ?
 			};
-			add_node!(Box::new(Join::new(vec![result_l.as_mono(), result_r.as_mono()])))
+			add_node!(Box::new(Join::new(vec![result_l.node(submachine_idx).as_mono(), result_r.node(submachine_idx).as_mono()])))
 		}
+	}
+}
+
+// TODO 別ファイルにする
+
+use crate::core::{node::*};
+// use std::ops::{Index, IndexMut};
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct MachineIndex(pub usize);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct NodeId {
+	pub machine: MachineIndex,
+	node_: ChanneledNodeIndex,
+}
+impl NodeId {
+	pub fn new(machine: MachineIndex, node: ChanneledNodeIndex) -> Self {
+		Self { machine, node_: node }
+	}
+	pub fn node(&self, expected_machine: MachineIndex) -> ChanneledNodeIndex {
+		// 別マシンのノードと誤って混ぜないようチェック入り
+		if self.machine != expected_machine {
+			panic!("wrong machine. expected: {}, actual: {}", expected_machine.0, self.machine.0);
+		}
+		self.node_
+	}
+	pub fn node_of_any_machine(&self) -> ChanneledNodeIndex {
+		// どのマシンのノードか不問
+		self.node_
+	}
+	pub fn channels(&self) -> i32 {
+		// これはマシン不問で取れてもいいかと…
+		self.node_.channels()
+	}
+}
+
+struct MachineSpec {
+	name: String,
+	nodes: NodeHost,
+}
+
+const MACHINE_MAIN: MachineIndex = MachineIndex(0usize);
+struct AllNodes {
+	machines: Vec<MachineSpec>,
+}
+impl AllNodes {
+	pub fn new() -> Self {
+		let mut s = Self { machines: vec![] };
+		s.add_submachine("main".to_string());
+		s
+	}
+	pub fn add_submachine(&mut self, name: String) -> MachineIndex {
+		self.machines.push(MachineSpec { name, nodes: NodeHost::new() });
+		let submachine_idx = MachineIndex(self.machines.len() - 1);
+		println!("machines[{}]: {}", submachine_idx.0, & self.machines[submachine_idx.0].name);
+
+		submachine_idx
+	}
+	pub fn add_node(&mut self, machine: MachineIndex, node: Box<dyn Node>) -> NodeId {
+		let node_idx = self.machines[machine.0].nodes.add(node);
+		NodeId::new(machine, node_idx)
+	}
+	pub fn add_node_with_tags(&mut self, machine: MachineIndex, tags: Vec<String>, node: Box<dyn Node>) -> NodeId {
+		let node_idx = self.machines[machine.0].nodes.add_with_tags(tags, node);
+		NodeId::new(machine, node_idx)
+	}
+	pub fn add_node_with_tag(&mut self, machine: MachineIndex, tag: String, node: Box<dyn Node>) -> NodeId {
+		let node_idx = self.machines[machine.0].nodes.add_with_tag(tag, node);
+		NodeId::new(machine, node_idx)
+	}
+	pub fn result(self) -> Vec<MachineSpec> {
+		self.machines
+	}
+}
+
+const INTERTHREAD_BUFFER_SIZE: usize = 50usize;
+use crate::node::thread::*;
+// use std::thread;
+use std::sync::mpsc::sync_channel;
+
+/// 別マシン上の出力を Sender/Receiver を使って持ってくる。同一マシン上の場合はそのまま使う
+/// TODO なんかいい名前あれば…
+fn ensure_on_machine(nodes: &mut AllNodes, node: NodeId, dest_machine: MachineIndex) -> ChanneledNodeIndex {
+	if node.machine == dest_machine {
+		// 同一マシン上のノードなのでそのまま使える
+		node.node(dest_machine)
+
+	} else {
+		// 別マシンなので Sender/Receiver で持ってくる
+		let (sender, receiver) = sync_channel::<Vec<Sample>>(INTERTHREAD_BUFFER_SIZE);
+		// TODO ステレオ対応
+		let _sender_node = nodes.add_node(node.machine, Box::new(Sender::new(node.node_of_any_machine().as_mono(), sender, INTERTHREAD_BUFFER_SIZE)));
+		let receiver_node = nodes.add_node(dest_machine, Box::new(Receiver::new(receiver)));
+
+		receiver_node.node(dest_machine)
 	}
 }
 
 fn create_calc_node(
 	track: Option<&str>,
-	nodes: &mut NodeHost,
-	arg_nodes: Vec<ChanneledNodeIndex>,
+	nodes: &mut AllNodes,
+	submachine_idx: MachineIndex,
+	arg_nodes: Vec<NodeId>,
 	node_factory: &dyn CalcNodeFactoryTrait,
-) -> ModdlResult<ChanneledNodeIndex> {
+) -> ModdlResult<NodeId> {
 	// TODO 共通化
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
 		($new_node: expr) => {
-			ModdlResult::<ChanneledNodeIndex>::Ok(match track {
-				Some(track) => nodes.add_with_tag(track.to_string(), $new_node),
-				None => nodes.add($new_node),
+			ModdlResult::Ok(match track {
+				Some(track) => nodes.add_node_with_tag(submachine_idx, track.to_string(), $new_node),
+				None => nodes.add_node(submachine_idx, $new_node),
 			})
 		}
 	}
@@ -733,19 +857,22 @@ fn create_calc_node(
 			else { ChannelCombination::AllStereo };
 	match comb {
 		ChannelCombination::AllMono => {
-			add_node!(node_factory.create_mono(arg_nodes.iter().map(|n| n.as_mono()).collect()))
+			let args = arg_nodes.iter().map(|n| ensure_on_machine(nodes, *n, submachine_idx).as_mono()).collect();
+			add_node!(node_factory.create_mono(args))
 		},
 		ChannelCombination::AllStereo => {
-			add_node!(node_factory.create_stereo(arg_nodes.iter().map(|n| n.as_stereo()).collect()))
+			let args = arg_nodes.iter().map(|n| ensure_on_machine(nodes, *n, submachine_idx).as_stereo()).collect();
+			add_node!(node_factory.create_stereo(args))
 		},
 		ChannelCombination::MonoAndStereo => {
 			let mut coerced_arg_nodes: Vec<StereoNodeIndex> = vec![];
 			for n in arg_nodes {
 				coerced_arg_nodes.push(if n.channels() == 1 {
-					let stereo = add_node!(Box::new(MonoToStereo::new(n.as_mono()))) ?;
-					stereo.as_stereo()
+					let mono = ensure_on_machine(nodes, n, submachine_idx).as_mono();
+					let stereo = add_node!(Box::new(MonoToStereo::new(mono))) ?;
+					ensure_on_machine(nodes, stereo, submachine_idx).as_stereo()
 				} else {
-					n.as_stereo()
+					ensure_on_machine(nodes, n, submachine_idx).as_stereo()
 				});
 			}
 			add_node!(node_factory.create_stereo(coerced_arg_nodes))
@@ -756,9 +883,9 @@ fn create_calc_node(
 
 macro_rules! binary {
 	($name: ident, $calc: ident) => {
-		fn $name(track: Option<&str>, nodes: &mut NodeHost,
-			l_node: ChanneledNodeIndex, r_node: ChanneledNodeIndex) -> ModdlResult<ChanneledNodeIndex> {
-				create_calc_node(track, nodes, vec![l_node, r_node], &CalcNodeFactory::<$calc>::new())
+		fn $name(track: Option<&str>, nodes: &mut AllNodes, submachine_idx: MachineIndex,
+			l_node: NodeId, r_node: NodeId) -> ModdlResult<NodeId> {
+				create_calc_node(track, nodes, submachine_idx, vec![l_node, r_node], &CalcNodeFactory::<$calc>::new())
 		}
 	};
 }

@@ -16,6 +16,7 @@ use crate::{
 use std::{
 	collections::hash_map::HashMap,
 	collections::hash_set::HashSet,
+	sync::Arc,
 };
 
 use itertools::Itertools; // for into_group_map_by
@@ -38,11 +39,12 @@ static mut EXECUTE_COUNT: i32 = 0;
 static mut UPDATE_COUNT: i32 = 0;
 
 pub struct Machine {
+	/// マルチマシン構成のデバッグ用
+	name: String,
 }
 impl Machine {
-	pub fn new() -> Self {
-		Self {
-		}
+	pub fn new(name: String) -> Self {
+		Self { name }
 	}
 
 	// TODO Node から状態を切り離すことができれば mut は不要になるのだが
@@ -50,13 +52,13 @@ impl Machine {
 		&mut self,
 		context: &mut Context,
 		nodes: &mut NodeHost,
-		waveforms: &mut WaveformHost,
+		waveforms: &Arc<WaveformHost>,
 		skip_mode_events: Option<Box<dyn Fn () -> Vec<Box<dyn Event>>>>,
 	) {
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
-
+		//  println!("{}: {:?}: {} nodes ({:?})", self.name, std::thread::current().id(), nodes.count(), &upstreams);
 		// TODO max_channels 不要？
 		let (value_offsets, value_count, _max_channels) = {
 			let mut value_offsets = HashMap::<NodeIndex, ValueIndex>::new();
@@ -295,18 +297,17 @@ pub type EventProducer = Producer<Box<dyn Event>>;
 pub type EventConsumer = Consumer<Box<dyn Event>>;
 pub struct Environment<'a> {
 	events: &'a mut EventProducer,
-	waveforms: &'a mut WaveformHost,
+	waveforms: &'a Arc<WaveformHost>,
 }
 impl <'a> Environment<'a> {
-	fn new(events: &'a mut EventProducer, waveforms: &'a mut WaveformHost) -> Self {
+	fn new(events: &'a mut EventProducer, waveforms: &'a Arc<WaveformHost>) -> Self {
 		Self { events, waveforms }
 	}
 	pub fn events_mut(&mut self) -> &mut EventProducer { self.events }
 	pub fn post_event(&mut self, event: Box<dyn Event>) {
 		ignore_errors(self.events_mut().push(event));
 	}
-	pub fn waveforms(&self) -> &WaveformHost { self.waveforms }
-	pub fn waveforms_mut(&mut self) -> &mut WaveformHost { self.waveforms }
+	pub fn waveforms(&self) -> &Arc<WaveformHost> { self.waveforms }
 }
 
 

@@ -14,6 +14,7 @@ pub mod osc;
 pub mod prim;
 pub mod stereo;
 pub mod system;
+pub mod thread;
 pub mod transit;
 pub mod util;
 pub mod var;

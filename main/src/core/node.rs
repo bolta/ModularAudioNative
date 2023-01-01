@@ -9,7 +9,7 @@ use super::{
 
 pub type Upstreams = Vec<ChanneledNodeIndex>;
 
-pub trait Node {
+pub trait Node: Send {
 	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams;
 	fn activeness(&self) -> Activeness;

@@ -16,11 +16,11 @@ use rand::prelude::*;
  * 一様乱数によるノイズジェネレータ
  */
 pub struct UniformNoise {
-	gen: ThreadRng,
+	gen: StdRng,
 }
 impl UniformNoise {
 	pub fn new() -> Self {
-		Self { gen: rand::thread_rng() }
+		Self { gen: StdRng::from_entropy() }
 	}
 }
 #[node_impl]
