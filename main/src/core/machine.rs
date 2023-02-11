@@ -73,6 +73,9 @@ impl Machine {
 			}
 			(value_offsets, next_val, max_channels)
 		};
+		// for i in 0usize .. nodes.count() {
+		// 	println!("{}[{}]: delay = {}", &self.name, i, nodes[NodeIndex(i)].delay_samples());
+		// }
 
 		let activenesses = compute_activenesses(nodes);
 // dbg!(&activenesses);

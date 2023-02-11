@@ -7,10 +7,11 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct Constant {
+	base_: NodeBase,
 	value: Sample,
 }
 impl Constant {
-	pub fn new(value: Sample) -> Self { Self { value } }
+	pub fn new(/* base: NodeBase, */ value: Sample) -> Self { Self { base_: NodeBase::new(0),  value } }
 }
 #[node_impl]
 impl Node for Constant {

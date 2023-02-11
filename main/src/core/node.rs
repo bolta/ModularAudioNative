@@ -9,6 +9,17 @@ use super::{
 
 pub type Upstreams = Vec<ChanneledNodeIndex>;
 
+pub struct NodeBase {
+	delay_samples: u32,
+}
+impl NodeBase {
+	pub fn new(delay_samples: u32) -> Self {
+		Self { delay_samples }
+	}
+
+	pub fn delay_samples(&self) -> u32 { self.delay_samples }
+}
+
 pub trait Node: Send {
 	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams;
@@ -20,9 +31,12 @@ pub trait Node: Send {
 	fn finalize(&mut self, _context: &Context, _env: &mut Environment) { }
 	fn process_event(&mut self, _event: &dyn Event, _context: &Context, _env: &mut Environment) { }
 
+	fn delay_samples(&self) -> u32 { self.base().delay_samples() }
+
 	// 以下は node_impl 属性によって自動実装されるため実装不要
 	fn implements_execute(&self) -> bool;
 	fn implements_update(&self) -> bool;
+	fn base(&self) -> &NodeBase;
 }
 
 pub fn output_mono(output: &mut [Sample], value: Sample) {

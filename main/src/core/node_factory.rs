@@ -43,16 +43,16 @@ pub trait NodeFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec>;
 	fn input_channels(&self) -> i32;
 	/// piped_upstream は接続の前段となっているノード
-	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node>;
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node>;
 }
 
 pub struct PanFactory { }
 impl NodeFactory for PanFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("pos", 1)] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let input = piped_upstream.as_mono();
 		let pan = node_args.get("pos").unwrap().as_mono();
-		Box::new(Pan::new(input, pan))
+		Box::new(Pan::new(base, input, pan))
 	}
 }

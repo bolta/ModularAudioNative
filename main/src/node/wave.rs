@@ -16,6 +16,7 @@ use crate::{
 use node_macro::node_impl;
 
 pub struct WaveformPlayer {
+	base_: NodeBase,
 	// TODO 波形のチャンネル数と照合
 	// ステレオの player でモノラルの波形を読む場合はステレオに拡張するとして、
 	// 逆の場合はエラー？
@@ -26,8 +27,9 @@ pub struct WaveformPlayer {
 	offset: f32,
 }
 impl WaveformPlayer {
-	pub fn new(channels: i32, index: WaveformIndex, freq: MonoNodeIndex) -> Self {
+	pub fn new(base: NodeBase, channels: i32, index: WaveformIndex, freq: MonoNodeIndex) -> Self {
 		Self {
+			base_: base,
 			channels,
 			index,
 			freq,
@@ -102,8 +104,8 @@ impl WaveformPlayerFactory {
 impl NodeFactory for WaveformPlayerFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(WaveformPlayer::new(1, self.waveform_index, freq))
+		Box::new(WaveformPlayer::new(base, 1, self.waveform_index, freq))
 	}
 }

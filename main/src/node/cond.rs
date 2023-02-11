@@ -13,13 +13,14 @@ use node_macro::node_impl;
 //// Condition
 
 pub struct Condition {
+	base_: NodeBase,
 	cond: MonoNodeIndex,
 	then: MonoNodeIndex,
 	els: MonoNodeIndex,
 }
 impl Condition {
-	pub fn new(cond: MonoNodeIndex, then: MonoNodeIndex, els: MonoNodeIndex) -> Self {
-		Self { cond, then, els }
+	pub fn new(base: NodeBase, cond: MonoNodeIndex, then: MonoNodeIndex, els: MonoNodeIndex) -> Self {
+		Self { base_: base, cond, then, els }
 	}
 }
 #[node_impl]
@@ -38,7 +39,7 @@ impl Node for Condition {
 // impl NodeFactory for ConditionFactory {
 // 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("cond", 1), spec("then", 1), spec("else", 1)] }
 // 	fn input_channels(&self) -> i32 { 1 }
-// 	fn create_node(&self, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+// 	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 // 		Box::new(Condition::new(
 // 			node_args.get("cond").unwrap().as_mono(),
 // 			node_args.get("then").unwrap().as_mono(),

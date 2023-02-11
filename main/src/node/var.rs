@@ -8,11 +8,12 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct Var {
+	base_: NodeBase,
 	value: Sample,
 }
 
 impl Var {
-	pub fn new(value: Sample) -> Self { Self { value } }
+	pub fn new(base: NodeBase, value: Sample) -> Self { Self { base_: base, value } }
 }
 #[node_impl]
 impl Node for Var {

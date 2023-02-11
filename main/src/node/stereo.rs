@@ -7,10 +7,11 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct MonoToStereo {
+	base_: NodeBase,
 	input: MonoNodeIndex,
 }
 impl MonoToStereo {
-	pub fn new(input: MonoNodeIndex) -> Self { Self { input } }
+	pub fn new(base: NodeBase, input: MonoNodeIndex) -> Self { Self { base_: base,  input } }
 }
 #[node_impl]
 impl Node for MonoToStereo {
@@ -23,12 +24,13 @@ impl Node for MonoToStereo {
 }
 
 pub struct Split {
+	base_: NodeBase,
 	input: StereoNodeIndex, 
 	channel: usize,
 }
 impl Split {
-	pub fn new(input: StereoNodeIndex, channel: i32) -> Self {
-		Self { input, channel: channel as usize }
+	pub fn new(base: NodeBase, input: StereoNodeIndex, channel: i32) -> Self {
+		Self { base_: base, input, channel: channel as usize }
 	}
 }
 #[node_impl]
@@ -42,10 +44,11 @@ impl Node for Split {
 }
 
 pub struct Join {
+	base_: NodeBase,
 	inputs: Vec<MonoNodeIndex>,
 }
 impl Join {
-	pub fn new(inputs: Vec<MonoNodeIndex>) -> Self { Self { inputs } }
+	pub fn new(base: NodeBase, inputs: Vec<MonoNodeIndex>) -> Self { Self { base_: base,  inputs } }
 }
 #[node_impl]
 impl Node for Join {
@@ -60,11 +63,12 @@ impl Node for Join {
 }
 
 pub struct Pan {
+	base_: NodeBase,
 	input: MonoNodeIndex,
 	pos: MonoNodeIndex,
 }
 impl Pan {
-	pub fn new(input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self { input, pos } }
+	pub fn new(base: NodeBase, input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self { base_: base,  input, pos } }
 }
 #[node_impl]
 impl Node for Pan {

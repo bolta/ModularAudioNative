@@ -23,13 +23,15 @@ use std::{
 };
 
 pub struct Sequencer {
+	base_: NodeBase,
 	sequences: HashMap<String, Sequence>,
 	// TODO 今後 context は任意個になる予定
 	context: Context,
 }
 impl Sequencer {
-	pub fn new(sequences: HashMap<String, Sequence>) -> Self {
+	pub fn new(base: NodeBase, sequences: HashMap<String, Sequence>) -> Self {
 		Self {
+			base_: base,
 			sequences,
 			context: Context {
 				stack: Stack::init(StackFrame {

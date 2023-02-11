@@ -52,6 +52,12 @@ pub fn node_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 	add_implementation_marker!("execute");
 	add_implementation_marker!("update");
 
+	let meth: TokenStream = quote! {
+		fn base(&self) -> &NodeBase { &self.base_ }
+	}.into();
+	let meth_ast = parse_macro_input!(meth as ImplItemMethod);
+	ast.items.push(ImplItem::Method(meth_ast));
+
 	// 関数にするとなぜかコンパイルエラーになるためマクロで共通化
 	// add_implementation_marker(&mut ast, &method_names, "execute");
 	use quote::ToTokens;

@@ -12,14 +12,16 @@ use node_macro::node_impl;
 //// Exponential Envelope
 
 pub struct ExpEnv {
+	base_: NodeBase,
 	ratio_per_sec: MonoNodeIndex,
 
 	amplitude: Sample,
 	state: ExpEnvState,
 }
 impl ExpEnv {
-	pub fn new(ratio_per_sec: MonoNodeIndex) -> Self {
+	pub fn new(base: NodeBase, ratio_per_sec: MonoNodeIndex) -> Self {
 		Self {
+			base_: base,
 			ratio_per_sec,
 			amplitude: 0f32,
 			state: ExpEnvState::Idle,
@@ -66,8 +68,8 @@ pub struct ExpEnvFactory { }
 impl NodeFactory for ExpEnvFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("ratioPerSec", 1, 0.125f32)] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(ExpEnv::new(node_args.get("ratioPerSec").unwrap().as_mono()))
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(ExpEnv::new(base, node_args.get("ratioPerSec").unwrap().as_mono()))
 	}
 }
 
@@ -75,6 +77,7 @@ impl NodeFactory for ExpEnvFactory {
 //// ADSR Envelope
 
 pub struct AdsrEnv {
+	base_: NodeBase,
 	attack_time: MonoNodeIndex,
 	decay_time: MonoNodeIndex,
 	sustain_level: MonoNodeIndex,
@@ -86,6 +89,7 @@ pub struct AdsrEnv {
 }
 impl AdsrEnv {
 	pub fn new(
+		base: NodeBase, 
 		attack_time: MonoNodeIndex, 
 		decay_time: MonoNodeIndex,
 		sustain_level: MonoNodeIndex,
@@ -93,6 +97,7 @@ impl AdsrEnv {
 		initial_level: MonoNodeIndex, 
 	) -> Self {
 		Self {
+			base_: base,
 			attack_time,
 			decay_time,
 			sustain_level,
@@ -198,8 +203,9 @@ impl NodeFactory for AdsrEnvFactory {
 		]
 	}
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		Box::new(AdsrEnv::new(
+			base,
 			node_args.get("attack").unwrap().as_mono(),
 			node_args.get("decay").unwrap().as_mono(),
 			node_args.get("sustain").unwrap().as_mono(),

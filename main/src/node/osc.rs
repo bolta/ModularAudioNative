@@ -10,12 +10,13 @@ use node_macro::node_impl;
 macro_rules! simple_osc {
 	($name: ident, $factory_name: ident, $expr: expr) => {
 		pub struct $name {
+			base_: NodeBase,
 			freq: MonoNodeIndex,
 		
 			phase: f32,
 		}
 		impl $name {
-			pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase: 0f32 } }
+			pub fn new(base: NodeBase, freq: MonoNodeIndex) -> Self { Self { base_: base,  freq, phase: 0f32 } }
 		}
 		
 		#[node_impl]
@@ -38,9 +39,9 @@ macro_rules! simple_osc {
 		impl NodeFactory for $factory_name {
 			fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 			fn input_channels(&self) -> i32 { 1 }
-			fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+			fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 				let freq = piped_upstream.as_mono();
-				Box::new($name::new(freq))
+				Box::new($name::new(base, freq))
 			}
 		}
 	}
@@ -64,13 +65,14 @@ simple_osc!(SawOsc, SawOscFactory, (|phase: f32| phase / PI - 1f32));
 //// Pulse Oscillator
 
 pub struct PulseOsc {
+	base_: NodeBase,
 	freq: MonoNodeIndex,
 	duty: MonoNodeIndex,
 
 	phase: f32,
 }
 impl PulseOsc {
-	pub fn new(freq: MonoNodeIndex, duty: MonoNodeIndex) -> Self { Self { freq, duty, phase: 0f32 } }
+	pub fn new(base: NodeBase, freq: MonoNodeIndex, duty: MonoNodeIndex) -> Self { Self { base_: base,  freq, duty, phase: 0f32 } }
 }
 
 #[node_impl]
@@ -97,10 +99,10 @@ pub struct PulseOscFactory { }
 impl NodeFactory for PulseOscFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("duty", 1, 0.5f32)] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		let duty = node_args.get("duty").unwrap().as_mono(); 
-		Box::new(PulseOsc::new(freq, duty))
+		Box::new(PulseOsc::new(base, freq, duty))
 	}
 }
 
@@ -108,13 +110,14 @@ impl NodeFactory for PulseOscFactory {
 //// StereoTestOsc
 
 pub struct StereoTestOsc {
+	base_: NodeBase,
 	freq: MonoNodeIndex,
 
 	phase_l: f32,
 	phase_r: f32,
 }
 impl StereoTestOsc {
-	pub fn new(freq: MonoNodeIndex) -> Self { Self { freq, phase_l: 0f32, phase_r: 0f32 } }
+	pub fn new(base: NodeBase, freq: MonoNodeIndex) -> Self { Self { base_: base, freq, phase_l: 0f32, phase_r: 0f32 } }
 }
 #[node_impl]
 impl Node for StereoTestOsc {
@@ -136,8 +139,8 @@ pub struct StereoTestOscFactory { }
 impl NodeFactory for StereoTestOscFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(StereoTestOsc::new(freq))
+		Box::new(StereoTestOsc::new(base, freq))
 	}
 }

@@ -7,10 +7,11 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct Print {
+	base_: NodeBase,
 	input: ChanneledNodeIndex,
 }
 impl Print {
-	pub fn new(input: ChanneledNodeIndex) -> Self { Self { input } }
+	pub fn new(base: NodeBase, input: ChanneledNodeIndex) -> Self { Self { base_: base,  input } }
 }
 #[node_impl]
 impl Node for Print {
@@ -26,10 +27,11 @@ impl Node for Print {
 }
 
 pub struct NullOut {
+	base_: NodeBase,
 	input: ChanneledNodeIndex,
 }
 impl NullOut {
-	pub fn new(input: ChanneledNodeIndex) -> Self { Self { input } }
+	pub fn new(base: NodeBase, input: ChanneledNodeIndex) -> Self { Self { base_: base,  input } }
 }
 #[node_impl]
 impl Node for NullOut {
@@ -42,12 +44,13 @@ impl Node for NullOut {
 }
 
 pub struct MemoryOut<'a> {
+	base_: NodeBase,
 	input: ChanneledNodeIndex,
 	output: &'a mut Vec<Sample>,
 }
 impl <'a> MemoryOut<'a> {
-	pub fn new(input: ChanneledNodeIndex, output: &'a mut Vec<Sample>) -> Self {
-		Self { input, output }
+	pub fn new(base: NodeBase, input: ChanneledNodeIndex, output: &'a mut Vec<Sample>) -> Self {
+		Self { base_: base, input, output }
 	}
 }
 #[node_impl]

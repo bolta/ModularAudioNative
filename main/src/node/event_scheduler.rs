@@ -13,12 +13,14 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 
 pub struct EventScheduler {
+	base_: NodeBase,
 	events: BTreeMap<SampleCount, Vec<Box<dyn Event>>>,
 	next_key: Option<SampleCount>,
 }
 impl EventScheduler {
-	pub fn new() -> Self {
+	pub fn new(base: NodeBase) -> Self {
 		Self {
+			base_: base,
 			events: BTreeMap::new(),
 			next_key: None, // TODO None の代わりにとても大きい値でもいいかも（Option が不要になる）
 		}

@@ -16,11 +16,12 @@ use rand::prelude::*;
  * 一様乱数によるノイズジェネレータ
  */
 pub struct UniformNoise {
+	base_: NodeBase,
 	gen: StdRng,
 }
 impl UniformNoise {
-	pub fn new() -> Self {
-		Self { gen: StdRng::from_entropy() }
+	pub fn new(base: NodeBase) -> Self {
+		Self { base_: base, gen: StdRng::from_entropy() }
 	}
 }
 #[node_impl]
@@ -38,7 +39,7 @@ pub struct UniformNoiseFactory { }
 impl NodeFactory for UniformNoiseFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(UniformNoise::new())
+	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(UniformNoise::new(base))
 	}
 }

@@ -16,6 +16,7 @@ use node_macro::node_impl;
 macro_rules! bi_quad_filter {
 	($name: ident, $factory_name: ident, $make_coeffs: expr) => {
 		pub struct $name {
+			base_: NodeBase,
 			signal: MonoNodeIndex,
 			cutoff: MonoNodeIndex,
 			q: MonoNodeIndex,
@@ -23,8 +24,8 @@ macro_rules! bi_quad_filter {
 			filter: BiQuadFilterCore,
 		}
 		impl $name {
-			pub fn new(signal: MonoNodeIndex, cutoff: MonoNodeIndex, q: MonoNodeIndex) -> Self {
-				Self { signal, cutoff, q, filter: BiQuadFilterCore::new() }
+			pub fn new(base: NodeBase, signal: MonoNodeIndex, cutoff: MonoNodeIndex, q: MonoNodeIndex) -> Self {
+				Self { base_: base, signal, cutoff, q, filter: BiQuadFilterCore::new() }
 			}
 		}
 		#[node_impl]
@@ -56,11 +57,11 @@ macro_rules! bi_quad_filter {
 				spec("q", 1),
 			] }
 			fn input_channels(&self) -> i32 { 1 }
-			fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+			fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 				let signal = piped_upstream.as_mono();
 				let cutoff = node_args.get("cutoff").unwrap().as_mono(); 
 				let q = node_args.get("q").unwrap().as_mono(); 
-				Box::new($name::new(signal, cutoff, q))
+				Box::new($name::new(base, signal, cutoff, q))
 			}
 		}
 	}

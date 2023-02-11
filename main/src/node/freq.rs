@@ -11,6 +11,7 @@ use node_macro::node_impl;
 //// NES Freq Simulator
 
 pub struct NesFreq {
+	base_: NodeBase,
 	freq: MonoNodeIndex,
 
 	/// 三角波チャンネルとして計算するか。
@@ -19,8 +20,8 @@ pub struct NesFreq {
 	triangle: bool,
 }
 impl NesFreq {
-	pub fn new(freq: MonoNodeIndex, triangle: bool) -> Self {
-		Self { freq, triangle }
+	pub fn new(base: NodeBase, freq: MonoNodeIndex, triangle: bool) -> Self {
+		Self { base_: base, freq, triangle }
 	}
 }
 
@@ -53,8 +54,8 @@ impl NesFreqFactory {
 impl NodeFactory for NesFreqFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(NesFreq::new(freq, self.triangle))
+		Box::new(NesFreq::new(base, freq, self.triangle))
 	}
 }

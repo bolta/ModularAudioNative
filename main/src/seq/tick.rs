@@ -2,14 +2,16 @@ use crate::core::{common::*, context::*, event::*, machine::*, node::*};
 use node_macro::node_impl;
 
 pub struct Tick {
+	base_: NodeBase,
 	timer: MonoNodeIndex,
 	cycle: f32, // 必ず整数だが、常に Sample と比較するので Sample で保持しておく
 	target_tag: String,
 	prev_tick_no: Sample, // 必ず整数だが、常に Sample と比較するので Sample で保持しておく
 }
 impl Tick {
-	pub fn new(timer: MonoNodeIndex, cycle: i32, target_tag: String) -> Self {
+	pub fn new(base: NodeBase, timer: MonoNodeIndex, cycle: i32, target_tag: String) -> Self {
 		Self {
+			base_: base,
 			timer,
 			cycle: cycle as Sample,
 			target_tag,
@@ -50,14 +52,16 @@ impl Node for Tick {
 }
 
 pub struct TickTimer {
+	base_: NodeBase,
 	tempo: MonoNodeIndex,
 	ticks_per_bar: i32,
 	cycle: f32,
 	timer: f32,
 }
 impl TickTimer {
-	pub fn new(tempo: MonoNodeIndex, ticks_per_bar: i32, cycle: i32) -> Self {
+	pub fn new(base: NodeBase, tempo: MonoNodeIndex, ticks_per_bar: i32, cycle: i32) -> Self {
 		Self {
+			base_: base,
 			tempo,
 			ticks_per_bar,
 			cycle: cycle as Sample,
@@ -101,10 +105,11 @@ impl Event for TickEvent {
 pub const EVENT_TYPE_TICK: &str = "Tick::Tick";
 
 pub struct ExperGroove {
+	base_: NodeBase,
 	timer: MonoNodeIndex,
 }
 impl ExperGroove {
-	pub fn new(timer: MonoNodeIndex) -> Self { Self { timer } }
+	pub fn new(base: NodeBase, timer: MonoNodeIndex) -> Self { Self { base_: base, timer } }
 }
 #[node_impl]
 impl Node for ExperGroove {
