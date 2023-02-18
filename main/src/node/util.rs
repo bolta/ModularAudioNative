@@ -20,7 +20,7 @@ impl Node for Print {
 	// TODO ステレオ対応
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute<'a>(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute<'a>(&mut self, inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		// TODO ステレオ対応
 		println!("{}", inputs[0]);
 	}
@@ -38,7 +38,7 @@ impl Node for NullOut {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn activeness(&self) -> Activeness { Activeness::Static }
-	fn execute<'a>(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute<'a>(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		// do nothing
 	}
 }
@@ -58,7 +58,7 @@ impl <'a> Node for MemoryOut<'a> {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		self.output.push(inputs[0]);
 	}
 }

@@ -32,7 +32,7 @@ impl Node for QuantCrush {
 		self.max.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let resolution = inputs[1];
 		let min = inputs[2];
@@ -91,7 +91,7 @@ impl Node for SampleCrush {
 		self.sample_rate.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let sample_rate = inputs[1];
 

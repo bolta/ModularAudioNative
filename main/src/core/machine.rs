@@ -60,8 +60,10 @@ impl Machine {
 				.collect();
 		//  println!("{}: {:?}: {} nodes ({:?})", self.name, std::thread::current().id(), nodes.count(), &upstreams);
 		// TODO max_channels 不要？
-		let (value_offsets, value_count, _max_channels) = {
+		let (value_offsets, value_offsets_reversed, value_count, _max_channels) = {
 			let mut value_offsets = HashMap::<NodeIndex, ValueIndex>::new();
+			// TODO もうちょっときれいにいけないか
+			let mut value_offsets_reversed = HashMap::<ValueIndex, NodeIndex>::new();
 			let mut next_val = ValueIndex(0_usize);
 			let mut max_channels = 0_usize;
 			for (i, node) in nodes.nodes().iter().enumerate() {
@@ -69,9 +71,10 @@ impl Machine {
 				max_channels = max_channels.max(chs as usize);
 				if chs <= 0 { continue; }
 				value_offsets.insert(NodeIndex(i), next_val);
+				value_offsets_reversed.insert(next_val, NodeIndex(i));
 				next_val.0 += chs as usize;
 			}
-			(value_offsets, next_val, max_channels)
+			(value_offsets, value_offsets_reversed, next_val, max_channels)
 		};
 		// for i in 0usize .. nodes.count() {
 		// 	println!("{}[{}]: delay = {}", &self.name, i, nodes[NodeIndex(i)].delay_samples());
@@ -81,10 +84,35 @@ impl Machine {
 // dbg!(&activenesses);
 		let mut update_flags = make_update_flags(&activenesses);
 // dbg!(&update_flags);
-		// 各ノードの出力値。複数個所から参照される可能性があるのでキャッシュする
-		let mut values = vec_with_length(value_count.0);
+		// let mut values = vec_with_length(value_count.0);
+
+		// NodeIndex -> Delay
+		// 各ノードが最大何サンプル遅れて参照されるか
+		let max_downstream_delays = {
+			let mut result = vec_with_length_and_init_value(nodes.count(), |_| 0u32);
+			for (d, us) in upstreams.iter().enumerate() {
+				let delay_down = nodes[NodeIndex(d)].delay_samples();
+				for u in us {
+					let up_idx = u.unchanneled();
+					let delay_up = nodes[u.unchanneled()].delay_samples();
+					result[up_idx.0] = result[up_idx.0].max(delay_down - delay_up);
+				}
+			}
+			result
+		};
+
+		// ValueIndex -> OutputBuffer
+		// 各ノードの出力値。複数個所から参照される可能性がある。また遅れて参照される可能性がある
+		let mut values = {
+			let mut values = Vec::with_capacity(value_count.0);
+			for value_idx in 0 .. value_count.0 {
+				let buffer_size = max_downstream_delays[value_offsets_reversed[& ValueIndex(value_idx)].0] as usize + 1;
+				values.push(OutputBuffer::new(buffer_size));
+			}
+			values
+		};
 		// 各ノードの入力値
-		let mut inputs =  vec_with_length(upstreams.iter().map(|us| {
+		let mut inputs =  sample_vec_with_length(upstreams.iter().map(|us| {
 			us.iter().map(|u| u.channels()).sum::<i32>()
 		}).max().unwrap() as usize);
 
@@ -214,10 +242,12 @@ impl Machine {
 		}
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<OutputBuffer>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
 		match instrc {
 			Instruction::Load { to, from } => {
-				inputs[to.0] = values[from.0];
+				inputs[to.0] = values[from.0]
+						// TODO 遅延数の差を考慮する
+						[0];
 			}
 			Instruction::Execute{ node_idx, output } => {
 				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {

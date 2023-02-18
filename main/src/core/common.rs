@@ -1,5 +1,9 @@
+use super::delay_buffer::*;
+
 pub type Sample = f32;
 pub type SampleCount = i32;
+
+pub type OutputBuffer = DelayBuffer<Sample>;
 
 /// NodeHost における Node の添字。
 /// 単なる添字なので出力チャンネル数の情報は持たない

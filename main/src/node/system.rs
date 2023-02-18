@@ -30,7 +30,7 @@ impl Node for Terminator {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO どうなんだろう？　保留
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		// TODO 無音検知
 	}
 	fn process_event(&mut self, event: &dyn Event, _context: &Context, env: &mut Environment) {

@@ -40,7 +40,7 @@ impl Node for Sender {
 		self.signal.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		// TODO ステレオ対応
 		let signal = inputs[0];
 		self.buffer.push(signal);
@@ -73,7 +73,7 @@ impl Node for Receiver {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		let value = match &mut self.buffer {
 			Some((buffer, index)) => {
 				if *index >= buffer.len() {

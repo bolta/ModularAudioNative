@@ -2,11 +2,11 @@ use crate::{
 	core::{
 		common::*,
 		context::*,
+		delay_buffer::*,
 		machine::*,
 		node::*,
 		node_factory::*,
 	},
-	node::common::delay_buffer::*,
 };
 use node_macro::node_impl;
 
@@ -37,7 +37,7 @@ macro_rules! bi_quad_filter {
 				self.q.channeled(),
 			] }
 			fn activeness(&self) -> Activeness { Activeness::Active }
-			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
+			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], context: &Context, _env: &mut Environment) {
 				let in_value = inputs[0];
 				let cutoff = inputs[1];
 				let q = inputs[2];

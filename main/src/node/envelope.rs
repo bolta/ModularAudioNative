@@ -33,7 +33,7 @@ impl Node for ExpEnv {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.ratio_per_sec.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.amplitude);
 	}
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
@@ -121,7 +121,7 @@ impl Node for AdsrEnv {
 		]
 	}
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.amplitude);
 	}
 

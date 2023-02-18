@@ -83,7 +83,7 @@ impl Node for PortAudioOut {
 
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		if self.buffer.len() < self.buffer_size { return; }
 
 		let b = &mut self.buffer;

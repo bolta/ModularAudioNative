@@ -18,7 +18,7 @@ impl Node for MonoToStereo {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		output_stereo(output, inputs[0], inputs[0]);
 	}
 }
@@ -38,7 +38,7 @@ impl Node for Split {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		output_mono(output, inputs[self.channel]);
 	}
 }
@@ -55,9 +55,9 @@ impl Node for Join {
 	fn channels(&self) -> i32 { self.inputs.len() as i32 }
 	fn upstreams(&self) -> Upstreams { self.inputs.iter().map(|i| i.channeled()).collect() }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		for i in 0 .. self.inputs.len() {
-			output[i] = inputs[i];
+			output[i].push(inputs[i]);
 		}
 	}
 }
@@ -75,7 +75,7 @@ impl Node for Pan {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled(), self.pos.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		let input = inputs[0];
 		let pos = inputs[1].max(-1f32).min(1f32); // 外すとどうなる？
 

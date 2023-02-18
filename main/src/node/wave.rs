@@ -45,18 +45,18 @@ impl Node for WaveformPlayer {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, env: &mut Environment) {
 		match self.state {
 			WaveformPlayerState::Note => {
 				let waveform = self.waveform(env);
 				for ch in 0usize .. self.channels as usize {
 					// TODO 補間
-					output[ch] = waveform.sample(ch as i32, self.offset as usize);
+					output[ch].push(waveform.sample(ch as i32, self.offset as usize));
 				}
 			}
 			WaveformPlayerState::Idle => {
 				for ch in 0usize .. self.channels as usize {
-					output[ch] = 0f32;
+					output[ch].push(0f32);
 				}
 			}
 		}

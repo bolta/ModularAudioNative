@@ -1,4 +1,4 @@
-use crate::core::{common::*, context::*, event::*, machine::*, node::*};
+use crate::core::{common::*, context::*, event::*, machine::*, node::*, delay_buffer::DelayBuffer};
 use node_macro::node_impl;
 
 pub struct Tick {
@@ -74,7 +74,7 @@ impl Node for TickTimer {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.tempo.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.timer);
 	}
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
@@ -116,7 +116,7 @@ impl Node for ExperGroove {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.timer.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		let timer = inputs[0];
 		fn l(nth: f32) -> f32 { 384f32 / nth }
 		// c16c16 -> c12c24

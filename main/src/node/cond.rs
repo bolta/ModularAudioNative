@@ -28,7 +28,7 @@ impl Node for Condition {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.cond.channeled(), self.then.channeled(), self.els.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		let cond = sample_to_bool(inputs[0]);
 		let then = inputs[1];
 		let els = inputs[2];

@@ -4,12 +4,12 @@ use crate::{
 	core::{
 		common::*,
 		context::*,
+		delay_buffer::*,
 		machine::*,
 		node::*,
 		node_factory::*,
 		util::*,
 	},
-	node::common::delay_buffer::*,
 };
 use node_macro::node_impl;
 
@@ -49,7 +49,7 @@ impl Node for Delay {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.signal.channeled(), self.time.channeled(), self.feedback.channeled(), self.wet.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let time = inputs[1];
 		let feedback = inputs[2];
