@@ -3,11 +3,12 @@ use std::{
 	ops::Index,
 };
 
-pub struct DelayBuffer<T: Clone + Default> {
+#[derive(Debug)]
+pub struct DelayBuffer<T: Clone + Default + std::fmt::Display> {
 	buffer: Vec<T>,
 	head: usize,
 }
-impl <T: Clone + Default> DelayBuffer<T> {
+impl <T: Clone + Default + std::fmt::Display> DelayBuffer<T> {
 	pub fn new(size: usize) -> Self {
 		Self {
 			buffer: vec![Default::default(); size],
@@ -18,9 +19,12 @@ impl <T: Clone + Default> DelayBuffer<T> {
 	pub fn push(&mut self, value: T) {
 		self.head = (self.head + 1) % self.buffer.len();
 		self.buffer[self.head] = value;
+// if self.buffer.len() > 1 {
+// 	println!("new value = {}, new head = {}", self.buffer[self.head], self.head);
+// }
 	}
 }
-impl <T: Clone + Default> Index<i32> for DelayBuffer<T> {
+impl <T: Clone + Default + std::fmt::Display> Index<i32> for DelayBuffer<T> {
 	type Output = T;
 	fn index(&self, offset: i32) -> &Self::Output {
 		if offset <= -(self.buffer.len() as i32) || 0 < offset {

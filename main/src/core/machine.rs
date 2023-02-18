@@ -198,9 +198,15 @@ impl Machine {
 				let count = nodes[upstream_idx.unchanneled()].channels() as usize;
 
 				// let to_0 = input_idx;
+				let delay_down = nodes[NodeIndex(i)].delay_samples();
+				let delay_up = nodes[upstream_idx.unchanneled()].delay_samples();
+				let delay_idx = delay_up as i32 - delay_down as i32;
+				if delay_idx > 0 { panic!("delay_idx must be non_positive") };
+
 				let instrcs = (0 .. count).map(move |j| Instruction::Load {
 					to: InputIndex(input_idx.0 + j),
 					from: ValueIndex(from.0 + j),
+					delay_idx,
 				});
 				input_idx.0 += count;
 				instrcs
@@ -244,17 +250,16 @@ impl Machine {
 
 	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<OutputBuffer>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
 		match instrc {
-			Instruction::Load { to, from } => {
-				inputs[to.0] = values[from.0]
-						// TODO 遅延数の差を考慮する
-						[0];
+			Instruction::Load { to, from, delay_idx } => {
+				inputs[to.0] = values[from.0][*delay_idx];
 			}
 			Instruction::Execute{ node_idx, output } => {
-				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
-// println!("{:?}: skipping Execute", node_idx);
-					return;
-				}
-// println!("{:?}: executing Execute", node_idx);
+				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく
+// 				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
+// // println!("{:?}: skipping Execute", node_idx);
+// 					return;
+// 				}
+// // println!("{:?}: executing Execute", node_idx);
 
 				let node = &mut nodes[*node_idx];
 				let output_slice = match output {
@@ -266,11 +271,12 @@ impl Machine {
 				unsafe { EXECUTE_COUNT += 1; }
 			}
 			Instruction::Update(node_idx) => {
-				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
-// println!("{:?}: skipping Update", node_idx);
-					return;
-				}
-// println!("{:?}: executing Update", node_idx);
+				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく
+// 				if context.elapsed_samples() > 0 && ! update_flags.at(*node_idx) {
+// // println!("{:?}: skipping Update", node_idx);
+// 					return;
+// 				}
+// // println!("{:?}: executing Update", node_idx);
 					
 				nodes[*node_idx].update(&inputs, context, env);
 				unsafe { UPDATE_COUNT += 1; }
@@ -349,8 +355,9 @@ struct InputIndex(pub usize);
 
 #[derive(Debug)]
 enum Instruction {
-	/// 計算済みの値を次の計算のための入力値にコピー
-	Load { to: InputIndex, from: ValueIndex },
+	/// 計算済みの値を次の計算のための入力値にコピーする
+	/// delay_idx は DelayBuffer にアクセスする際の添字（常に非正）
+	Load { to: InputIndex, from: ValueIndex, delay_idx: i32 },
 	Execute { node_idx: NodeIndex, output: Option<ValueIndex> },
 	Update(NodeIndex),
 }
