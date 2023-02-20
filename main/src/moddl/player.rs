@@ -15,6 +15,7 @@ use crate::{
 		context::*,
 		event::*,
 		machine::*,
+		node::*,
 		node_factory::*,
 		node_host::*,
 	},
@@ -34,6 +35,9 @@ use crate::{
 	seq::{
 		sequencer::*,
 		tick::*,
+	},
+	vis::{
+		visualizer::*,
 	},
 	wave::{
 		waveform_host::*,
@@ -295,8 +299,13 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 		events
 	});
 
+	let sends_to_receives = nodes.sends_to_receives().clone();
+	let nodes_result = nodes.result();
+	// TODO コマンドオプションで指定されたときだけ出力する
+	output_structure(&nodes_result, &sends_to_receives);
+
 	let waveforms = Arc::new(pctx.waveforms);
-	let joins: Vec<_> = nodes.result().into_iter().map(|mut machine_spec| {
+	let joins: Vec<_> = nodes_result.into_iter().map(|mut machine_spec| {
 		let waveforms = Arc::clone(&waveforms);
 		thread::spawn(move || {
 			// TODO skip_mode_events が供給できていない
@@ -308,6 +317,10 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	}
 
 	Ok(())
+}
+
+fn output_structure(all: &Vec<MachineSpec>, sends_to_receives: &HashMap<NodeId, NodeId>) {
+	output_graph(make_graph(all, sends_to_receives));
 }
 
 pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> ModdlResult<HashMap<String, Value>> {
@@ -766,53 +779,17 @@ fn apply_input(
 	}
 }
 
-// TODO 別ファイルにする
-
-use crate::core::{node::*};
-// use std::ops::{Index, IndexMut};
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct MachineIndex(pub usize);
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct NodeId {
-	pub machine: MachineIndex,
-	node_: ChanneledNodeIndex,
-}
-impl NodeId {
-	pub fn new(machine: MachineIndex, node: ChanneledNodeIndex) -> Self {
-		Self { machine, node_: node }
-	}
-	pub fn node(&self, expected_machine: MachineIndex) -> ChanneledNodeIndex {
-		// 別マシンのノードと誤って混ぜないようチェック入り
-		if self.machine != expected_machine {
-			panic!("wrong machine. expected: {}, actual: {}", expected_machine.0, self.machine.0);
-		}
-		self.node_
-	}
-	pub fn node_of_any_machine(&self) -> ChanneledNodeIndex {
-		// どのマシンのノードか不問
-		self.node_
-	}
-	pub fn channels(&self) -> i32 {
-		// これはマシン不問で取れてもいいかと…
-		self.node_.channels()
-	}
-}
-
-struct MachineSpec {
-	name: String,
-	nodes: NodeHost,
-}
-
 const MACHINE_MAIN: MachineIndex = MachineIndex(0usize);
 struct AllNodes {
 	machines: Vec<MachineSpec>,
+	sends_to_receives: HashMap<NodeId, NodeId>,
 	delays: HashMap<NodeId, u32>,
 }
 impl AllNodes {
 	pub fn new() -> Self {
 		let mut s = Self {
 			machines: vec![],
+			sends_to_receives: HashMap::new(),
 			delays: HashMap::new(),
 		};
 		s.add_submachine("main".to_string());
@@ -849,9 +826,13 @@ impl AllNodes {
 
 		result
 	}
+	pub fn add_send_receive(&mut self, send: NodeId, receive: NodeId) {
+		self.sends_to_receives.insert(send, receive);
+	}
 	pub fn result(self) -> Vec<MachineSpec> {
 		self.machines
 	}
+	pub fn sends_to_receives(&self) -> &HashMap<NodeId, NodeId> { &self.sends_to_receives }
 	pub fn delay(&self, node: NodeId) -> u32 { self.delays[&node] }
 	pub fn calc_delay(&self, upstreams: Vec<NodeId>, interthread: bool) -> u32 {
 		upstreams.iter().map(|u| self.delay(*u)).max().unwrap()
@@ -885,6 +866,7 @@ fn ensure_on_machine(nodes: &mut AllNodes, node: NodeId, dest_machine: MachineIn
 		let receiver_node = nodes.add_node(dest_machine, Box::new(Receiver::new(
 				NodeBase::new(receiver_delay),
 				receiver)));
+		nodes.add_send_receive(sender_node, receiver_node);
 
 		(receiver_node.node(dest_machine), nodes.delay(receiver_node))
 		// to_local_idx_and_delay(receiver_node)

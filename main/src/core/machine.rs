@@ -38,6 +38,11 @@ struct OutputIndex(pub usize);
 static mut EXECUTE_COUNT: i32 = 0;
 static mut UPDATE_COUNT: i32 = 0;
 
+pub struct MachineSpec {
+	pub name: String,
+	pub nodes: NodeHost,
+}
+
 pub struct Machine {
 	/// マルチマシン構成のデバッグ用
 	name: String,
