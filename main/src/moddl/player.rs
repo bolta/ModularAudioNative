@@ -172,7 +172,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let sample_rate = 44100; // TODO 値を外から渡せるように
 	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
 	
-	let mut nodes = AllNodes::new();
+	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
+	let mut nodes = AllNodes::new(true);
 
 	// TODO タグ名を sequence_generator と共通化
 	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(NodeBase::new(0), pctx.tempo)));
@@ -252,32 +253,34 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	};
 	let master_vol = nodes.add_node(machine_mix, Box::new(Constant::new(0.5f32))); // TODO 値を外から渡せるように
 	let master = multiply(None, &mut nodes, machine_mix, mix, master_vol) ?;
-	let (master_node, master_delay) = ensure_on_machine(&mut nodes, master, MACHINE_MAIN);
+
+	let machine_out = nodes.add_submachine("out".to_string());
+	let (master_node, master_delay) = ensure_on_machine(&mut nodes, master, machine_out);
 
 	match &options.output {
 		PlayerOutput::Audio => {
-			nodes.add_node(MACHINE_MAIN,
+			nodes.add_node(machine_out,
 					Box::new(PortAudioOut::new(NodeBase::new(master_delay), master_node)));
 		},
 		PlayerOutput::Wav { path } => {
 			// wav ファイルに出力
-			nodes.add_node(MACHINE_MAIN,
+			nodes.add_node(machine_out,
 					Box::new(crate::node::file::WavFileOut::new(NodeBase::new(master_delay), master_node, path.clone())));
 		},
 		PlayerOutput::Stdout => {
 			// stdout に出力
-			nodes.add_node(MACHINE_MAIN,
+			nodes.add_node(machine_out,
 					Box::new(Print::new(NodeBase::new(master_delay), master_node)));
 		},
 		PlayerOutput::Null => {
 			// 出力しない（パフォーマンス計測用）
-			nodes.add_node(MACHINE_MAIN,
+			nodes.add_node(machine_out,
 					Box::new(NullOut::new(NodeBase::new(master_delay), master_node)));
 		},
 	}
 
 	// TODO タグ名共通化
-	nodes.add_node_with_tag(MACHINE_MAIN, "terminator".to_string(),
+	nodes.add_node_with_tag(machine_out, "terminator".to_string(),
 			Box::new(Terminator::new(NodeBase::new(master_delay), master_node)));
 
 	// 一定時間で終了
@@ -781,13 +784,15 @@ fn apply_input(
 
 const MACHINE_MAIN: MachineIndex = MachineIndex(0usize);
 struct AllNodes {
+	single_machine: bool,
 	machines: Vec<MachineSpec>,
 	sends_to_receives: HashMap<NodeId, NodeId>,
 	delays: HashMap<NodeId, u32>,
 }
 impl AllNodes {
-	pub fn new() -> Self {
+	pub fn new(single_machine: bool) -> Self {
 		let mut s = Self {
+			single_machine,
 			machines: vec![],
 			sends_to_receives: HashMap::new(),
 			delays: HashMap::new(),
@@ -796,6 +801,10 @@ impl AllNodes {
 		s
 	}
 	pub fn add_submachine(&mut self, name: String) -> MachineIndex {
+		if self.single_machine && self.machines.len() > 0 {
+			return MachineIndex(0);
+		}
+
 		self.machines.push(MachineSpec { name, nodes: NodeHost::new() });
 		let submachine_idx = MachineIndex(self.machines.len() - 1);
 		println!("machines[{}]: {}", submachine_idx.0, & self.machines[submachine_idx.0].name);

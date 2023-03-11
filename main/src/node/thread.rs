@@ -89,7 +89,7 @@ impl Node for Receiver {
 				}
 			}
 			None => {
-				let try_result = self.receiver.try_recv();
+				let try_result = self.receiver.recv();
 				match try_result {
 					Err(_) => {
 						self.error_count += 1;
