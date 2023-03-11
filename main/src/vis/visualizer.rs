@@ -105,7 +105,7 @@ fn node_to_dot_node_stmt(machine_idx: usize, node_idx: usize, node_: &Box<dyn No
 	stmt!(DotNode {
 		id: make_dot_node_id(machine_idx, node_idx),
 		attributes: vec![
-			make_label_attr(node_.type_label().as_str()),
+			make_label_attr(format!("{}\\nd={}", node_.type_label(), node_.delay_samples()).as_str()),
 		],
 	})
 }
