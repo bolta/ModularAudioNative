@@ -168,7 +168,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let sample_rate = 44100; // TODO 値を外から渡せるように
 	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
 	
-	let mut nodes = AllNodes::new();
+	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
+	let mut nodes = AllNodes::new(true);
 
 	// TODO タグ名を sequence_generator と共通化
 	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(NodeBase::new(0), pctx.tempo)));
@@ -806,12 +807,14 @@ struct MachineSpec {
 
 const MACHINE_MAIN: MachineIndex = MachineIndex(0usize);
 struct AllNodes {
+	single_machine: bool,
 	machines: Vec<MachineSpec>,
 	delays: HashMap<NodeId, u32>,
 }
 impl AllNodes {
-	pub fn new() -> Self {
+	pub fn new(single_machine: bool) -> Self {
 		let mut s = Self {
+			single_machine,
 			machines: vec![],
 			delays: HashMap::new(),
 		};
@@ -819,6 +822,10 @@ impl AllNodes {
 		s
 	}
 	pub fn add_submachine(&mut self, name: String) -> MachineIndex {
+		if self.single_machine && self.machines.len() > 0 {
+			return MachineIndex(0);
+		}
+
 		self.machines.push(MachineSpec { name, nodes: NodeHost::new() });
 		let submachine_idx = MachineIndex(self.machines.len() - 1);
 		println!("machines[{}]: {}", submachine_idx.0, & self.machines[submachine_idx.0].name);
