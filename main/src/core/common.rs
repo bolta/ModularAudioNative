@@ -77,6 +77,35 @@ impl ChanneledNodeIndex {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct MachineIndex(pub usize);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct NodeId {
+	pub machine: MachineIndex,
+	node_: ChanneledNodeIndex,
+}
+impl NodeId {
+	pub fn new(machine: MachineIndex, node: ChanneledNodeIndex) -> Self {
+		Self { machine, node_: node }
+	}
+	pub fn node(&self, expected_machine: MachineIndex) -> ChanneledNodeIndex {
+		// 別マシンのノードと誤って混ぜないようチェック入り
+		if self.machine != expected_machine {
+			panic!("wrong machine. expected: {}, actual: {}", expected_machine.0, self.machine.0);
+		}
+		self.node_
+	}
+	pub fn node_of_any_machine(&self) -> ChanneledNodeIndex {
+		// どのマシンのノードか不問
+		self.node_
+	}
+	pub fn channels(&self) -> i32 {
+		// これはマシン不問で取れてもいいかと…
+		self.node_.channels()
+	}
+}
+
+
 pub const PI: f32 = std::f32::consts::PI;
 pub const TWO_PI: f32 = 2_f32 * PI;
 

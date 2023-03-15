@@ -1,4 +1,8 @@
 extern crate portaudio;
+use std::any::type_name;
+
+use regex::Regex;
+
 use super::{
 	common::*,
 	context::*,
@@ -21,6 +25,12 @@ impl NodeBase {
 }
 
 pub trait Node: Send {
+	fn type_label_default(&self) -> String {
+		// foo::bar::Baz<hoge::pita::Boke> → Baz<Boke>
+		let modules_re = Regex::new(r"[^<>]*::").unwrap(); // TODO できれば singleton にしたい
+		modules_re.replace_all(type_name::<Self>(), "").to_string()
+	}
+	fn type_label(&self) -> String { self.type_label_default() }
 	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams;
 	fn activeness(&self) -> Activeness;

@@ -13,6 +13,7 @@ mod mml;
 mod moddl;
 mod node;
 mod seq;
+mod vis;
 mod wave;
 
 use crate::moddl::{

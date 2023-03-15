@@ -17,6 +17,9 @@ impl Var {
 }
 #[node_impl]
 impl Node for Var {
+	fn type_label(&self) -> String {
+		format!("{}: {}", self.type_label_default(), self.value)
+	}
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Evential }
