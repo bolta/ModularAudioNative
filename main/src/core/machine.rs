@@ -251,7 +251,10 @@ impl Machine {
 	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<OutputBuffer>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
 		match instrc {
 			Instruction::Load { to, from, delay_idx } => {
-				inputs[to.0] = values[from.0][*delay_idx];
+				// XXX 遅延数の差を補償しないといけないはずだが、補償するとかえってずれてしまい、
+				// しない方がむしろ正しくなる。原因不明
+				// inputs[to.0] = values[from.0][*delay_idx];
+				inputs[to.0] = values[from.0][0];
 			}
 			Instruction::Execute{ node_idx, output } => {
 				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく

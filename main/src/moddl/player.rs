@@ -169,7 +169,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
 	
 	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
-	let mut nodes = AllNodes::new(true);
+	let mut nodes = AllNodes::new(false);
 
 	// TODO タグ名を sequence_generator と共通化
 	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(NodeBase::new(0), pctx.tempo)));
@@ -537,6 +537,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 
 	let (tick_node, tick_delay) = ensure_on_machine(nodes, timer, submachine_idx);
 	nodes.add_node(submachine_idx, Box::new(Tick::new(NodeBase::new(tick_delay), tick_node.as_mono(), groove_cycle, seq_tag.clone())));
+	nodes.set_driver_delay(submachine_idx, tick_delay);
 
 	Ok(output)
 }
@@ -812,6 +813,11 @@ struct AllNodes {
 	single_machine: bool,
 	machines: Vec<MachineSpec>,
 	delays: HashMap<NodeId, u32>,
+
+	/// マシンごとに、そのマシン内の各ノードをイベントで駆動するノード（要は Tick）の遅延数。
+	/// 遅延管理のために設けたが、結局 Machine で遅延補償は行っておらず（行うとかえっておかしくなる）、
+	/// 不要かもしれない
+	driver_delays: HashMap<MachineIndex, u32>,
 }
 impl AllNodes {
 	pub fn new(single_machine: bool) -> Self {
@@ -819,6 +825,7 @@ impl AllNodes {
 			single_machine,
 			machines: vec![],
 			delays: HashMap::new(),
+			driver_delays: HashMap::new(),
 		};
 		s.add_submachine("main".to_string());
 		s
@@ -858,13 +865,30 @@ impl AllNodes {
 
 		result
 	}
+	pub fn set_driver_delay(&mut self, machine: MachineIndex, delay: u32) {
+		let delay = self.driver_delays.get(&machine).unwrap_or(&0u32).max(&delay);
+		self.driver_delays.insert(machine, *delay);
+	}
+	// pub fn add_send_receive(&mut self, send: NodeId, receive: NodeId) {
+	// 	// self.sends_to_receives.insert(send, receive);
+	// }
 	pub fn result(self) -> Vec<MachineSpec> {
 		self.machines
 	}
 	pub fn delay(&self, node: NodeId) -> u32 { self.delays[&node] }
 	pub fn calc_delay(&self, upstreams: Vec<NodeId>, interthread: bool) -> u32 {
-		upstreams.iter().map(|u| self.delay(*u)).max().unwrap()
-				+ if interthread { INTERTHREAD_BUFFER_SIZE } else { 0 }
+		debug_assert!(upstreams.len() > 0);
+		let upstream_delay = upstreams.iter().map(|u| self.delay(*u)).max().unwrap();
+
+		if interthread {
+			let upstream_machine = upstreams[0].machine;
+			// let driver_delay = * self.driver_delays.get(&upstream_machine).unwrap_or(&0u32);
+			let driver_delay = 0u32;
+			upstream_delay.max(driver_delay) + INTERTHREAD_BUFFER_SIZE
+
+		} else {
+			upstream_delay
+		}
 	}
 }
 
