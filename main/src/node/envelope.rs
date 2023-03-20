@@ -218,6 +218,7 @@ impl NodeFactory for AdsrEnvFactory {
 
 
 // TODO 置き場所ここでいいのか？
+#[derive(Clone)]
 pub struct NoteEvent {
 	target: EventTarget,
 	note_on: bool,
@@ -234,6 +235,7 @@ impl NoteEvent {
 impl Event for NoteEvent {
 	fn target(&self) -> &EventTarget { &self.target }
 	fn event_type(&self) -> &str { EVENT_TYPE_NOTE }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 
 pub const EVENT_TYPE_NOTE: &str = "Env::Note";

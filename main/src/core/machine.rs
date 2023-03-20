@@ -1,4 +1,4 @@
-use crate::common::util::ignore_errors;
+use crate::{common::util::ignore_errors, node::event_scheduler::EventScheduler};
 
 use super::{
 	common::*,
@@ -16,7 +16,11 @@ use crate::{
 use std::{
 	collections::hash_map::HashMap,
 	collections::hash_set::HashSet,
-	sync::Arc,
+	sync::{
+		Arc,
+		mpsc::Receiver
+	},
+	ops::DerefMut,
 };
 
 use itertools::Itertools; // for into_group_map_by
@@ -28,6 +32,7 @@ use ringbuf::{
 };
 
 const EVENT_QUEUE_CAPACITY: usize = 1000;
+const BROADCAST_POLLING_INTERVAL: i32 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct ValueIndex(pub usize);
@@ -58,8 +63,14 @@ impl Machine {
 		context: &mut Context,
 		nodes: &mut NodeHost,
 		waveforms: &Arc<WaveformHost>,
+		broadcaster: Broadcaster,
+		broadcast_receiver: Receiver<GlobalEvent>,
 		skip_mode_events: Option<Box<dyn Fn () -> Vec<Box<dyn Event>>>>,
 	) {
+		// ここで追加したノードは Graphviz では出力されない（Graphviz 出力の方が先だから）
+		// TODO Player 側で追加した方がいいかも
+		let scheduler_idx = nodes.add(Box::new(EventScheduler::new(NodeBase::new(0)))).unchanneled();
+
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
@@ -128,7 +139,7 @@ impl Machine {
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
-		let mut env = Environment::new(&mut events_prod, waveforms);
+		let mut env = Environment::new(&mut events_prod, &broadcaster, waveforms);
 
 		let start = std::time::Instant::now();
 
@@ -138,6 +149,21 @@ impl Machine {
 		println!("playing...");
 		let mut skip = false;
 		'play: loop {
+			if context.elapsed_samples() % BROADCAST_POLLING_INTERVAL == 0 {
+				loop {
+					match broadcast_receiver.try_recv() {
+						Err(_) => { break; },
+						Ok(e) => {
+							// NodeHost に入れた EventScheduler を復元する
+							// https://stackoverflow.com/questions/42418964/porting-a-c-program-to-rust-of-reinterpret-cast-structs-and-bluetooth
+							// TODO 安全ではあるが、もうちょっとやりようはないのだろうか…
+							let scheduler_ptr = nodes[scheduler_idx].deref_mut() as *mut dyn Node as *mut EventScheduler;
+							let scheduler: &mut EventScheduler = unsafe { &mut *scheduler_ptr };
+							scheduler.add_event(e.elapsed_samples(), e.event());
+						}
+					}
+				}
+			}
 			'do_events: loop {
 				match events_cons.pop() {
 					None => { break 'do_events; }
@@ -148,6 +174,7 @@ impl Machine {
 								EVENT_TYPE_TERMINATE => break 'play,
 								EVENT_TYPE_ENTER_SKIP_MODE => skip = true,
 								EVENT_TYPE_EXIT_SKIP_MODE => skip = false,
+								EVENT_TYPE_DEBUG_PRINT => println!("debug: event received on machine {} at sample {}", &self.name, context.elapsed_samples()),
 								_ => println!("unknown machine event: {}", &typ),
 							}
 						}
@@ -175,6 +202,13 @@ impl Machine {
 			for instrc in &instructions {
 				self.do_instruction(nodes, &instrc, &mut values, &mut inputs, context, &mut env, &update_flags);
 			}
+
+			// TODO 削除
+			// if context.elapsed_samples() % 44100 == 0 && self.name == "a" {
+			// 	let at = context.elapsed_samples() + 1;
+			// 	println!("******************** {}", at);
+			// 	env.broadcast_event(at, Box::new(DebugPrintEvent { }));
+			// }
 
 			update_flags.init();
 			context.sample_elapsed();
@@ -344,15 +378,20 @@ pub type EventProducer = Producer<Box<dyn Event>>;
 pub type EventConsumer = Consumer<Box<dyn Event>>;
 pub struct Environment<'a> {
 	events: &'a mut EventProducer,
+	broadcaster: &'a Broadcaster,
 	waveforms: &'a Arc<WaveformHost>,
 }
 impl <'a> Environment<'a> {
-	fn new(events: &'a mut EventProducer, waveforms: &'a Arc<WaveformHost>) -> Self {
-		Self { events, waveforms }
+	fn new(events: &'a mut EventProducer, broadcaster: &'a Broadcaster, waveforms: &'a Arc<WaveformHost>) -> Self {
+		Self { events, broadcaster, waveforms }
 	}
 	pub fn events_mut(&mut self) -> &mut EventProducer { self.events }
 	pub fn post_event(&mut self, event: Box<dyn Event>) {
 		ignore_errors(self.events_mut().push(event));
+	}
+	pub fn broadcast_event(&self, elapsed_samples: SampleCount, event: Box<dyn Event>) {
+		// TODO 時刻を外から与えないでよくしたい。Environment と Context ってまとめられないものか
+		self.broadcaster.broadcast(GlobalEvent::new(elapsed_samples, event));
 	}
 	pub fn waveforms(&self) -> &Arc<WaveformHost> { self.waveforms }
 }
@@ -372,22 +411,36 @@ enum Instruction {
 
 // TODO ちゃんと名前空間を規定する
 const EVENT_TYPE_TERMINATE: &str = "Machine::Terminate";
+#[derive(Clone)]
 pub struct TerminateEvent { }
 impl Event for TerminateEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_TERMINATE }
 	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 const EVENT_TYPE_ENTER_SKIP_MODE: &str = "Machine::EnterSkipMode";
+#[derive(Clone)]
 pub struct EnterSkipModeEvent { }
 impl Event for EnterSkipModeEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_ENTER_SKIP_MODE }
 	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 const EVENT_TYPE_EXIT_SKIP_MODE: &str = "Machine::ExitSkipMode";
+#[derive(Clone)]
 pub struct ExitSkipModeEvent { }
 impl Event for ExitSkipModeEvent {
 	fn event_type(&self) -> &str { EVENT_TYPE_EXIT_SKIP_MODE }
 	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
+}
+const EVENT_TYPE_DEBUG_PRINT: &str = "Machine::DebugPrint";
+#[derive(Clone)]
+pub struct DebugPrintEvent { }
+impl Event for DebugPrintEvent {
+	fn event_type(&self) -> &str { EVENT_TYPE_DEBUG_PRINT }
+	fn target(&self) -> &EventTarget { &EventTarget::Machine }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 
 #[derive(Debug)]

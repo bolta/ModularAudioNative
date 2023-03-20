@@ -35,6 +35,7 @@ impl Node for Var {
 	}
 }
 
+#[derive(Clone)]
 pub struct SetEvent {
 	// base: TargetedEventBase,
 	target: EventTarget,
@@ -52,6 +53,7 @@ impl SetEvent {
 impl Event for SetEvent {
 	fn target(&self) -> &EventTarget { &self.target }
 	fn event_type(&self) -> &str { EVENT_TYPE_SET }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 
 const EVENT_TYPE_SET: &str = "Var::Set";

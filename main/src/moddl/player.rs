@@ -61,7 +61,10 @@ use std::{
 	io::Read,
 	path::Path,
 	rc::Rc,
-	sync::Arc,
+	sync::{
+		Arc,
+		mpsc,
+	},
 	thread,
 };
 
@@ -304,15 +307,25 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	let sends_to_receives = nodes.sends_to_receives().clone();
 	let nodes_result = nodes.result();
+
+	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
+	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
+
 	// TODO コマンドオプションで指定されたときだけ出力する
 	output_structure(&nodes_result, &sends_to_receives);
 
 	let waveforms = Arc::new(pctx.waveforms);
-	let joins: Vec<_> = nodes_result.into_iter().map(|mut machine_spec| {
+	let joins: Vec<_> = nodes_result.into_iter()
+			.zip(broadcast_pairs.receivers.into_iter())
+			.map(|(mut machine_spec, broadcast_receiver)| {
 		let waveforms = Arc::clone(&waveforms);
+		let broadcaster_ = broadcaster.clone();
 		thread::spawn(move || {
 			// TODO skip_mode_events が供給できていない
-			Machine::new(machine_spec.name).play(&mut Context::new(sample_rate), &mut machine_spec.nodes, &waveforms, None);
+			let mut machine = Machine::new(machine_spec.name);
+
+			machine.play(&mut Context::new(sample_rate), &mut machine_spec.nodes, &waveforms,
+					broadcaster_, broadcast_receiver, None);
 		})
 	}).collect();
 	for j in joins {
@@ -320,6 +333,21 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	}
 
 	Ok(())
+}
+
+struct BroadcastPairs {
+	senders: Vec<mpsc::Sender<GlobalEvent>>,
+	receivers: Vec<mpsc::Receiver<GlobalEvent>>,
+}
+fn make_broadcast_pairs(machine_count: usize) -> BroadcastPairs {
+	let mut result = BroadcastPairs { senders: vec![], receivers: vec![] };
+	for _ in 0 .. machine_count {
+		let (s, r) = mpsc::channel();
+		result.senders.push(s);
+		result.receivers.push(r);
+	}
+
+	result
 }
 
 fn output_structure(all: &Vec<MachineSpec>, sends_to_receives: &HashMap<NodeId, NodeId>) {

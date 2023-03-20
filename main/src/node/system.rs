@@ -49,6 +49,7 @@ impl Node for Terminator {
 	}
 }
 
+#[derive(Clone)]
 pub struct JobEvent {
 	target: EventTarget,
 	event_type: &'static str,
@@ -71,6 +72,7 @@ impl JobEvent {
 impl Event for JobEvent {
 	fn target(&self) -> &EventTarget { &self.target }
 	fn event_type(&self) -> &str { self.event_type }
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 
 pub const EVENT_TYPE_JOB_STARTING: &str = "System::JobStarting";

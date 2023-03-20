@@ -83,6 +83,7 @@ impl Node for TickTimer {
 	}
 }
 
+#[derive(Clone)]
 pub struct TickEvent {
 	target: EventTarget,
 }
@@ -100,6 +101,7 @@ impl Event for TickEvent {
 	fn event_type(&self) -> &str {
 		EVENT_TYPE_TICK
 	}
+	fn clone_event(&self) -> Box<dyn Event> { clone_event(self) }
 }
 
 pub const EVENT_TYPE_TICK: &str = "Tick::Tick";
