@@ -885,7 +885,7 @@ fn ensure_on_machine(nodes: &mut AllNodes, node: NodeId, dest_machine: MachineIn
 
 	} else {
 		// 別マシンなので Sender/Receiver で持ってくる
-		let (sender, receiver) = sync_channel::<Vec<Sample>>(INTERTHREAD_BUFFER_SIZE as usize);
+		let (sender, receiver) = sync_channel::<Vec<Sample>>(0);
 		// TODO ステレオ対応
 		let sender_delay = nodes.calc_delay(vec![node], false);
 		let sender_node = nodes.add_node(node.machine, Box::new(Sender::new(
