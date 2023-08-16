@@ -185,10 +185,10 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			tempo.node(MACHINE_MAIN).as_mono(), pctx.ticks_per_bar, pctx.groove_cycle)))/* .as_mono() */;
 
 	// TODO even groove を誰も使わない場合は省略
-	// TODO マルチマシン化に伴い削除
+	let even_tag = make_seq_tag(None, &mut pctx.seq_tags);
 	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(
 			NodeBase::new(nodes.calc_delay(vec![timer], false)),
-			timer.node(MACHINE_MAIN).as_mono(), pctx.groove_cycle, make_seq_tag(None, &mut pctx.seq_tags))));
+			timer.node(MACHINE_MAIN).as_mono(), pctx.groove_cycle, even_tag.clone())));
 
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
@@ -201,12 +201,10 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			if pctx.mute_solo_tracks.contains(track) == (pctx.mute_solo == MuteSolo::Mute) {
 				Some(nodes.add_node(submachine_idx, Box::new(Constant::new(0f32))))
 			} else {
-				// let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
-				// let seq_tag = match pctx.grooves.get(track) {
-				// 	Some(g) => g.clone(),
-				// 	None => make_seq_tag(None, &mut pctx.seq_tags),
-				// };
-				let seq_tag = make_seq_tag(Some(track), &mut pctx.seq_tags);
+				let seq_tag = match pctx.grooves.get(track) {
+					Some(g) => g.clone(),
+					None => even_tag.clone(),
+				};
 				match spec {
 					TrackSpec::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
@@ -221,9 +219,9 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 								&mut placeholders, None, timer, pctx.groove_cycle) ?)
 					}
 					TrackSpec::Groove(structure) => {
-						// TODO しくみから再考が必要
-						// let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx, &mut PlaceholderStack::init(HashMap::new()), Some(timer))?.as_mono();
-						// nodes.add_node(submachine_idx, Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN, &mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle)
+								?.node(MACHINE_MAIN).as_mono();
+						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
 						None
 					}
@@ -577,10 +575,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		output = output_vol;
 	}
 
-	// TODO 仮（遅延管理は廃止の方向）
-	let tick_delay = 0;
-	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(tick_delay), timer.node(MACHINE_MAIN).as_mono(), groove_cycle, seq_tag.clone())));
-
+	let tick_delay = 0; // TODO 仮（遅延管理は廃止の方向）
 	nodes.set_driver_delay(submachine_idx, tick_delay);
 
 	Ok(output)
