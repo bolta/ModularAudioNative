@@ -1,4 +1,5 @@
 use crate::common;
+use crate::core::common::{Sample, OutputBuffer};
 use crate::core::{
 	event::*,
 	machine::*,
@@ -56,6 +57,14 @@ impl Node for Sequencer {
 //		println!("tick at sample {}", context.elapsed_samples());
 		self.context.tick(&mut self.sequences, context, env);
 	}
+
+	// fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &CoreContext, _env: &mut Environment) {
+	// 	if _context.elapsed_samples() == 0 {
+	// 		use std::{thread, time};
+	// 		let ten_millis = time::Duration::from_millis(1000);		
+	// 		thread::sleep(ten_millis);
+	// 	}
+	// }
 }
 
 // TODO 他の型の変数もほしいかも…

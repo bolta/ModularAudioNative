@@ -159,6 +159,15 @@ impl Machine {
 							// TODO 安全ではあるが、もうちょっとやりようはないのだろうか…
 							let scheduler_ptr = nodes[scheduler_idx].deref_mut() as *mut dyn Node as *mut EventScheduler;
 							let scheduler: &mut EventScheduler = unsafe { &mut *scheduler_ptr };
+
+							// if e.elapsed_samples() < context.elapsed_samples() {
+							// 	println!("too late: received an event expected for sample {} at actual sample {} (offset: {})",
+							// 			e.elapsed_samples(), context.elapsed_samples(),
+							// 			context.elapsed_samples() - e.elapsed_samples());
+							// } else {
+							// 	// println!("on time");
+							// }
+
 							scheduler.add_event(e.elapsed_samples(), e.event());
 						}
 					}
