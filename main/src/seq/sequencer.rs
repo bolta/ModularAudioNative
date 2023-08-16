@@ -73,7 +73,7 @@ struct Context {
 	wait: i32,
 }
 impl Context {
-	fn tick(&mut self, sequences: &mut HashMap<String, Sequence>, _context: &CoreContext, env: &mut Environment) {
+	fn tick(&mut self, sequences: &mut HashMap<String, Sequence>, context: &CoreContext, env: &mut Environment) {
 		if self.wait > 0 {
 			self.wait -= 1;
 			if self.wait > 0 { return; }
@@ -84,13 +84,13 @@ impl Context {
 			let instrc_idx = self.stack.top_mut().instrc_idx as usize;
 			// TODO 無限ループで先頭に戻ったときも開始扱いになってしまう
 			if instrc_idx == 0usize && self.stack.is_bottom() {
-				env.post_event(Box::new(JobEvent::starting()));
+				env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::starting()));
 			}
 			// TODO 毎回ハッシュテーブルを引くと遅いか？
 			let mut sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
 			if instrc_idx >= sequence.len() { return; }
 
-			self.process_instruction(&sequence[instrc_idx], env);
+			self.process_instruction(&sequence[instrc_idx], env, context);
 
 			// 次に実行するインストラクションを求める
 			loop {
@@ -100,7 +100,7 @@ impl Context {
 
 				// シーケンスの終わりに達した
 				if self.stack.is_bottom() {
-					env.post_event(Box::new(JobEvent::ended()));
+					env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::ended()));
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
 					self.stack.pop(); // 呼び出し元の続きに復帰
@@ -111,16 +111,16 @@ impl Context {
 		}
 	}
 
-	fn process_instruction(&mut self, instrc: &Instruction, env: &mut Environment) {
+	fn process_instruction(&mut self, instrc: &Instruction, env: &mut Environment, context: &CoreContext) {
 		match instrc {
 			Instruction::Nop => {
 				// nop
 			}
 			Instruction::Note { tag, note_on } => {
-				env.post_event(Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
+				env.broadcast_event(context.elapsed_samples(), Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
 			}
 			Instruction::Value { tag, value } => {
-				env.post_event(Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), *value)));
+				env.broadcast_event(context.elapsed_samples(), Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), *value)));
 			}
 			Instruction::Wait(wait) => {
 				self.wait = *wait;
@@ -156,14 +156,14 @@ impl Context {
 			}
 			Instruction::If0 { var, then } => {
 				if let Some(0) = self.stack.top().vars.get(var.as_str()) {
-					self.process_instruction(then, env);
+					self.process_instruction(then, env, context);
 				}
 			}
 			Instruction::EnterSkipMode => {
-				env.post_event(Box::new(EnterSkipModeEvent { }));
+				env.broadcast_event(context.elapsed_samples(), Box::new(EnterSkipModeEvent { }));
 			}
 			Instruction::ExitSkipMode => {
-				env.post_event(Box::new(ExitSkipModeEvent { }));
+				env.broadcast_event(context.elapsed_samples(), Box::new(ExitSkipModeEvent { }));
 			}
 		}
 	}

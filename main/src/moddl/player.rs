@@ -202,10 +202,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				Some(nodes.add_node(submachine_idx, Box::new(Constant::new(0f32))))
 			} else {
 				// let seq_tag = pctx.grooves.get(track).map(|t| t.clone()).unwrap_or(TAG_SEQUENCER.to_string());
-				let seq_tag = match pctx.grooves.get(track) {
-					Some(g) => g.clone(),
-					None => make_seq_tag(None, &mut pctx.seq_tags),
-				};
+				// let seq_tag = match pctx.grooves.get(track) {
+				// 	Some(g) => g.clone(),
+				// 	None => make_seq_tag(None, &mut pctx.seq_tags),
+				// };
+				let seq_tag = make_seq_tag(Some(track), &mut pctx.seq_tags);
 				match spec {
 					TrackSpec::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
@@ -539,7 +540,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		note: track.to_string(),
 	};
 	let (seqs, features) = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
-	let _seqr = nodes.add_node_with_tag(submachine_idx, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), seqs)));
+	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), seqs)));
 
 	let mut input = match override_input {
 		Some(input) => input,
@@ -576,8 +577,10 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		output = output_vol;
 	}
 
-	let (tick_node, tick_delay) = ensure_on_machine(nodes, timer, submachine_idx);
-	nodes.add_node(submachine_idx, Box::new(Tick::new(NodeBase::new(tick_delay), tick_node.as_mono(), groove_cycle, seq_tag.clone())));
+	// TODO 仮（遅延管理は廃止の方向）
+	let tick_delay = 0;
+	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(tick_delay), timer.node(MACHINE_MAIN).as_mono(), groove_cycle, seq_tag.clone())));
+
 	nodes.set_driver_delay(submachine_idx, tick_delay);
 
 	Ok(output)

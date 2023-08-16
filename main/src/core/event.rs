@@ -15,7 +15,7 @@ mopafy!(Event);
 // 	pub fn new(target_id: String) -> Self { Self { target_id } }
 // }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum EventTarget {
 	Machine,
 	Tag(String),
@@ -44,7 +44,9 @@ impl GlobalEvent {
 	}
 	pub fn elapsed_samples(&self) -> SampleCount { self.elapsed_samples }
 	pub fn event(self) -> Box<dyn Event> { self.event }
-	
+	pub fn debug_string(&self) -> String {
+		format!("{}: {} ({:?})", self.elapsed_samples(), self.event.event_type(), self.event.target())
+	}
 }
 impl Clone for GlobalEvent {
 	fn clone(&self) -> Self {
