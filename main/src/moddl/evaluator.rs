@@ -41,6 +41,8 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		Expr::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars),
 		Expr::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars),
 
+		Expr::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars),
+
 		Expr::Identifier(id) => {
 			let val = vars.borrow().lookup(id).ok_or_else(|| { Error::VarNotFound { var: id.clone() } }) ?;
 			Ok(val.clone())
@@ -121,6 +123,30 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			Ok(Value::Labeled { label: label.clone(), inner: Box::new(inner_val) })
 		}
 	}
+}
+
+fn evaluate_unary_structure<C: Calc + 'static>(
+	arg: &Expr,
+	vars: &Rc<RefCell<Scope>>,
+) -> ModdlResult<Value> {
+	let arg_val = evaluate(arg, vars) ?;
+
+	// 定数はコンパイル時に計算する。
+	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
+	if arg_val.label().is_none() {
+		match arg_val.as_float() {
+			Some(arg_float) => {
+				return Ok(Value::Float(C::calc(&vec![arg_float])));
+			}
+			_ => { } // 下へ
+		}
+	}
+
+	let arg_str = as_node_structure(&arg_val) ?;
+	Ok(Value::NodeStructure(NodeStructure::Calc {
+		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
+		args: vec![Box::new(arg_str)],
+	}))
 }
 
 fn evaluate_binary_structure<C: Calc + 'static>(

@@ -2,7 +2,7 @@
 
 @let `thres`, 0.5@thres
 @instrument ^a, sineOsc | (node (x)
-		if x < -1*thres then -1*thres // -thres と書けない…
+		if x < -thres then -thres
 		else if thres < x then thres
 		else x) / thres * adsrEnv
 

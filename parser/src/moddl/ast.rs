@@ -40,6 +40,7 @@ pub enum Expr {
 	GreaterOrEqual { lhs: Box<Expr>, rhs: Box<Expr> },
 	And { lhs: Box<Expr>, rhs: Box<Expr> },
 	Or { lhs: Box<Expr>, rhs: Box<Expr> },
+	Negate { arg: Box<Expr> },
 	Identifier(String),
 	Condition { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
 	LambdaFunction { params: Vec<FunctionParam>, body: Box<Expr> },

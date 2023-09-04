@@ -132,6 +132,15 @@ parser![lambda_node_expr, Box<Expr>, {
 		})) },
 	)
 }];
+parser![negative_expr, Box<Expr>, {
+	map_res(
+		preceded(
+			ss!(char('-')),
+			si!(expr()),
+		),
+		|arg| { ok(Box::new(Expr::Negate { arg }))},
+	)
+}];
 parser![parenthesized_expr, Box<Expr>, {
 	// preceded(si!(char('(')),
 	// 		terminated(expr(),
@@ -159,6 +168,7 @@ parser![primary_expr, Box<Expr>, {
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		identifier_expr(),
+		negative_expr(),
 		parenthesized_expr(),
 	))
 }];
