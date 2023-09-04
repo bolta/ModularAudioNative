@@ -122,7 +122,9 @@ impl Machine {
 		let mut values = {
 			let mut values = Vec::with_capacity(value_count.0);
 			for value_idx in 0 .. value_count.0 {
-				let buffer_size = max_downstream_delays[value_offsets_reversed[& ValueIndex(value_idx)].0] as usize + 1;
+				// 添字？エラーが出るが、遅延管理は廃止の方向なので常に 1 でよい
+				// let buffer_size = max_downstream_delays[value_offsets_reversed[& ValueIndex(value_idx)].0] as usize + 1;
+				let buffer_size = 1usize;
 				values.push(OutputBuffer::new(buffer_size));
 			}
 			values

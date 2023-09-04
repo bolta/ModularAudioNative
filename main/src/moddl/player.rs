@@ -916,11 +916,12 @@ fn ensure_on_machine(nodes: &mut AllNodes, node: NodeId, dest_machine: MachineIn
 		let sender_delay = nodes.calc_delay(vec![node], false);
 		let sender_node = nodes.add_node(node.machine, Box::new(Sender::new(
 				NodeBase::new(sender_delay),
-				node.node_of_any_machine().as_mono(), sender, INTERTHREAD_BUFFER_SIZE as usize)));
+				node.node_of_any_machine(), sender, INTERTHREAD_BUFFER_SIZE as usize)));
 
 		let receiver_delay = nodes.calc_delay(vec![sender_node], true);
 		let receiver_node = nodes.add_node(dest_machine, Box::new(Receiver::new(
 				NodeBase::new(receiver_delay),
+				node.node_of_any_machine().channels(),
 				receiver)));
 		nodes.add_send_receive(sender_node, receiver_node);
 

@@ -10,7 +10,7 @@ use std::sync::mpsc;
 
 pub struct Sender {
 	base_: NodeBase,
-	signal: MonoNodeIndex,
+	signal: ChanneledNodeIndex,
 	sender: mpsc::SyncSender<Vec<Sample>>,
 	buffer: Vec<Sample>,
 	// capacity は多めに確保されることがあるので別途持っておく
@@ -19,15 +19,16 @@ pub struct Sender {
 impl Sender {
 	pub fn new(
 		base: NodeBase, 
-		signal: MonoNodeIndex,
+		signal: ChanneledNodeIndex,
 		sender: mpsc::SyncSender<Vec<Sample>>,
 		buffer_size: usize,
 	) -> Self {
+		let channels = signal.channels();
 		Self {
 			base_: base, 
 			signal,
 			sender,
-			buffer: Vec::with_capacity(buffer_size),
+			buffer: Vec::with_capacity(buffer_size * (channels as usize)),
 			buffer_size,
 		}
 	}
@@ -37,13 +38,22 @@ impl Sender {
 impl Node for Sender {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![
-		self.signal.channeled(),
+		self.signal,
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
-		// TODO ステレオ対応
-		let signal = inputs[0];
-		self.buffer.push(signal);
+		match self.signal {
+			ChanneledNodeIndex::NoOutput(_) => { },
+			ChanneledNodeIndex::Mono(_) => {
+				self.buffer.push(inputs[0]);
+			},
+			ChanneledNodeIndex::Stereo(_) => {
+				self.buffer.push(inputs[0]);
+				self.buffer.push(inputs[1]);
+			},
+		}
+		// let signal = inputs[0];
+		// self.buffer.push(signal);
 		if self.buffer.len() >= self.buffer_size {
 			self.sender.send(self.buffer.clone());
 			self.buffer.clear();
@@ -53,14 +63,16 @@ impl Node for Sender {
 
 pub struct Receiver {
 	base_: NodeBase,
+	channels: i32,
 	receiver: mpsc::Receiver<Vec<Sample>>,
 	buffer: Option<(Vec<Sample>, usize)>,
 	error_count: i32,
 }
 impl Receiver {
-	pub fn new(base: NodeBase, receiver: mpsc::Receiver<Vec<Sample>>) -> Self {
+	pub fn new(base: NodeBase, channels: i32, receiver: mpsc::Receiver<Vec<Sample>>) -> Self {
 		Self {
 			base_: base, 
+			channels,
 			receiver,
 			buffer: None,
 			error_count: 0,
@@ -70,7 +82,7 @@ impl Receiver {
 // TODO ステレオ対応
 #[node_impl]
 impl Node for Receiver {
-	fn channels(&self) -> i32 { 1 }
+	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
@@ -80,12 +92,12 @@ impl Node for Receiver {
 					// TODO ちゃんとエラー処理
 					let new_buffer = self.receiver.recv().unwrap();
 					let mut new_index = 0usize;
-					let value = get_buffer_value(&new_buffer, &mut new_index);
+					let value = output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
 					self.buffer = Some((new_buffer, new_index));
-					value
+					// value
 
 				} else {
-					get_buffer_value(buffer, index)
+					output_buffer_values(output, self.channels, buffer, index)
 				}
 			}
 			None => {
@@ -93,23 +105,27 @@ impl Node for Receiver {
 				match try_result {
 					Err(_) => {
 						self.error_count += 1;
-						0f32
+						output_zeros(output, self.channels);
 					},
 					Ok(new_buffer) => {
 						println!("error_count: {}", self.error_count);
 						let mut new_index = 0usize;
-						let value = get_buffer_value(&new_buffer, &mut new_index);
+						let value = output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
 						self.buffer = Some((new_buffer, new_index));
-						value
 					}
 				}
 			}
 		};
-		output_mono(output, value);
 	}
 }
-fn get_buffer_value(buffer: &Vec<Sample>, index: &mut usize) -> Sample {
-	let value = buffer[*index];
-	*index += 1;
-	value
+fn output_buffer_values(output: &mut [OutputBuffer], channels: i32, buffer: &Vec<Sample>, index: &mut usize) /* -> Sample */ {
+	for c in 0 .. channels as usize {
+		output[c].push(buffer[*index]);
+		*index += 1;
+	}
+}
+fn output_zeros(output: &mut [OutputBuffer], channels: i32) {
+	for c in 0 .. channels as usize {
+		output[c].push(0f32);
+	}
 }
