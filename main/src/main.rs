@@ -34,7 +34,7 @@ extern crate nom;
 fn main() {
 	match env::args().nth(1) {
 		None => {
-			eprintln!("Please specify the moddl file path.");
+			eprintln!("Please specify a moddl file path.");
 			exit(1);
 		}
 		Some(moddl_path) => {
