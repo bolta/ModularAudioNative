@@ -16,6 +16,11 @@ pub struct Args {
 	pub unnamed: Vec<Box<Expr>>,
 	pub named: AssocArray,
 }
+impl Args {
+	pub fn empty() -> Self {
+		Self { unnamed: vec![], named: vec![] }
+	}
+}
 
 #[derive(Clone, Debug)]
 pub struct FunctionParam {
@@ -52,6 +57,8 @@ pub enum Expr {
 	TrackSetLiteral(Vec<String>),
 	IdentifierLiteral(String),
 	StringLiteral(String),
+	// FIXME この Box は取り除ける？
+	ArrayLiteral(Vec<Box<Expr>>),
 	MmlLiteral(String),
 	AssocArrayLiteral(AssocArray),
 

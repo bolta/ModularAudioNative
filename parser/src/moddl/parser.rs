@@ -56,6 +56,19 @@ parser![string_literal, Box<Expr>, {
 	map_res(si!(delimited(char('"'), re_find(re(r#"[^"]*"#)), char('"'))),
 			|str| { ok(Box::new(Expr::StringLiteral(str.to_string()))) })
 }];
+parser![array_literal, Box<Expr>, {
+	map_res(
+		delimited(
+			ss!(char('[')),
+			terminated(
+				separated_list0(ss!(char(',')), ss!(expr())),
+				opt(ss!(char(','))),
+			),
+			si!(char(']')),
+		),
+		|elems| { ok(Box::new(Expr::ArrayLiteral(elems))) },
+	)
+}];
 parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
@@ -164,6 +177,7 @@ parser![primary_expr, Box<Expr>, {
 		track_set_literal(),
 		identifier_literal(),
 		string_literal(),
+		array_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
@@ -173,24 +187,78 @@ parser![primary_expr, Box<Expr>, {
 	))
 }];
 
-parser![labeled_expr, Box<Expr>, {
+// 後置系の構文は任意の順序・回数で適用できるよう、まとめて解析する
+parser![postfix_expr, Box<Expr>, {
 	map_res(
 		tuple((
 			si!(primary_expr()),
-			opt(
-				preceded(
-					ss!(char('@')),
-					si!(identifier()),
-				),
-			),
-		)),
-		|(expr, label)| ok(
-			match label {
-				Some(label) => Box::new(Expr::Labeled { label: label.to_string(), inner: expr }),
-				None => expr,
+			many0(si!(postfix())),
+		)), |(lhs, postfixes)| {
+			let mut result = lhs;
+			for p in postfixes {
+				result = Box::new(match p {
+					Postfix::Label(label) => Expr::Labeled { label, inner: result },
+					Postfix::FunctionCall(args) => Expr::FunctionCall { function: result, args },
+					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
+					// 糖衣構文として、このレイヤーで吸収してしまう
+					Postfix::MethodCall { method_name, args } => Expr::FunctionCall {
+						function: Box::new(Expr::Identifier(method_name)),
+						args: Args {
+							unnamed: [vec![result], args.unnamed].concat(),
+							named: args.named,
+						},
+					},
+				})
 			}
-		)
+
+			ok(result)
+		}
 	)
+}];
+
+enum Postfix {
+	Label(String),
+	FunctionCall(Args),
+	MethodCall { method_name: String, args: Args },
+}
+
+parser![postfix, Postfix, {
+	alt((
+		map_res(
+			preceded(
+				ss!(char('@')),
+				si!(identifier()),
+			),
+			|label| ok(Postfix::Label(label.to_string())),
+		),
+		map_res(
+			delimited(
+				ss!(char('(')),
+				ss!(args()),
+				si!(char(')')),
+			),
+			|args| ok(Postfix::FunctionCall(args)),
+		),
+		map_res(
+			preceded(
+				ss!(tag("->")),
+				tuple((
+					si!(identifier()),
+					opt(
+						delimited(
+							ss!(char('(')),
+							ss!(args()),
+							si!(char(')')),
+						),
+					),
+				)),
+			),
+			|(method_name, args)| ok(Postfix::MethodCall {
+				method_name: method_name.to_string(),
+				args: args.unwrap_or_else(|| Args::empty()),
+			}),
+		),
+	))
 }];
 
 macro_rules! binary_expr {
@@ -291,32 +359,10 @@ parser![args, Args, {
 	)
 }];
 
-parser![function_call, Box<Expr>, {
-	map_res(
-		tuple((
-			si!(labeled_expr()),
-			// 関数を返す関数では f(args)(args)... のような呼び出し方になるので全部処理
-			many0(delimited(
-				ss!(char('(')),
-				ss!(args()),
-				si!(char(')')),
-			)),
-		)),
-		|(x, lists_of_args)| ok(if lists_of_args.is_empty() {
-			x
-		} else {
-			lists_of_args.into_iter().fold(x, |lhs, rhs| Box::new(Expr::FunctionCall {
-				function: lhs,
-				args: rhs,
-			}))
-		}),
-	)
-}];
-
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
 		tuple((
-			si!(function_call()),
+			si!(postfix_expr()),
 			opt(
 				delimited(
 					ss!(char('{')),

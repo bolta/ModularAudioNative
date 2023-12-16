@@ -72,6 +72,9 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("cos", Cos { });
 	add_function!("tan", Tan { });
 
+	add_function!("map", Map { });
+	add_function!("reduce", Reduce { });
+
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_function!("twice", Twice { });
@@ -153,3 +156,50 @@ unary_math_func!(Log10, Log10Calc);
 unary_math_func!(Sin, SinCalc);
 unary_math_func!(Cos, CosCalc);
 unary_math_func!(Tan, TanCalc);
+
+// 最低限の配列操作のため、とりあえず map と reduce を作っておく
+
+pub struct Map { }
+impl Function for Map {
+	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+		let source_val = args.get(& "source".to_string()).ok_or_else(|| Error::ArgMissing { name: "source".to_string() }) ?;
+		let source = source_val.as_array().ok_or_else(|| Error::TypeMismatch) ?;
+
+		let mapper_val = args.get(& "mapper".to_string()).ok_or_else(|| Error::ArgMissing { name: "mapper".to_string() }) ?;
+		let mapper = mapper_val.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+
+		let sig = mapper.signature();
+		if sig.len() != 1 { return Err(Error::SignatureMismatch); }
+
+		let mut result = vec![];
+		for elem in source {
+			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars) ?);
+		}
+		Ok(Value::Array(result))
+	}
+}
+
+pub struct Reduce { }
+impl Function for Reduce {
+	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "initial".to_string(), "reducer".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+		let source = args.get(& "source".to_string()).ok_or_else(|| Error::ArgMissing { name: "source".to_string() }) ?
+				.as_array().ok_or_else(|| Error::TypeMismatch) ?;
+		let init = args.get(& "initial".to_string()).ok_or_else(|| Error::ArgMissing { name: "initial".to_string() }) ?;
+		let folder = args.get(& "reducer".to_string()).ok_or_else(|| Error::ArgMissing { name: "reducer".to_string() }) ?
+				.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+
+		let sig = folder.signature();
+		if sig.len() != 2 { return Err(Error::SignatureMismatch); }
+
+		let mut result = init.clone();
+		for elem in source {
+			result = folder.call(& HashMap::from([
+				(sig[0].clone(), result),
+				(sig[1].clone(), elem.clone()),
+			]), vars) ?;
+		}
+		Ok(result)
+	}
+}

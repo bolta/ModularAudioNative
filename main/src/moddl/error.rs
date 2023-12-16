@@ -23,6 +23,7 @@ pub enum Error/* <'a> */ {
 	ChannelMismatch,
 	TypeMismatch,
 	ArgMissing { name: String },
+	SignatureMismatch, // map や filter に渡す関数の arity が 1 でないなど
 	EntryDuplicate { name: String },
 	TooManyUnnamedArgs,
 	TooManyTracks,
