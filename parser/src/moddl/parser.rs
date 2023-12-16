@@ -187,24 +187,48 @@ parser![primary_expr, Box<Expr>, {
 	))
 }];
 
-parser![labeled_expr, Box<Expr>, {
+// 後置系の構文は任意の順序・回数で適用できるよう、まとめて解析する
+parser![postfix_expr, Box<Expr>, {
 	map_res(
 		tuple((
 			si!(primary_expr()),
-			opt(
-				preceded(
-					ss!(char('@')),
-					si!(identifier()),
-				),
-			),
-		)),
-		|(expr, label)| ok(
-			match label {
-				Some(label) => Box::new(Expr::Labeled { label: label.to_string(), inner: expr }),
-				None => expr,
+			many0(si!(postfix())),
+		)), |(lhs, postfixes)| {
+			let mut result = lhs;
+			for p in postfixes {
+				result = Box::new(match p {
+					Postfix::Label(label) => Expr::Labeled { label, inner: result },
+					Postfix::FunctionCall(args) => Expr::FunctionCall { function: result, args },
+				})
 			}
-		)
+
+			ok(result)
+		}
 	)
+}];
+enum Postfix {
+	Label(String),
+	FunctionCall(Args),
+}
+
+parser![postfix, Postfix, {
+	alt((
+		map_res(
+			preceded(
+				ss!(char('@')),
+				si!(identifier()),
+			),
+			|label| ok(Postfix::Label(label.to_string())),
+		),
+		map_res(
+			delimited(
+				ss!(char('(')),
+				ss!(args()),
+				si!(char(')')),
+			),
+			|args| ok(Postfix::FunctionCall(args)),
+		),
+	))
 }];
 
 macro_rules! binary_expr {
@@ -305,32 +329,10 @@ parser![args, Args, {
 	)
 }];
 
-parser![function_call, Box<Expr>, {
-	map_res(
-		tuple((
-			si!(labeled_expr()),
-			// 関数を返す関数では f(args)(args)... のような呼び出し方になるので全部処理
-			many0(delimited(
-				ss!(char('(')),
-				ss!(args()),
-				si!(char(')')),
-			)),
-		)),
-		|(x, lists_of_args)| ok(if lists_of_args.is_empty() {
-			x
-		} else {
-			lists_of_args.into_iter().fold(x, |lhs, rhs| Box::new(Expr::FunctionCall {
-				function: lhs,
-				args: rhs,
-			}))
-		}),
-	)
-}];
-
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
 		tuple((
-			si!(function_call()),
+			si!(postfix_expr()),
 			opt(
 				delimited(
 					ss!(char('{')),
