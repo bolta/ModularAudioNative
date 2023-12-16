@@ -56,6 +56,19 @@ parser![string_literal, Box<Expr>, {
 	map_res(si!(delimited(char('"'), re_find(re(r#"[^"]*"#)), char('"'))),
 			|str| { ok(Box::new(Expr::StringLiteral(str.to_string()))) })
 }];
+parser![array_literal, Box<Expr>, {
+	map_res(
+		delimited(
+			ss!(char('[')),
+			terminated(
+				separated_list0(ss!(char(',')), ss!(expr())),
+				opt(ss!(char(','))),
+			),
+			si!(char(']')),
+		),
+		|elems| { ok(Box::new(Expr::ArrayLiteral(elems))) },
+	)
+}];
 parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
@@ -164,6 +177,7 @@ parser![primary_expr, Box<Expr>, {
 		track_set_literal(),
 		identifier_literal(),
 		string_literal(),
+		array_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す

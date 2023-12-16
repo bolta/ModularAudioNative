@@ -67,6 +67,7 @@ pub enum Value {
 	TrackSet(Vec<String>),
 	IdentifierLiteral(String),
 	String(String),
+	Array(Vec<Value>),
 	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
@@ -111,6 +112,13 @@ impl Value {
 	pub fn as_string(&self) -> Option<String> {
 		match self.value() {
 			Self::String(content) => Some(content.clone()),
+			_ => None,
+		}
+	}
+
+	pub fn as_array(&self) -> Option<&Vec<Value>> {
+		match self.value() {
+			Self::Array(content) => Some(content),
 			_ => None,
 		}
 	}
