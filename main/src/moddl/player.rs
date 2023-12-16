@@ -20,7 +20,7 @@ use crate::{
 		node_host::*,
 	},
 	mml::default::{
-		feature::*,
+		feature::Feature,
 		sequence_generator::*,
 	},
 	node::{

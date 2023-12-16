@@ -264,12 +264,23 @@ impl Machine {
 
 			let node_idx = NodeIndex(i);
 			let node = & nodes[node_idx];
+			let value_of = |node_idx| value_offsets.get(&node_idx).map(|o| *o);
 			loads
 					.chain(if node.implements_execute() {
-						vec![Instruction::Execute { node_idx, output: value_offsets.get(&node_idx).map(|o| *o) }]
+						vec![Instruction::Execute { node_idx, output: value_of(node_idx) }]
 					} else {
 						vec![]
 					})
+					.chain(node.features().iter().filter_map(|f| {
+						match f {
+							&Feature::FeedbackIn { out } => {
+								let to = value_of(out.unchanneled()).expect("Feedback OUT node must have value index");
+								let from = value_of(node_idx).expect("Feedback IN node must have value index");
+								Some(Instruction::Copy { to, from })
+							},
+							// _ => None, // unreachable so far
+						}
+					}).collect::<Vec<_>>())
 					.chain(if node.implements_update() {
 						vec![Instruction::Update(node_idx)]
 					} else {
@@ -322,6 +333,10 @@ impl Machine {
 				};
 				node.execute(&inputs, output_slice, context, env);
 				unsafe { EXECUTE_COUNT += 1; }
+			}
+			&Instruction::Copy { to, from } => {
+				let from_val = values[from.0][0];
+				values[to.0].push(from_val);
 			}
 			Instruction::Update(node_idx) => {
 				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく
@@ -417,6 +432,7 @@ enum Instruction {
 	/// delay_idx は DelayBuffer にアクセスする際の添字（常に非正）
 	Load { to: InputIndex, from: ValueIndex, delay_idx: i32 },
 	Execute { node_idx: NodeIndex, output: Option<ValueIndex> },
+	Copy { to: ValueIndex, from: ValueIndex },
 	Update(NodeIndex),
 }
 

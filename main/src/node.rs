@@ -5,6 +5,7 @@ pub mod cond;
 pub mod delay;
 pub mod envelope;
 pub mod event_scheduler;
+pub mod feedback;
 pub mod file;
 pub mod filter;
 pub mod freq;
