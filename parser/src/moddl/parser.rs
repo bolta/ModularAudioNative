@@ -199,6 +199,15 @@ parser![postfix_expr, Box<Expr>, {
 				result = Box::new(match p {
 					Postfix::Label(label) => Expr::Labeled { label, inner: result },
 					Postfix::FunctionCall(args) => Expr::FunctionCall { function: result, args },
+					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
+					// 糖衣構文として、このレイヤーで吸収してしまう
+					Postfix::MethodCall { method_name, args } => Expr::FunctionCall {
+						function: Box::new(Expr::Identifier(method_name)),
+						args: Args {
+							unnamed: [vec![result], args.unnamed].concat(),
+							named: args.named,
+						},
+					},
 				})
 			}
 
@@ -206,9 +215,11 @@ parser![postfix_expr, Box<Expr>, {
 		}
 	)
 }];
+
 enum Postfix {
 	Label(String),
 	FunctionCall(Args),
+	MethodCall { method_name: String, args: Args },
 }
 
 parser![postfix, Postfix, {
@@ -227,6 +238,25 @@ parser![postfix, Postfix, {
 				si!(char(')')),
 			),
 			|args| ok(Postfix::FunctionCall(args)),
+		),
+		map_res(
+			preceded(
+				ss!(tag("->")),
+				tuple((
+					si!(identifier()),
+					opt(
+						delimited(
+							ss!(char('(')),
+							ss!(args()),
+							si!(char(')')),
+						),
+					),
+				)),
+			),
+			|(method_name, args)| ok(Postfix::MethodCall {
+				method_name: method_name.to_string(),
+				args: args.unwrap_or_else(|| Args::empty()),
+			}),
 		),
 	))
 }];

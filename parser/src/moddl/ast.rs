@@ -16,6 +16,11 @@ pub struct Args {
 	pub unnamed: Vec<Box<Expr>>,
 	pub named: AssocArray,
 }
+impl Args {
+	pub fn empty() -> Self {
+		Self { unnamed: vec![], named: vec![] }
+	}
+}
 
 #[derive(Clone, Debug)]
 pub struct FunctionParam {
