@@ -51,11 +51,19 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		Expr::StringLiteral(content) => Ok(Value::String(content.clone())),
 		Expr::ArrayLiteral(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
-			let mut results = vec![];
+			let mut result = vec![];
 			for elem in content {
-				results.push(evaluate(&*elem, vars) ?);
+				result.push(evaluate(&*elem, vars) ?);
 			}
-			Ok(Value::Array(results))
+			Ok(Value::Array(result))
+		},
+		Expr::AssocLiteral(content) => {
+			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
+			let mut result = HashMap::<String, Value>::with_capacity(content.len());
+			for (key, value_expr) in content {
+				result.insert(key.clone(), evaluate(&*value_expr, vars) ?);
+			}
+			Ok(Value::Assoc(result))
 		},
 		Expr::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
 		Expr::LambdaFunction { params, body } => {
@@ -101,6 +109,12 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 
 			function.call(&value_args, &vars)
 		},
+		Expr::PropertyAccess { assoc, name } => {
+			let assoc_val = evaluate(assoc, vars) ?;
+			let content = assoc_val.as_assoc().ok_or_else(|| Error::TypeMismatch) ?;
+			let val = content.get(name);
+			Ok(val.ok_or_else(|| Error::EntryNotFound { name: name.clone() })?.clone())
+		},
 		Expr::NodeWithArgs { node_def, label, args } => {
 			let factory = evaluate_as_node_structure(node_def, vars) ?;
 			let arg_names = match &factory {
@@ -122,7 +136,6 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			}))
 		},
 
-		Expr::AssocArrayLiteral(_) => unimplemented!(),
 		Expr::MmlLiteral(_) => unimplemented!(),
 
 		Expr::Labeled { label, inner } => {

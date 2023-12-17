@@ -25,6 +25,7 @@ pub enum Error/* <'a> */ {
 	ArgMissing { name: String },
 	SignatureMismatch, // map や filter に渡す関数の arity が 1 でないなど
 	EntryDuplicate { name: String },
+	EntryNotFound { name: String },
 	TooManyUnnamedArgs,
 	TooManyTracks,
 	GrooveTargetDuplicate { track: String },

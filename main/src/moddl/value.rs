@@ -68,6 +68,7 @@ pub enum Value {
 	IdentifierLiteral(String),
 	String(String),
 	Array(Vec<Value>),
+	Assoc(HashMap<String, Value>),
 	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
@@ -119,6 +120,13 @@ impl Value {
 	pub fn as_array(&self) -> Option<&Vec<Value>> {
 		match self.value() {
 			Self::Array(content) => Some(content),
+			_ => None,
+		}
+	}
+
+	pub fn as_assoc(&self) -> Option<&HashMap<String, Value>> {
+		match self.value() {
+			Self::Assoc(content) => Some(content),
 			_ => None,
 		}
 	}

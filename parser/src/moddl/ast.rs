@@ -9,12 +9,12 @@ pub enum Statement {
 	Mml { tracks: Vec<String>, mml: String },
 }
 
-pub type AssocArray = Vec<(String, Box<Expr>)>;
+pub type Assoc = Vec<(String, Box<Expr>)>;
 
 #[derive(Clone, Debug)]
 pub struct Args {
 	pub unnamed: Vec<Box<Expr>>,
-	pub named: AssocArray,
+	pub named: Assoc,
 }
 impl Args {
 	pub fn empty() -> Self {
@@ -51,6 +51,7 @@ pub enum Expr {
 	LambdaFunction { params: Vec<FunctionParam>, body: Box<Expr> },
 	LambdaNode { input_param: String, body: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
+	PropertyAccess { assoc: Box<Expr>, name: String },
 	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },
 
 	FloatLiteral(f32),
@@ -59,8 +60,8 @@ pub enum Expr {
 	StringLiteral(String),
 	// FIXME この Box は取り除ける？
 	ArrayLiteral(Vec<Box<Expr>>),
+	AssocLiteral(Assoc),
 	MmlLiteral(String),
-	AssocArrayLiteral(AssocArray),
 
 	Labeled { label: String, inner: Box<Expr> },
 }
