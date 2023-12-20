@@ -69,6 +69,16 @@ parser![array_literal, Box<Expr>, {
 		|elems| { ok(Box::new(Expr::ArrayLiteral(elems))) },
 	)
 }];
+parser![assoc_literal, Box<Expr>, {
+	map_res(
+		delimited(
+			ss!(char('{')),
+			ss!(opt(assoc_entries())),
+			si!(char('}')),
+		),
+		|elems| { ok(Box::new(Expr::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())))) },
+	)
+}];
 parser![identifier_expr, Box<Expr>, {
 	map_res(identifier(),
 			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
@@ -178,6 +188,7 @@ parser![primary_expr, Box<Expr>, {
 		identifier_literal(),
 		string_literal(),
 		array_literal(),
+		assoc_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
@@ -201,13 +212,14 @@ parser![postfix_expr, Box<Expr>, {
 					Postfix::FunctionCall(args) => Expr::FunctionCall { function: result, args },
 					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
 					// 糖衣構文として、このレイヤーで吸収してしまう
-					Postfix::MethodCall { method_name, args } => Expr::FunctionCall {
-						function: Box::new(Expr::Identifier(method_name)),
+					Postfix::MethodCall { name, args } => Expr::FunctionCall {
+						function: Box::new(Expr::Identifier(name)),
 						args: Args {
 							unnamed: [vec![result], args.unnamed].concat(),
 							named: args.named,
 						},
 					},
+					Postfix::PropertyAccess { name } => Expr::PropertyAccess { assoc: result, name },
 				})
 			}
 
@@ -219,7 +231,8 @@ parser![postfix_expr, Box<Expr>, {
 enum Postfix {
 	Label(String),
 	FunctionCall(Args),
-	MethodCall { method_name: String, args: Args },
+	MethodCall { name: String, args: Args },
+	PropertyAccess { name: String },
 }
 
 parser![postfix, Postfix, {
@@ -253,10 +266,17 @@ parser![postfix, Postfix, {
 					),
 				)),
 			),
-			|(method_name, args)| ok(Postfix::MethodCall {
-				method_name: method_name.to_string(),
+			|(name, args)| ok(Postfix::MethodCall {
+				name: name.to_string(),
 				args: args.unwrap_or_else(|| Args::empty()),
 			}),
+		),
+		map_res(
+			preceded(
+				ss!(char('.')),
+				si!(identifier()),
+			),
+			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
 		),
 	))
 }];
@@ -356,6 +376,16 @@ parser![args, Args, {
 			),
 		)),
 		opt(ss!(char(','))),
+	)
+}];
+
+parser![assoc_entries, Assoc, {
+	map_res(
+		terminated(
+			ss!(separated_list1(ss!(char(',')), ss!(named_entry()))),
+			opt(ss!(char(','))),
+		),
+		|entries| ok(entries),
 	)
 }];
 
