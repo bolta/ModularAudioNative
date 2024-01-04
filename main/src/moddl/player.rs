@@ -1,5 +1,6 @@
 use super::{
 	builtin::*,
+	console::*,
 	error::*,
 	evaluator::*,
 	path::*,
@@ -41,10 +42,11 @@ use crate::{
 	},
 	wave::{
 		waveform_host::*,
-		wav_reader::*,
+		wav_reader::*, waveform::Waveform,
 	}
 };
 extern crate parser;
+use graphviz_rust::attributes::start;
 use parser::{
 	mml::default_mml_parser,
 	moddl::ast::*,
@@ -439,10 +441,20 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					let path = value.as_string().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					// TODO 読み込み失敗時のエラー処理
-					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
-					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index));
+					let path = value.as_string();
+					let waveform = if path.is_some() {
+						// TODO 読み込み失敗時のエラー処理
+						Ok(read_wav_file(path.unwrap().as_str(), None, None, None, None) ?)
+					} else {
+						let spec = value.as_assoc();
+						if spec.is_some() {
+							Ok(parse_waveform_spec(spec.unwrap()) ?)
+						} else {
+							Err(Error::DirectiveArgTypeMismatch)
+						}
+					} ?;
+					let index = pctx.waveforms.add(waveform);
+					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index)) ?;
 				}
 				"ticksPerBar" => {
 					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
@@ -492,6 +504,52 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 
 	Ok(())
 }
+
+// 仕様は #16 を参照のこと
+fn parse_waveform_spec(spec: &HashMap<String, Value>) -> ModdlResult<Waveform> {
+	let get_optional_value = |name: &str| spec.get(& name.to_string());
+	let get_required_value = |name: &str| get_optional_value(name).ok_or_else(|| Error::EntryNotFound { name: name.to_string() });
+
+	let data_values = get_required_value("data")?.as_array().ok_or_else(|| Error::TypeMismatch) ?;
+	let sample_rate = get_required_value("sampleRate")?.as_float().ok_or_else(|| Error::TypeMismatch) ? as i32;
+	let master_freq = get_optional_value("masterFreq").map(|value| value.as_float().ok_or_else(|| Error::TypeMismatch))
+	.transpose() ?;
+	let start_offset = get_optional_value("startOffset").map(|value| value.as_float().ok_or_else(|| Error::TypeMismatch))
+	.transpose() ?;
+	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_float().ok_or_else(|| Error::TypeMismatch))
+	.transpose() ?;
+	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_float().ok_or_else(|| Error::TypeMismatch))
+	.transpose() ?;
+
+	// TODO ステレオ対応
+	let channels = 1;
+	let mut data = vec![];
+	for v in data_values {
+		let f = v.as_float();
+		if f.is_some() {
+			data.push(f.unwrap());
+		} else {
+			let looop = v.as_array();
+			if looop.is_some() {
+				match loop_offset {
+					Some(_) => { warn("duplicate loop offset"); }, // assoc に明記されていればそちらが優先
+					None => { loop_offset = Some(data.len() as f32); },
+				}
+				for v in looop.unwrap() {
+					let f = v.as_float().ok_or_else(|| Error::TypeMismatch) ?;
+					data.push(f);
+				}
+				match end_offset {
+					Some(_) => { warn("duplicate end offset"); }, // assoc に明記されていればそちらが優先
+					None => { end_offset = Some(data.len() as f32); },
+				}
+			}
+		}
+	}
+
+	Ok(Waveform::new_with_details(channels, sample_rate, data, master_freq, start_offset, end_offset, loop_offset))
+}
+
 /// シーケンサのタグ名を生成する。また生成したタグ名を記録する
 fn make_seq_tag(track: Option<&String>, tags: &mut HashSet<String>) -> String {
 	let tag = match track {

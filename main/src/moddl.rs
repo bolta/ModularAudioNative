@@ -1,4 +1,5 @@
 pub mod builtin;
+pub mod console;
 pub mod error;
 pub mod evaluator;
 pub mod function;
