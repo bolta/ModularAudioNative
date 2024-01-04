@@ -68,10 +68,17 @@ impl Node for WaveformPlayer {
 		let waveform = self.waveform(env);
 		// freq == waveform.master_freq() && waveform.sample_rate() == context.sample_rate_f32() のとき、等速（1 サンプル進む）
 		// そこから freq と waveform.sample_rate() に比例して速くなる
-		// TODO ループ対応
 		self.offset += 1f32 * freq * waveform.sample_rate() as f32 / waveform.master_freq() / context.sample_rate_f32();
-		if self.offset >= waveform.len() as f32 {
-			self.state = WaveformPlayerState::Idle;
+		let end_offset = waveform.end_offset().unwrap_or_else(|| waveform.len() as f32);
+		if self.offset >= end_offset {
+			match waveform.loop_offset() {
+				Some(loop_offset) => {
+					self.offset -= end_offset - loop_offset;
+				},
+				None => {
+					self.state = WaveformPlayerState::Idle;
+				},
+			}
 		}
 	}
 
