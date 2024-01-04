@@ -42,6 +42,7 @@ use crate::{
 	wave::{
 		waveform_host::*,
 		wav_reader::*,
+		waveform::*,
 	}
 };
 extern crate parser;
@@ -172,7 +173,7 @@ fn read_file(path: &str) -> ModdlResult<String> {
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = options.moddl_path.as_str();
 	let moddl = read_file(moddl_path) ?;
-	let sample_rate = 44100; // TODO 値を外から渡せるように
+	let sample_rate = 48000; // TODO 値を外から渡せるように
 	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
 	
 	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
@@ -262,7 +263,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	match &options.output {
 		PlayerOutput::Audio => {
 			nodes.add_node(machine_out,
-					Box::new(PortAudioOut::new(NodeBase::new(master_delay), master_node)));
+					Box::new(AudioOut::new(NodeBase::new(master_delay), master_node)));
 		},
 		PlayerOutput::Wav { path } => {
 			// wav ファイルに出力
@@ -439,9 +440,22 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
 							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
 					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					let path = value.as_string().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					// TODO 読み込み失敗時のエラー処理
-					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
+
+					let waveform = {
+						let path = value.as_string();
+						if path.is_some() {
+							// TODO 読み込み失敗時のエラー処理
+							Ok(read_wav_file(path.unwrap().as_str(), None, None, None, None) ?)
+						} else {
+							let spec = value.as_assoc();
+							if spec.is_some() {
+								parse_waveform_assoc(spec.unwrap())
+							} else {
+								Err(Error::DirectiveArgTypeMismatch)
+							}
+						}
+					} ?; 
+					let index = pctx.waveforms.add(waveform);
 					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index));
 				}
 				"ticksPerBar" => {
@@ -492,6 +506,37 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 
 	Ok(())
 }
+
+fn parse_waveform_assoc(spec: &HashMap<String, Value>) -> ModdlResult<Waveform> {
+	// TODO ボイラープレートなんとかしたいな
+	let data = spec.get(& "data".to_string()).ok_or_else(|| Error::EntryNotFound { name: "data".to_string() }) ?
+			.as_array().ok_or_else(|| Error::TypeMismatch) ?;
+	let sample_rate = spec.get(& "sampleRate".to_string()).ok_or_else(|| Error::EntryNotFound { name: "sampleRate".to_string() }) ?
+			.as_float().ok_or_else(|| Error::TypeMismatch) ?;
+
+	struct ParsedData {
+		data: Vec<Sample>,
+		end_offset: Option<f32>,
+		loop_offset: Option<f32>,
+	}
+	let mut parsed_data = ParsedData {
+		data: vec![],
+		end_offset: None,
+		loop_offset: None,
+	};
+	// let parsed_data = {
+	// 	data.iter().map(|elem| {
+	// 		let f = elem.as_float();
+	// 		if (f.is_some())
+	// 	})
+	// };
+
+	
+
+	todo!()
+}
+
+
 /// シーケンサのタグ名を生成する。また生成したタグ名を記録する
 fn make_seq_tag(track: Option<&String>, tags: &mut HashSet<String>) -> String {
 	let tag = match track {

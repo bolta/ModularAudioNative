@@ -13,13 +13,14 @@ parser = { path = "../parser" }
 itertools = "0.10.3"
 mopa = "*"
 nom = { version = "*", features = ["regexp"] }
-portaudio = "*"
 rand = "*"
 regex = "^1"
 ringbuf = "*"
 wav = "*"
 
 graphviz-rust = "0.6.1"
+cpal = "0.15.2"
+force-send-sync = "1.1.0"
 
 [profile.release]
 # debug = 1

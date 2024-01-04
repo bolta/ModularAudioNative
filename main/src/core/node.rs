@@ -1,4 +1,3 @@
-extern crate portaudio;
 use std::any::type_name;
 
 use regex::Regex;
