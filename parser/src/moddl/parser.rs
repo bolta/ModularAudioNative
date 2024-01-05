@@ -76,17 +76,42 @@ enum DataArrayElement {
 	Loop(Vec<DataArrayElement>),
 }
 
-fn data_array_literal<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
+
+// FIXME unsigned と signed はほとんど同じコードが重複しているのでなんとかして整理したい
+
+fn data_array_literal_unsigned<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
 	map_res(
 		delimited(
 			tuple((
 				tag(prefix), // x [ のようにスペースを空けるのは不可
 				ss!(char('[')),
 			)),
-			many0(alt((
-				data_array_element_nonloop(digits),
-				data_array_element_loop(digits),
-			))),
+			many0(
+				alt((
+					data_array_element_nonloop_unsigned(digits),
+					data_array_element_loop_unsigned(digits),
+				))
+			),
+			si!(char(']')),
+		),
+		|elems| {
+			ok(translate_data_array(&elems, 1))
+		}
+	)
+}
+fn data_array_literal_signed<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
+	map_res(
+		delimited(
+			tuple((
+				tag(prefix), // x [ のようにスペースを空けるのは不可
+				ss!(char('[')),
+			)),
+			many0(
+				alt((
+					data_array_element_nonloop_signed(digits),
+					data_array_element_loop_signed(digits),
+				))
+			),
 			si!(char(']')),
 		),
 		|elems| {
@@ -114,7 +139,7 @@ fn translate_data_array(elems: &Vec<DataArrayElement>, mut sign: i32) -> Box<Exp
 	Box::new(Expr::ArrayLiteral((result)))
 }
 
-fn data_array_element_nonloop<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
 	alt((
 		map_res(
 			ss!(re_find(re(format!(r"[0-9a-fA-F]{}{}{}", '{', digits, '}').as_str()))),
@@ -124,12 +149,34 @@ fn data_array_element_nonloop<'a>(digits: i32) -> impl FnMut (&'a str) -> IResul
 		map_res(ss!(char('>')), |_| ok(DataArrayElement::Sign(1))),
 	))
 }
-
-fn data_array_element_loop<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_loop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
 	map_res(
 		delimited(
 			ss!(char('[')),
-			many0(ss!(data_array_element_nonloop(digits))),
+			many0(ss!(data_array_element_nonloop_unsigned(digits))),
+			ss!(char(']')),
+		),
+		|xs| ok(DataArrayElement::Loop(xs)),
+	)
+}
+fn data_array_element_nonloop_signed<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+	map_res(
+		ss!(re_find(re(format!(r"[0-9a-fA-F]{}{}{}", '{', digits, '}').as_str()))),
+		move |x| {
+			let value = {
+				let unsigned_value = i32::from_str_radix(x, 16).unwrap();
+				let unsigned_max = 16i32.pow(digits as u32);
+				if unsigned_value < unsigned_max / 2 { unsigned_value } else { unsigned_value - unsigned_max }
+			};
+			ok(DataArrayElement::Value(value))
+		},
+	)
+}
+fn data_array_element_loop_signed<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+	map_res(
+		delimited(
+			ss!(char('[')),
+			many0(ss!(data_array_element_nonloop_signed(digits))),
 			ss!(char(']')),
 		),
 		|xs| ok(DataArrayElement::Loop(xs)),
@@ -255,8 +302,10 @@ parser![primary_expr, Box<Expr>, {
 		identifier_literal(),
 		string_literal(),
 		array_literal(),
-		data_array_literal("x", 1),
-		data_array_literal("xx", 2),
+		data_array_literal_unsigned("x", 1),
+		data_array_literal_unsigned("xx", 2),
+		data_array_literal_signed("sx", 1),
+		data_array_literal_signed("sxx", 2),
 		assoc_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
