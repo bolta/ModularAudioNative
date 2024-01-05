@@ -76,21 +76,16 @@ enum DataArrayElement {
 	Loop(Vec<DataArrayElement>),
 }
 
-parser![data_array_literal, Box<Expr>, {
-	// alt((
-		data_array_literal_x() //,
-		// data_array_literal_xx(),
-		// data_array_literal_sx(),
-		// data_array_literal_sxx(),
-	// ))
-}];
-parser![data_array_literal_x, Box<Expr>, {
+fn data_array_literal<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
 	map_res(
 		delimited(
-			ss!(tag("x[")),
+			tuple((
+				tag(prefix), // x [ のようにスペースを空けるのは不可
+				ss!(char('[')),
+			)),
 			many0(alt((
-				data_array_element_nonloop(1),
-				data_array_element_loop(1),
+				data_array_element_nonloop(digits),
+				data_array_element_loop(digits),
 			))),
 			si!(char(']')),
 		),
@@ -98,7 +93,7 @@ parser![data_array_literal_x, Box<Expr>, {
 			ok(translate_data_array(&elems, 1))
 		}
 	)
-}];
+}
 fn translate_data_array(elems: &Vec<DataArrayElement>, mut sign: i32) -> Box<Expr> {
 	let mut result = vec![];
 	// let mut sign = 1;
@@ -260,7 +255,8 @@ parser![primary_expr, Box<Expr>, {
 		identifier_literal(),
 		string_literal(),
 		array_literal(),
-		data_array_literal(),
+		data_array_literal("x", 1),
+		data_array_literal("xx", 2),
 		assoc_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
