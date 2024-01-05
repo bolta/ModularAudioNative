@@ -69,6 +69,78 @@ parser![array_literal, Box<Expr>, {
 		|elems| { ok(Box::new(Expr::ArrayLiteral(elems))) },
 	)
 }];
+
+enum DataArrayElement {
+	Value(i32),
+	Sign(i32),
+	Loop(Vec<DataArrayElement>),
+}
+
+parser![data_array_literal, Box<Expr>, {
+	// alt((
+		data_array_literal_x() //,
+		// data_array_literal_xx(),
+		// data_array_literal_sx(),
+		// data_array_literal_sxx(),
+	// ))
+}];
+parser![data_array_literal_x, Box<Expr>, {
+	map_res(
+		delimited(
+			ss!(tag("x[")),
+			many0(alt((
+				data_array_element_nonloop(1),
+				data_array_element_loop(1),
+			))),
+			si!(char(']')),
+		),
+		|elems| {
+			ok(translate_data_array(&elems, 1))
+		}
+	)
+}];
+fn translate_data_array(elems: &Vec<DataArrayElement>, mut sign: i32) -> Box<Expr> {
+	let mut result = vec![];
+	// let mut sign = 1;
+	for elem in elems {
+		match elem {
+			DataArrayElement::Value(v) => {
+				result.push(Box::new(Expr::FloatLiteral((sign * v) as f32)));
+			},
+			DataArrayElement::Sign(s) => {
+				sign = *s;
+			},
+			DataArrayElement::Loop(inner_elems) => {
+				result.push(translate_data_array(inner_elems, sign));
+			},
+		}
+	}
+
+	Box::new(Expr::ArrayLiteral((result)))
+}
+
+fn data_array_element_nonloop<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+	alt((
+		map_res(
+			ss!(re_find(re(format!(r"[0-9a-fA-F]{}{}{}", '{', digits, '}').as_str()))),
+			|x| ok(DataArrayElement::Value(i32::from_str_radix(x, 16).unwrap())),
+		),
+		map_res(ss!(char('<')), |_| ok(DataArrayElement::Sign(-1))),
+		map_res(ss!(char('>')), |_| ok(DataArrayElement::Sign(1))),
+	))
+}
+
+fn data_array_element_loop<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+	map_res(
+		delimited(
+			ss!(char('[')),
+			many0(ss!(data_array_element_nonloop(digits))),
+			ss!(char(']')),
+		),
+		|xs| ok(DataArrayElement::Loop(xs)),
+	)
+}
+
 parser![assoc_literal, Box<Expr>, {
 	map_res(
 		delimited(
@@ -188,6 +260,7 @@ parser![primary_expr, Box<Expr>, {
 		identifier_literal(),
 		string_literal(),
 		array_literal(),
+		data_array_literal(),
 		assoc_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
