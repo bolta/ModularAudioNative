@@ -312,8 +312,9 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
 	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
 
+	// デバッグ用機能なのでとりあえず蓋をしておく
 	// TODO コマンドオプションで指定されたときだけ出力する
-	output_structure(&nodes_result, &sends_to_receives);
+	// output_structure(&nodes_result, &sends_to_receives);
 
 	let waveforms = Arc::new(pctx.waveforms);
 	let joins: Vec<_> = nodes_result.into_iter()
