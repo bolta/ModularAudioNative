@@ -2,14 +2,16 @@ use std::{
 	convert::From,
 	io,
 };
+use std::fmt::Display;
 
-type NomError<'a> = nom::Err<nom::error::VerboseError<&'a str>>;
+
+type NomError = nom::Err<nom::error::VerboseError<String>>;
 
 // それぞれのエラーに十分な付加情報を含めるべきだが、とりあえずはざっと分類まで
 #[derive(Debug)]
-pub enum Error/* <'a> */ {
-	Syntax(String/* NomError<'a> */),
-	MmlSyntax, // TODO MML パーザから返されたエラーをラップする
+pub enum Error {
+	Syntax(NomError),
+	// MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
@@ -35,16 +37,29 @@ pub enum Error/* <'a> */ {
 	File(io::Error),
 }
 
-pub type ModdlResult</* 'a, */ T> = Result<T, Error/* <'a> */>;
-
-// TODO Error 全体が MML の寿命に影響されるのがまずいので format! をかましてしまっているが、どうするのがいいのか？
-// MML のエラー表示をやる際に再検討
-impl <'a> From<NomError<'a>> for Error/* <'a> */ {
-	fn from(nom_err: NomError<'a>) -> Self {
-		Self::Syntax(format!("{}", nom_err))
+impl Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:?}", self)
 	}
 }
-impl <'a> From<io::Error> for Error {
+
+pub type ModdlResult<T> = Result<T, Error>;
+
+impl From<nom::Err<nom::error::VerboseError<&str>>> for Error {
+	fn from(nom_err: nom::Err<nom::error::VerboseError<&str>>) -> Self {
+		// エラーがソースコードの寿命に干渉されると不便なので、
+		// VerboseError<&str> から VerboseError<String> に変換する。
+		// FIXME e.to_owned() をかませばよいかと思いきや、それでは &str から変わってくれなかったので、
+		// 中身を 1 つずつ変換したが、これでいいのか？
+		let nom_err_by_string = nom_err.map(|e| {
+			nom::error::VerboseError {
+				errors: e.errors.into_iter().map(|(part, kind)| (part.to_owned(), kind)).collect(),
+			}
+		});
+		Self::Syntax(nom_err_by_string)
+	}
+}
+impl From<io::Error> for Error {
 	fn from(io_err: io::Error) -> Self {
 		Self::File(io_err)
 	}

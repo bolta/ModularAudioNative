@@ -153,7 +153,6 @@ impl PlayerContext {
 fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<PlayerContext> {
 	let mut pctx = PlayerContext::init(moddl_path, sample_rate);
 
-	// TODO パーズエラーをちゃんと処理
 	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
 
 	for stmt in &statements {
@@ -589,7 +588,7 @@ impl Iterator for EventIter {
 // TODO 引数を整理できるか
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32)
 		-> ModdlResult<NodeId> {
-	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
+	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?;
 	let freq_tag = format!("{}_freq", track);
 
 	let tag_set = TagSet {
