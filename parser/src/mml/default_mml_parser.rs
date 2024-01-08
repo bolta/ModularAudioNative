@@ -15,7 +15,6 @@ use nom::{
 	combinator::*,
 	IResult,
 	multi::*,
-	regexp::str::*,
 	sequence::*,
 };
 

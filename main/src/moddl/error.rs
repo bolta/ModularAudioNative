@@ -4,6 +4,8 @@ use std::{
 };
 use std::fmt::Display;
 
+use parser::common::Span;
+
 
 type NomError = nom::Err<nom::error::VerboseError<String>>;
 
@@ -45,15 +47,15 @@ impl Display for Error {
 
 pub type ModdlResult<T> = Result<T, Error>;
 
-impl From<nom::Err<nom::error::VerboseError<&str>>> for Error {
-	fn from(nom_err: nom::Err<nom::error::VerboseError<&str>>) -> Self {
+impl <'a> From<nom::Err<nom::error::VerboseError<Span<'a>>>> for Error {
+	fn from(nom_err: nom::Err<nom::error::VerboseError<Span<'a>>>) -> Self {
 		// エラーがソースコードの寿命に干渉されると不便なので、
 		// VerboseError<&str> から VerboseError<String> に変換する。
 		// FIXME e.to_owned() をかませばよいかと思いきや、それでは &str から変わってくれなかったので、
 		// 中身を 1 つずつ変換したが、これでいいのか？
 		let nom_err_by_string = nom_err.map(|e| {
 			nom::error::VerboseError {
-				errors: e.errors.into_iter().map(|(part, kind)| (part.to_owned(), kind)).collect(),
+				errors: e.errors.into_iter().map(|(part, kind)| (part.to_string(), kind)).collect(),
 			}
 		});
 		Self::Syntax(nom_err_by_string)

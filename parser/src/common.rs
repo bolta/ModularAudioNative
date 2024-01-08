@@ -1,31 +1,38 @@
 extern crate nom;
+extern crate nom_locate;
 //use nom::regexp::str::*;
 use nom::{
 	branch::alt,
 	bytes::complete::*,
 	character::complete::*,
 	combinator::*,
-	error::VerboseError,
+	error::{
+		ParseError,
+		VerboseError,
+	},
 	IResult,
 	multi::*,
-	regexp::str::*,
+	Slice,
 };
-
+use nom_locate::{
+	LocatedSpan,
+	position,
+};
 use regex::Regex;
 
 // trait ResultMap {
-// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R>;
+// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R>;
 // }
-// impl <'a> ResultMap for IResult<&'a str, &'a str> {
-// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R> {
+// impl <'a> ResultMap for IResult<Span<'a>, &'a str> {
+// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R> {
 // 		self.map(|(rest, matched)| (rest, f(matched)))
 // 	}
 // }
 trait ResultMap<'a> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R, VerboseError<&'a str>>;
+	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R, VerboseError<&'a str>>;
 }
-impl <'a> ResultMap<'a> for IResult<&'a str, &'a str, VerboseError<&'a str>> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<&'a str, R, VerboseError<&'a str>> {
+impl <'a> ResultMap<'a> for IResult<Span<'a>, &'a str, VerboseError<&'a str>> {
+	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R, VerboseError<&'a str>> {
 		self.map(|(rest, matched)| (rest, f(matched)))
 	}
 }
@@ -41,13 +48,29 @@ pub fn re(pattern: &str) -> Regex {
 	Regex::new(head_match_pattern.as_str()).unwrap()
 }
 
+// use nom::error::VerboseError;
 
-//type Parser<'a, Result> = FnMut (&'a str) -> IResult<&'a str, Result>;
+/// re_find の入力の型がなぜか &str に固定されており、LocatedSpan に対応できないので
+/// 自前でラッパーを作った
+pub fn re_find<'a>(regex: Regex) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, &'a str, nom::error::VerboseError<Span<'a>>> {
+	move |input| {
+		let input_raw = *input.fragment();
+
+		// FIXME エラー処理、とりあえず型だけ合わせたがこんなんでいいのか？
+		let (_, result) = nom_regex::str::re_find::<'a, VerboseError<&str>>(regex.clone())(input_raw)
+		.or_else(|_| Err(nom::Err::Error(VerboseError { errors: vec![] }))) ?;
+		
+		Ok((input.slice(result.len() ..), result))
+	}
+}
+
+pub type Span<'a> = LocatedSpan<&'a str>;
+pub type Located<'a, T> = (T, Span<'a>);
 
 #[macro_export]
 macro_rules! parser {
 	($name: ident, $result_type: ty, $impl: expr) => {
-		fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type, nom::error::VerboseError<&'a str>> {
+		fn $name<'a>() -> impl FnMut (Span<'a>) -> IResult<Span<'a>, $result_type, nom::error::VerboseError<Span<'a>>> {
 			$impl
 		}
 	}
@@ -55,9 +78,21 @@ macro_rules! parser {
 #[macro_export]
 macro_rules! pub_parser {
 	($name: ident, $result_type: ty, $impl: expr) => {
-		pub fn $name<'a>() -> impl FnMut (&'a str) -> IResult<&'a str, $result_type, nom::error::VerboseError<&'a str>> {
+		pub fn $name<'a>() -> impl FnMut (Span<'a>) -> IResult<Span<'a>, $result_type, nom::error::VerboseError<Span<'a>>> {
 			$impl
 		}
+	}
+}
+
+pub fn loc<'a, O, E/* , F */>(mut f: impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Located<'a, O>, E>
+where
+//   F: Parser<Span<'a>, O, E>,
+  E: ParseError<Span<'a>>,
+{
+	move |input| {
+		let (input, span) = position(input) ?;
+		let (input, result) = f(input) ?;
+ 		Ok((input, (result, span)))
 	}
 }
 

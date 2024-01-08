@@ -11,10 +11,9 @@ use nom::{
 	combinator::*,
 	IResult,
 	multi::*,
-	regexp::str::*,
 	sequence::*,
 };
-
+// use nom_regex::str::re_find;
 
 // fn map_res_ok<I: Clone, O1, O2, E: ParseError<I>, F, G>(
 //     first: F, 
@@ -79,7 +78,7 @@ enum DataArrayElement {
 
 // FIXME unsigned と signed はほとんど同じコードが重複しているのでなんとかして整理したい
 
-fn data_array_literal_unsigned<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
+fn data_array_literal_unsigned<'a>(prefix: &'static str, digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, Box<Expr>, nom::error::VerboseError<Span<'a>>> {
 	map_res(
 		delimited(
 			tuple((
@@ -99,7 +98,7 @@ fn data_array_literal_unsigned<'a>(prefix: &'static str, digits: i32) -> impl Fn
 		}
 	)
 }
-fn data_array_literal_signed<'a>(prefix: &'static str, digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, Box<Expr>, nom::error::VerboseError<&'a str>> {
+fn data_array_literal_signed<'a>(prefix: &'static str, digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, Box<Expr>, nom::error::VerboseError<Span<'a>>> {
 	map_res(
 		delimited(
 			tuple((
@@ -139,7 +138,7 @@ fn translate_data_array(elems: &Vec<DataArrayElement>, mut sign: i32) -> Box<Exp
 	Box::new(Expr::ArrayLiteral((result)))
 }
 
-fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
 	alt((
 		map_res(
 			ss!(re_find(re(format!(r"[0-9a-fA-F]{}{}{}", '{', digits, '}').as_str()))),
@@ -149,7 +148,7 @@ fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) 
 		map_res(ss!(char('>')), |_| ok(DataArrayElement::Sign(1))),
 	))
 }
-fn data_array_element_loop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_loop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
 	map_res(
 		delimited(
 			ss!(char('[')),
@@ -159,7 +158,7 @@ fn data_array_element_loop_unsigned<'a>(digits: i32) -> impl FnMut (&'a str) -> 
 		|xs| ok(DataArrayElement::Loop(xs)),
 	)
 }
-fn data_array_element_nonloop_signed<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_nonloop_signed<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
 	map_res(
 		ss!(re_find(re(format!(r"[0-9a-fA-F]{}{}{}", '{', digits, '}').as_str()))),
 		move |x| {
@@ -172,7 +171,7 @@ fn data_array_element_nonloop_signed<'a>(digits: i32) -> impl FnMut (&'a str) ->
 		},
 	)
 }
-fn data_array_element_loop_signed<'a>(digits: i32) -> impl FnMut (&'a str) -> IResult<&'a str, DataArrayElement, nom::error::VerboseError<&'a str>> {
+fn data_array_element_loop_signed<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
 	map_res(
 		delimited(
 			ss!(char('[')),
