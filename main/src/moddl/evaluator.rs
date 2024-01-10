@@ -19,7 +19,7 @@ use std::{
 };
 
 pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-	match &expr.expr {
+	match &expr.body {
 		ExprBody::Connect { lhs, rhs } => {
 			let l_str = evaluate_as_node_structure(lhs, vars) ?;
 			let r_str = evaluate_as_node_structure(rhs, vars) ?;

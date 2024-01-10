@@ -1,4 +1,4 @@
-use crate::common::Location;
+use crate::common::{Location, Located};
 
 #[derive(Debug)]
 pub struct CompilationUnit {
@@ -30,16 +30,7 @@ pub struct FunctionParam {
 	pub default: Option<Box<Expr>>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Expr {
-	pub expr: ExprBody,
-	pub loc: Location, // Option にするかも
-}
-impl Expr {
-	pub fn new(expr: ExprBody, loc: Location) -> Self {
-		Self { expr, loc }
-	}
-}
+pub type Expr = Located<ExprBody>;
 
 #[derive(Clone, Debug)]
 pub enum ExprBody {

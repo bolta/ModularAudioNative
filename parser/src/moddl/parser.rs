@@ -291,7 +291,7 @@ parser![parenthesized_expr, Box<Expr>, {
 		let (input, _) = si!(char(')'))(input) ?;
 
 		// 位置だけ開き括弧の位置に修正
-		let result = Box::new(Expr::new(inner.expr, loc));
+		let result = Box::new(Expr::new(inner.body, loc));
 
 		Ok((input, result))
 	}

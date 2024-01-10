@@ -65,7 +65,16 @@ pub fn re_find<'a>(regex: Regex) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, &
 }
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-pub type Located<T> = (T, Location);
+#[derive(Clone, Debug)]
+pub struct Located<T> {
+	pub body: T,
+	pub loc: Location, // Option にするかも
+}
+impl <T> Located<T> {
+	pub fn new(body: T, loc: Location) -> Self {
+		Self { body, loc }
+	}
+}
 
 /// LocatedSpan からエラーメッセージの表示に過不足のない情報だけ抽出したもの
 /// （取り回しのためソースの寿命に依存しない形で）
@@ -106,7 +115,7 @@ macro_rules! pub_parser {
 	}
 }
 
-pub fn loc<'a, O, E/* , F */>(mut f: impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Located<O>, E>
+pub fn loc<'a, O, E/* , F */>(mut f: impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, (O, Location), E>
 where
 //   F: Parser<Span<'a>, O, E>,
   E: ParseError<Span<'a>>,
