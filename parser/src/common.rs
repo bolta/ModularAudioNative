@@ -12,7 +12,7 @@ use nom::{
 	},
 	IResult,
 	multi::*,
-	Slice,
+	Slice, AsBytes,
 };
 use nom_locate::{
 	LocatedSpan,
@@ -65,7 +65,29 @@ pub fn re_find<'a>(regex: Regex) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, &
 }
 
 pub type Span<'a> = LocatedSpan<&'a str>;
-pub type Located<'a, T> = (T, Span<'a>);
+pub type Located<T> = (T, Location);
+
+/// LocatedSpan からエラーメッセージの表示に過不足のない情報だけ抽出したもの
+/// （取り回しのためソースの寿命に依存しない形で）
+#[derive(Clone, Debug)]
+pub struct Location {
+	/// 行番号（1 始まり）
+	pub line: u32,
+
+	/// 列番号（1 始まり）
+	pub column: usize,
+
+	// offset: usize, // 必要なら追加
+}
+impl Location {
+	pub fn of<T>(span: &LocatedSpan<T>) -> Self
+	where T: AsBytes {
+		Self {
+			line: span.location_line(),
+			column: span.get_utf8_column(),
+		}
+	}
+}
 
 #[macro_export]
 macro_rules! parser {
@@ -84,7 +106,7 @@ macro_rules! pub_parser {
 	}
 }
 
-pub fn loc<'a, O, E/* , F */>(mut f: impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Located<'a, O>, E>
+pub fn loc<'a, O, E/* , F */>(mut f: impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Located<O>, E>
 where
 //   F: Parser<Span<'a>, O, E>,
   E: ParseError<Span<'a>>,
@@ -92,7 +114,7 @@ where
 	move |input| {
 		let (input, span) = position(input) ?;
 		let (input, result) = f(input) ?;
- 		Ok((input, (result, span)))
+ 		Ok((input, (result, Location::of(&span))))
 	}
 }
 

@@ -1,3 +1,5 @@
+use crate::common::Location;
+
 #[derive(Debug)]
 pub struct CompilationUnit {
 	pub statements: Vec<Statement>,
@@ -29,7 +31,18 @@ pub struct FunctionParam {
 }
 
 #[derive(Clone, Debug)]
-pub enum Expr {
+pub struct Expr {
+	pub expr: ExprBody,
+	pub loc: Location, // Option にするかも
+}
+impl Expr {
+	pub fn new(expr: ExprBody, loc: Location) -> Self {
+		Self { expr, loc }
+	}
+}
+
+#[derive(Clone, Debug)]
+pub enum ExprBody {
 	Connect { lhs: Box<Expr>, rhs: Box<Expr> },
 	Power { lhs: Box<Expr>, rhs: Box<Expr> },
 	Multiply { lhs: Box<Expr>, rhs: Box<Expr> },

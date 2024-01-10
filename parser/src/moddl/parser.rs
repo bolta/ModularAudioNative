@@ -35,7 +35,7 @@ parser![statement_ending, (), {
 }];
 
 parser![float_literal, Box<Expr>, {
-	map_res(float(), |v| ok(Box::new(Expr::FloatLiteral(v))))
+	map_res(loc(float()), |(v, loc)| ok(Box::new(Expr::new(ExprBody::FloatLiteral(v), loc))))
 }];
 
 parser![track_set, Vec<String>, {
@@ -43,36 +43,36 @@ parser![track_set, Vec<String>, {
 			|tracks| { ok(tracks.iter().map(|t| t.to_string()).collect()) })
 }];
 parser![track_set_literal, Box<Expr>, {
-	map_res(preceded(si!(char('^')), track_set()),
-			|tracks| { ok(Box::new(Expr::TrackSetLiteral(tracks))) })
+	map_res(preceded(si!(char('^')), loc(track_set())),
+			|(tracks, loc)| { ok(Box::new(Expr::new(ExprBody::TrackSetLiteral(tracks), loc))) })
 }];
 parser![identifier_literal, Box<Expr>, {
-	map_res(si!(delimited(char('`'), identifier(), char('`'))),
-			|id| { ok(Box::new(Expr::IdentifierLiteral(id.to_string()))) })
+	map_res(si!(delimited(char('`'), loc(identifier()), char('`'))),
+			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::IdentifierLiteral(id.to_string()), loc))) })
 }];
 parser![string_literal, Box<Expr>, {
 	// TODO " などをエスケープできるようにする
-	map_res(si!(delimited(char('"'), re_find(re(r#"[^"]*"#)), char('"'))),
-			|str| { ok(Box::new(Expr::StringLiteral(str.to_string()))) })
+	map_res(si!(delimited(char('"'), loc(re_find(re(r#"[^"]*"#))), char('"'))),
+			|(str, loc)| { ok(Box::new(Expr::new(ExprBody::StringLiteral(str.to_string()), loc))) })
 }];
 parser![array_literal, Box<Expr>, {
 	map_res(
-		delimited(
+		loc(delimited(
 			ss!(char('[')),
 			terminated(
 				separated_list0(ss!(char(',')), ss!(expr())),
 				opt(ss!(char(','))),
 			),
 			si!(char(']')),
-		),
-		|elems| { ok(Box::new(Expr::ArrayLiteral(elems))) },
+		)),
+		|(elems, loc)| { ok(Box::new(Expr::new(ExprBody::ArrayLiteral(elems), loc))) },
 	)
 }];
 
 enum DataArrayElement {
 	Value(i32),
 	Sign(i32),
-	Loop(Vec<DataArrayElement>),
+	Loop(Vec<(DataArrayElement, Location)>),
 }
 
 
@@ -80,62 +80,63 @@ enum DataArrayElement {
 
 fn data_array_literal_unsigned<'a>(prefix: &'static str, digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, Box<Expr>, nom::error::VerboseError<Span<'a>>> {
 	map_res(
-		delimited(
+		loc(delimited(
 			tuple((
 				tag(prefix), // x [ のようにスペースを空けるのは不可
 				ss!(char('[')),
 			)),
 			many0(
-				alt((
+				loc(alt((
 					data_array_element_nonloop_unsigned(digits),
 					data_array_element_loop_unsigned(digits),
-				))
+				)))
 			),
 			si!(char(']')),
-		),
-		|elems| {
-			ok(translate_data_array(&elems, 1))
+		)),
+		|(elems, loc)| {
+			ok(translate_data_array(&elems, loc, 1))
 		}
 	)
 }
 fn data_array_literal_signed<'a>(prefix: &'static str, digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, Box<Expr>, nom::error::VerboseError<Span<'a>>> {
 	map_res(
-		delimited(
+		loc(delimited(
 			tuple((
 				tag(prefix), // x [ のようにスペースを空けるのは不可
 				ss!(char('[')),
 			)),
 			many0(
-				alt((
+				loc(alt((
 					data_array_element_nonloop_signed(digits),
 					data_array_element_loop_signed(digits),
-				))
+				)))
 			),
 			si!(char(']')),
-		),
-		|elems| {
-			ok(translate_data_array(&elems, 1))
+		)),
+		|(elems, loc)| {
+			ok(translate_data_array(&elems, loc, 1))
 		}
 	)
 }
-fn translate_data_array(elems: &Vec<DataArrayElement>, mut sign: i32) -> Box<Expr> {
+fn translate_data_array(elems: &Vec<(DataArrayElement, Location)>, outer_loc: Location, mut sign: i32) -> Box<Expr> {
 	let mut result = vec![];
 	// let mut sign = 1;
 	for elem in elems {
-		match elem {
+		let elem_loc = &elem.1;
+		match &elem.0 {
 			DataArrayElement::Value(v) => {
-				result.push(Box::new(Expr::FloatLiteral((sign * v) as f32)));
+				result.push(Box::new(Expr::new(ExprBody::FloatLiteral((sign * v) as f32), elem_loc.clone())));
 			},
 			DataArrayElement::Sign(s) => {
 				sign = *s;
 			},
 			DataArrayElement::Loop(inner_elems) => {
-				result.push(translate_data_array(inner_elems, sign));
+				result.push(translate_data_array(&inner_elems, elem_loc.clone(), sign));
 			},
 		}
 	}
 
-	Box::new(Expr::ArrayLiteral((result)))
+	Box::new(Expr::new(ExprBody::ArrayLiteral(result), outer_loc))
 }
 
 fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
@@ -152,7 +153,7 @@ fn data_array_element_loop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) ->
 	map_res(
 		delimited(
 			ss!(char('[')),
-			many0(ss!(data_array_element_nonloop_unsigned(digits))),
+			many0(loc(ss!(data_array_element_nonloop_unsigned(digits)))),
 			ss!(char(']')),
 		),
 		|xs| ok(DataArrayElement::Loop(xs)),
@@ -175,7 +176,7 @@ fn data_array_element_loop_signed<'a>(digits: i32) -> impl FnMut (Span<'a>) -> I
 	map_res(
 		delimited(
 			ss!(char('[')),
-			many0(ss!(data_array_element_nonloop_signed(digits))),
+			many0(loc(ss!(data_array_element_nonloop_signed(digits)))),
 			ss!(char(']')),
 		),
 		|xs| ok(DataArrayElement::Loop(xs)),
@@ -184,23 +185,23 @@ fn data_array_element_loop_signed<'a>(digits: i32) -> impl FnMut (Span<'a>) -> I
 
 parser![assoc_literal, Box<Expr>, {
 	map_res(
-		delimited(
+		loc(delimited(
 			ss!(char('{')),
 			ss!(opt(assoc_entries())),
 			si!(char('}')),
-		),
-		|elems| { ok(Box::new(Expr::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())))) },
+		)),
+		|(elems, loc)| { ok(Box::new(Expr::new(ExprBody::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())), loc))) },
 	)
 }];
 parser![identifier_expr, Box<Expr>, {
-	map_res(identifier(),
-			|id| { ok(Box::new(Expr::Identifier(id.to_string()))) })
+	map_res(loc(identifier()),
+			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::Identifier(id.to_string()), loc))) })
 }];
 // 専用の構文は必要なかったかも…短絡評価は不要なので、関数で if(cond, then, else) でもよかったかも
 // （括弧を減らせるのはメリットと思われるけど）
 parser![conditional_expr, Box<Expr>, {
 	map_res(
-		tuple((
+		loc(tuple((
 			preceded(
 				ss!(tag("if")),
 				ss!(expr()),
@@ -213,13 +214,13 @@ parser![conditional_expr, Box<Expr>, {
 				ss!(tag("else")),
 				si!(expr()),
 			),
-		)),
-		|(cond, then, els)| ok(Box::new(Expr::Condition { cond, then, els })),
+		))),
+		|((cond, then, els), loc)| ok(Box::new(Expr::new(ExprBody::Condition { cond, then, els }, loc))),
 	)
 }];
 parser![lambda_func_expr, Box<Expr>, {
 	map_res(
-		preceded(
+		loc(preceded(
 			ss!(tag("func")),
 			tuple((
 				delimited(
@@ -238,20 +239,20 @@ parser![lambda_func_expr, Box<Expr>, {
 				),
 				si!(expr()),
 			)),
-		),
-		|(params, body)| { ok(Box::new(Expr::LambdaFunction {
+		)),
+		|((params, body), loc)| { ok(Box::new(Expr::new(ExprBody::LambdaFunction {
 			params: params.into_iter().map(|(name, default)| FunctionParam {
 				name: name.to_string(),
 				default,
 			}).collect(),
 			body,
-		})) },
+		}, loc))) },
 	)
 }];
 
 parser![lambda_node_expr, Box<Expr>, {
 	map_res(
-		preceded(
+		loc(preceded(
 			ss!(tag("node")),
 			tuple((
 				delimited(
@@ -261,20 +262,20 @@ parser![lambda_node_expr, Box<Expr>, {
 				),
 				si!(expr()),
 			)),
-		),
-		|(input_param, body)| { ok(Box::new(Expr::LambdaNode {
+		)),
+		|((input_param, body), loc)| { ok(Box::new(Expr::new(ExprBody::LambdaNode {
 			input_param: input_param.to_string(),
 			body,
-		})) },
+		}, loc))) },
 	)
 }];
 parser![negative_expr, Box<Expr>, {
 	map_res(
-		preceded(
+		loc(preceded(
 			ss!(char('-')),
 			si!(expr()),
-		),
-		|arg| { ok(Box::new(Expr::Negate { arg }))},
+		)),
+		|(arg, loc)| { ok(Box::new(Expr::new(ExprBody::Negate { arg }, loc)))},
 	)
 }];
 parser![parenthesized_expr, Box<Expr>, {
@@ -285,9 +286,12 @@ parser![parenthesized_expr, Box<Expr>, {
 	// ポイントフリーで書くと型が再帰してだめらしかった。ここだけ手続きで書くといけた…
 	// https://qiita.com/elipmoc101/items/2b57eebb6627c69f59ff
 	|input| {
-		let (input, _) = si!(char('('))(input) ?;
-		let (input, result) = si!(expr())(input) ?;
+		let (input, (_, loc)) = si!(loc(char('(')))(input) ?;
+		let (input, inner) = si!(expr())(input) ?;
 		let (input, _) = si!(char(')'))(input) ?;
+
+		// 位置だけ開き括弧の位置に修正
+		let result = Box::new(Expr::new(inner.expr, loc));
 
 		Ok((input, result))
 	}
@@ -320,23 +324,25 @@ parser![postfix_expr, Box<Expr>, {
 	map_res(
 		tuple((
 			si!(primary_expr()),
-			many0(si!(postfix())),
+			many0(loc(si!(postfix()))),
 		)), |(lhs, postfixes)| {
 			let mut result = lhs;
 			for p in postfixes {
-				result = Box::new(match p {
-					Postfix::Label(label) => Expr::Labeled { label, inner: result },
-					Postfix::FunctionCall(args) => Expr::FunctionCall { function: result, args },
+				let loc = p.1;
+				result = Box::new(match p.0 {
+					Postfix::Label(label) => Expr::new(ExprBody::Labeled { label, inner: result }, loc),
+					Postfix::FunctionCall(args) => Expr::new(ExprBody::FunctionCall { function: result, args }, loc),
 					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
 					// 糖衣構文として、このレイヤーで吸収してしまう
-					Postfix::MethodCall { name, args } => Expr::FunctionCall {
-						function: Box::new(Expr::Identifier(name)),
+					Postfix::MethodCall { name, args } => Expr::new(ExprBody::FunctionCall {
+						// TODO 位置は関数名の位置であるべきだと思われるが、-> の位置になっている
+						function: Box::new(Expr::new(ExprBody::Identifier(name), loc.clone())),
 						args: Args {
 							unnamed: [vec![result], args.unnamed].concat(),
 							named: args.named,
 						},
-					},
-					Postfix::PropertyAccess { name } => Expr::PropertyAccess { assoc: result, name },
+					}, loc),
+					Postfix::PropertyAccess { name } => Expr::new(ExprBody::PropertyAccess { assoc: result, name }, loc),
 				})
 			}
 
@@ -417,15 +423,18 @@ macro_rules! binary_expr {
 			// 	= note: consider adding a `#![type_length_limit="1024860143"]` attribute to your crate
 
 			|input| {
+				// 2 項式の位置は、演算子の位置とする
+				// （先頭にすると、a + b - c + d - e のような同一優先度の演算の連鎖があったとき、
+				// 全ての式の位置が a の位置になってしまい不便と思われるため）
 				let (input, head) = si!($constituent_expr())(input) ?;
 				let (input, tail) = opt(many1(tuple((
-					ss!(re_find(re($oper_regexp))),
+					loc(ss!(re_find(re($oper_regexp)))),
 					si!($constituent_expr()),
 				))))(input) ?;
 				let result = match tail {
 					None => head,
 					Some(mut tail) => {
-						tail.drain(..).fold(head, |l, (op, r)| Box::new($make_expr(l, op, r)))
+						tail.drain(..).fold(head, |l, ((op, loc), r)| Box::new(Expr::new($make_expr(l, op, r), loc)))
 					}
 				};
 				Ok((input, result))
@@ -460,7 +469,7 @@ parser![named_entry, (String, Box<Expr>), {
 // 					))
 // 				)
 // 			),
-// 			|entries| ok(Box::new(Expr::AssocArrayLiteral(entries)))
+// 			|entries| ok(Box::new(Expr::new(ExprBody::AssocArrayLiteral(entries)))
 // 	)
 // }];
 
@@ -509,7 +518,7 @@ parser![assoc_entries, Assoc, {
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
 		tuple((
-			si!(postfix_expr()),
+			loc(si!(postfix_expr())),
 			opt(
 				delimited(
 					ss!(char('{')),
@@ -518,45 +527,45 @@ parser![node_with_args_expr, Box<Expr>, {
 				)
 			),
 		)),
-		|(x, args)| ok(match args {
+		|((x, loc), args)| ok(match args {
 			None => x,
 			Some(args) => {
-				Box::new(Expr::NodeWithArgs {
+				Box::new(Expr::new(ExprBody::NodeWithArgs {
 					node_def: x,
 					label: "".to_string(), // 未使用
 					args,
-				})
+				}, loc))
 			},
 		}),
 	)
 }];
 
-binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| Expr::Connect { lhs, rhs }];
+binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| ExprBody::Connect { lhs, rhs }];
 // TODO ↓これだと左結合になってしまう
-binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| Expr::Power { lhs, rhs }];
+binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| ExprBody::Power { lhs, rhs }];
 binary_expr![mul_div_mod_expr, power_expr, r"[*/%]", |lhs, op, rhs| match op {
-	"*" => Expr::Multiply { lhs, rhs },
-	"/" => Expr::Divide { lhs, rhs },
-	"%" => Expr::Remainder { lhs, rhs },
+	"*" => ExprBody::Multiply { lhs, rhs },
+	"/" => ExprBody::Divide { lhs, rhs },
+	"%" => ExprBody::Remainder { lhs, rhs },
 	_ => unreachable!(),
 }];
 binary_expr![add_sub_expr, mul_div_mod_expr, r"[+-]", |lhs, op, rhs| match op {
-	"+" => Expr::Add { lhs, rhs },
-	"-" => Expr::Subtract { lhs, rhs },
+	"+" => ExprBody::Add { lhs, rhs },
+	"-" => ExprBody::Subtract { lhs, rhs },
 	_ => unreachable!(),
 }];
 binary_expr![comparison_expr, add_sub_expr, r"<=|<|==|!=|>=|>", |lhs, op, rhs| match op {
-	"<" => Expr::Less { lhs, rhs },
-	"<=" => Expr::LessOrEqual { lhs, rhs },
-	"==" => Expr::Equal { lhs, rhs },
-	"!=" => Expr::NotEqual { lhs, rhs },
-	">" => Expr::Greater { lhs, rhs },
-	">=" => Expr::GreaterOrEqual { lhs, rhs },
+	"<" => ExprBody::Less { lhs, rhs },
+	"<=" => ExprBody::LessOrEqual { lhs, rhs },
+	"==" => ExprBody::Equal { lhs, rhs },
+	"!=" => ExprBody::NotEqual { lhs, rhs },
+	">" => ExprBody::Greater { lhs, rhs },
+	">=" => ExprBody::GreaterOrEqual { lhs, rhs },
 	_ => unreachable!(),
 }];
 binary_expr![logical_expr, comparison_expr, r"&&|\|\|", |lhs, op, rhs| match op {
-	"&&" => Expr::And { lhs, rhs },
-	"||" => Expr::Or { lhs, rhs },
+	"&&" => ExprBody::And { lhs, rhs },
+	"||" => ExprBody::Or { lhs, rhs },
 	_ => unreachable!(),
 }];
 
