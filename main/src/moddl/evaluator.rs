@@ -6,7 +6,7 @@ use super::{
 };
 
 extern crate parser;
-use parser::moddl::ast::*;
+use parser::{moddl::ast::*, common::Location};
 
 use crate::{
 	calc::*,
@@ -44,7 +44,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		ExprBody::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars),
 
 		ExprBody::Identifier(id) => {
-			let val = vars.borrow().lookup(id).ok_or_else(|| { Error::VarNotFound { var: id.clone() } }) ?;
+			let val = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
 			Ok(val.clone())
 		},
 		ExprBody::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
@@ -87,7 +87,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			vars.borrow_mut().set(input_param, Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() })) ?;
 			let result = Ok(Value::NodeStructure(NodeStructure::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, &vars)?.as_node_structure().ok_or_else(|| Error::TypeMismatch) ?),
+				body: Box::new(evaluate(body, &vars)?.as_node_structure().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?),
 			}));
 			result
 		},
@@ -97,7 +97,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
 		ExprBody::FunctionCall { function, args } => {
-			let function = evaluate(function, vars)?.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+			let function = evaluate(function, vars)?.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
 			let resolved_args = resolve_args(&arg_names, args) ?;
@@ -111,15 +111,15 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		},
 		ExprBody::PropertyAccess { assoc, name } => {
 			let assoc_val = evaluate(assoc, vars) ?;
-			let content = assoc_val.as_assoc().ok_or_else(|| Error::TypeMismatch) ?;
+			let content = assoc_val.as_assoc().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
 			let val = content.get(name);
-			Ok(val.ok_or_else(|| Error::EntryNotFound { name: name.clone() })?.clone())
+			Ok(val.ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, label, args } => {
 			let factory = evaluate_as_node_structure(node_def, vars) ?;
 			let arg_names = match &factory {
 				NodeStructure::NodeFactory(factory) => factory.node_arg_specs(),
-				_ => return Err(Error::TypeMismatch),
+				_ => return Err(error(ErrorType::TypeMismatch, expr.loc.clone())),
 			}.iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args) ?;
 
@@ -227,7 +227,7 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 
 fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
-	Ok(val.as_node_structure().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?)
+	Ok(val.as_node_structure().ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, Location::dummy())) ?)
 }
 fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<NodeStructure> {
 	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
@@ -240,7 +240,7 @@ fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlRe
 fn resolve_args<'a>(arg_names: &'a Vec<String>, args: &'a Args) -> ModdlResult<HashMap<String, &'a Box<Expr>>> {
 	let mut result = HashMap::<String, &'a Box<Expr>>::new();
 	let mut add = |name: &String, expr: &'a Box<Expr>| -> ModdlResult<()> {
-		if result.contains_key(name) { return Err(Error::EntryDuplicate { name: name.clone() }); }
+		if result.contains_key(name) { return Err(error(ErrorType::EntryDuplicate { name: name.clone() }, Location::dummy())); }
 
 		result.insert(name.clone(), expr);
 		Ok(())

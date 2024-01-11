@@ -1,15 +1,14 @@
+use parser::common::Location;
+
 /// ビルトイン変数を提供する。今後プラグインの読み込みなどをここでやる想定
 use super::{
 	function::*,
 	scope::*,
-	value::*,
+	value::*, error::{error, ErrorType, ModdlResult},
 };
 use crate::{
 	core::{
 		node_factory::*,
-	},
-	moddl::{
-		error::*,
 	},
 	node::{
 		arith::*,
@@ -88,8 +87,8 @@ pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
 	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
-		let wave = wave_val.as_waveform_index().ok_or_else(|| Error::TypeMismatch) ?;
+		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+		let wave = wave_val.as_waveform_index().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
 
 		Ok(Value::NodeFactory(result))
@@ -101,7 +100,7 @@ impl Function for NesFreq {
 	fn signature(&self) -> FunctionSignature { vec!["triangle".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
-		let triangle = triangle_val.as_boolean().ok_or_else(|| Error::TypeMismatch) ?;
+		let triangle = triangle_val.as_boolean().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 		let result = Rc::new(NesFreqFactory::new(triangle));
 
 		Ok(Value::NodeFactory(result))
@@ -117,8 +116,8 @@ impl Delay {
 impl Function for Delay {
 	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| Error::ArgMissing { name: "max_time".to_string() }) ?;
-		let max_time = max_time_val.as_float().ok_or_else(|| Error::TypeMismatch) ?;
+		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
+		let max_time = max_time_val.as_float().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
 		Ok(Value::NodeFactory(result))
@@ -133,7 +132,7 @@ macro_rules! unary_math_func {
 		impl Function for $name {
 			fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
 			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-				let arg = args.get(& "arg".to_string()).ok_or_else(|| Error::TypeMismatch) ?;
+				let arg = args.get(& "arg".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 				if let Some(val) = arg.as_float() {
 					Ok(Value::Float(<$calc_type>::calc(&vec![val])))
 		
@@ -144,7 +143,7 @@ macro_rules! unary_math_func {
 					}))
 		
 				} else {
-					Err(Error::TypeMismatch)
+					Err(error(ErrorType::TypeMismatch, Location::dummy()))
 				}
 			}
 		}
@@ -163,14 +162,14 @@ pub struct Map { }
 impl Function for Map {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let source_val = args.get(& "source".to_string()).ok_or_else(|| Error::ArgMissing { name: "source".to_string() }) ?;
-		let source = source_val.as_array().ok_or_else(|| Error::TypeMismatch) ?;
+		let source_val = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?;
+		let source = source_val.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 
-		let mapper_val = args.get(& "mapper".to_string()).ok_or_else(|| Error::ArgMissing { name: "mapper".to_string() }) ?;
-		let mapper = mapper_val.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+		let mapper_val = args.get(& "mapper".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "mapper".to_string() }, Location::dummy())) ?;
+		let mapper = mapper_val.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 
 		let sig = mapper.signature();
-		if sig.len() != 1 { return Err(Error::SignatureMismatch); }
+		if sig.len() != 1 { return Err(error(ErrorType::SignatureMismatch, Location::dummy())); }
 
 		let mut result = vec![];
 		for elem in source {
@@ -184,14 +183,14 @@ pub struct Reduce { }
 impl Function for Reduce {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "initial".to_string(), "reducer".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let source = args.get(& "source".to_string()).ok_or_else(|| Error::ArgMissing { name: "source".to_string() }) ?
-				.as_array().ok_or_else(|| Error::TypeMismatch) ?;
-		let init = args.get(& "initial".to_string()).ok_or_else(|| Error::ArgMissing { name: "initial".to_string() }) ?;
-		let folder = args.get(& "reducer".to_string()).ok_or_else(|| Error::ArgMissing { name: "reducer".to_string() }) ?
-				.as_function().ok_or_else(|| Error::TypeMismatch) ?;
+		let source = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?
+				.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+		let init = args.get(& "initial".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "initial".to_string() }, Location::dummy())) ?;
+		let folder = args.get(& "reducer".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "reducer".to_string() }, Location::dummy())) ?
+				.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 
 		let sig = folder.signature();
-		if sig.len() != 2 { return Err(Error::SignatureMismatch); }
+		if sig.len() != 2 { return Err(error(ErrorType::SignatureMismatch, Location::dummy())); }
 
 		let mut result = init.clone();
 		for elem in source {

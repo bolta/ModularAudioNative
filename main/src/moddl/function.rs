@@ -1,3 +1,5 @@
+use parser::common::Location;
+
 use super::{
 	error::*,
 	scope::*,
@@ -24,8 +26,8 @@ impl Function for Twice {
 	fn signature(&self) -> FunctionSignature { vec!["arg0".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		const ARG_NAME: &str = "arg0"; // TODO こういうどうでもいい名前でもつけないとだめか？
-		let arg_val = args.get(& ARG_NAME.to_string()).ok_or_else(|| Error::TypeMismatch) ?;
-		let arg = arg_val.as_float().ok_or_else(|| Error::TypeMismatch) ?;
+		let arg_val = args.get(& ARG_NAME.to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+		let arg = arg_val.as_float().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 		let result = arg * 2f32;
 
 		Ok(Value::Float(result))

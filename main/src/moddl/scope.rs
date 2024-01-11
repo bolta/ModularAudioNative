@@ -1,3 +1,5 @@
+use parser::common::Location;
+
 use crate::{
 	moddl::{
 		error::*,
@@ -51,7 +53,7 @@ impl Scope {
 	pub fn set(&mut self, name: &String, value: Value) -> ModdlResult<()> {
 println!("set: {}", name);
 		if self.entries.contains_key(name) {
-			Err(Error::EntryDuplicate { name: name.clone() })
+			Err(error(ErrorType::EntryDuplicate { name: name.clone() }, Location::dummy()))
 		} else {
 			self.entries.insert(name.clone(), value.clone());
 			Ok(())

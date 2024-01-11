@@ -4,14 +4,20 @@ use std::{
 };
 use std::fmt::Display;
 
-use parser::common::Span;
+use parser::common::{Span, Located, Location};
 
 
 type NomError = nom::Err<nom::error::VerboseError<String>>;
 
+pub type Error = Located<ErrorType>;
+
+pub fn error(tipe: ErrorType, loc: Location) -> Error {
+	Located::new(tipe, loc)
+}
+
 // それぞれのエラーに十分な付加情報を含めるべきだが、とりあえずはざっと分類まで
 #[derive(Debug)]
-pub enum Error {
+pub enum ErrorType {
 	Syntax(NomError),
 	// MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
@@ -39,7 +45,7 @@ pub enum Error {
 	File(io::Error),
 }
 
-impl Display for Error {
+impl Display for ErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{:?}", self)
 	}
@@ -47,7 +53,7 @@ impl Display for Error {
 
 pub type ModdlResult<T> = Result<T, Error>;
 
-impl <'a> From<nom::Err<nom::error::VerboseError<Span<'a>>>> for Error {
+impl <'a> From<nom::Err<nom::error::VerboseError<Span<'a>>>> for ErrorType {
 	fn from(nom_err: nom::Err<nom::error::VerboseError<Span<'a>>>) -> Self {
 		// エラーがソースコードの寿命に干渉されると不便なので、
 		// VerboseError<&str> から VerboseError<String> に変換する。
@@ -61,7 +67,7 @@ impl <'a> From<nom::Err<nom::error::VerboseError<Span<'a>>>> for Error {
 		Self::Syntax(nom_err_by_string)
 	}
 }
-impl From<io::Error> for Error {
+impl From<io::Error> for ErrorType {
 	fn from(io_err: io::Error) -> Self {
 		Self::File(io_err)
 	}

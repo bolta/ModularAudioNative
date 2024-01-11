@@ -96,6 +96,10 @@ impl Location {
 			column: span.get_utf8_column(),
 		}
 	}
+	/// 位置情報をすぐに引っ張れないところはとりあえずこれにしておく。最終的には廃止するつもり
+	pub fn dummy() -> Self {
+		Self{ line: 0, column: 0 }
+	}
 }
 
 #[macro_export]
