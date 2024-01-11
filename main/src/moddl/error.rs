@@ -19,7 +19,7 @@ pub fn error(tipe: ErrorType, loc: Location) -> Error {
 #[derive(Debug)]
 pub enum ErrorType {
 	Syntax(NomError),
-	// MmlSyntax(NomError),
+	MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
@@ -47,26 +47,36 @@ pub enum ErrorType {
 
 impl Display for ErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{:?}", self)
+		// write!(f, "{:?}", self)
+		match self {
+			Self::Syntax(nom_error) => write!(f, "ModDL syntax error: {}", nom_error),
+			Self::MmlSyntax(nom_error) => write!(f, "MML syntax error (error location is wrong for some reason): {}", nom_error),
+
+
+
+
+
+
+			// TODO 全種類ちゃんと作る
+			_ => write!(f, "{:?}", self),
+		}
 	}
 }
 
 pub type ModdlResult<T> = Result<T, Error>;
 
-impl <'a> From<nom::Err<nom::error::VerboseError<Span<'a>>>> for ErrorType {
-	fn from(nom_err: nom::Err<nom::error::VerboseError<Span<'a>>>) -> Self {
-		// エラーがソースコードの寿命に干渉されると不便なので、
-		// VerboseError<&str> から VerboseError<String> に変換する。
-		// FIXME e.to_owned() をかませばよいかと思いきや、それでは &str から変わってくれなかったので、
-		// 中身を 1 つずつ変換したが、これでいいのか？
-		let nom_err_by_string = nom_err.map(|e| {
-			nom::error::VerboseError {
-				errors: e.errors.into_iter().map(|(part, kind)| (part.to_string(), kind)).collect(),
-			}
-		});
-		Self::Syntax(nom_err_by_string)
-	}
+// エラーがソースコードの寿命に干渉されると不便なので、
+// VerboseError<&str> から VerboseError<String> に変換する。
+// FIXME e.to_owned() をかませばよいかと思いきや、それでは &str から変わってくれなかったので、
+// 中身を 1 つずつ変換したが、これでいいのか？
+pub fn nom_error_to_owned<'a>(nom_err: nom::Err<nom::error::VerboseError<Span<'a>>>) -> nom::Err<nom::error::VerboseError<String>> {
+	nom_err.map(|e| {
+		nom::error::VerboseError {
+			errors: e.errors.into_iter().map(|(part, kind)| (part.to_string(), kind)).collect(),
+		}
+	})
 }
+
 impl From<io::Error> for ErrorType {
 	fn from(io_err: io::Error) -> Self {
 		Self::File(io_err)
