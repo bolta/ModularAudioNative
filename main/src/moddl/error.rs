@@ -21,9 +21,9 @@ pub enum ErrorType {
 	Syntax(NomError),
 	MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
-	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
 	DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
+	TrackDefNotFound { track: String },
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
 	NodeFactoryNotFound,
@@ -51,9 +51,10 @@ impl Display for ErrorType {
 		match self {
 			Self::Syntax(nom_error) => write!(f, "ModDL syntax error: {}", nom_error),
 			Self::MmlSyntax(nom_error) => write!(f, "MML syntax error (error location is wrong for some reason): {}", nom_error),
-
+			Self::DirectiveArgNotFound => write!(f, "Not enough arguments are given for directive statement."),
+			Self::TrackDefNotFound { track } => write!(f, "MML is given for track ^{} but track definition is missing.", track),
 			Self::TrackDefDuplicate { track, existing_def_loc }
-					=> write!(f, "Definition for track \"{}\" is duplicate: definition already exists at {}.", track, existing_def_loc),
+					=> write!(f, "Definition for track ^{} is duplicate: definition already exists at {}.", track, existing_def_loc),
 	
 
 			Self::GrooveControllerTrackMustBeSingle => write!(f, "Groove controller track must be single."),
