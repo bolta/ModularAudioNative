@@ -51,9 +51,8 @@ impl Scope {
 	}
 
 	pub fn set(&mut self, name: &String, value: Value) -> ModdlResult<()> {
-println!("set: {}", name);
-		if self.entries.contains_key(name) {
-			Err(error(ErrorType::EntryDuplicate { name: name.clone() }, Location::dummy()))
+		if let Some((_, existing_loc)) = self.entries.get(name) {
+			Err(error(ErrorType::EntryDuplicate { name: name.clone() }, existing_loc.clone()))
 		} else {
 			self.entries.insert(name.clone(), value.clone());
 			Ok(())

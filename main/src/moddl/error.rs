@@ -24,7 +24,7 @@ pub enum ErrorType {
 	InstrumentNotFound { track: String },
 	DirectiveArgNotFound,
 	DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
-	DirectiveDuplicate { msg: String }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
+	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
 	NodeFactoryNotFound,
 	NodeFactoryArgTypeMismatch, // TODO 今後 TypeMismatch に統合
@@ -37,8 +37,8 @@ pub enum ErrorType {
 	EntryDuplicate { name: String },
 	EntryNotFound { name: String },
 	TooManyUnnamedArgs,
-	TooManyTracks,
-	GrooveTargetDuplicate { track: String },
+	GrooveControllerTrackMustBeSingle,
+	GrooveTargetDuplicate { track: String, existing_assign_loc: Location },
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,
@@ -52,8 +52,13 @@ impl Display for ErrorType {
 			Self::Syntax(nom_error) => write!(f, "ModDL syntax error: {}", nom_error),
 			Self::MmlSyntax(nom_error) => write!(f, "MML syntax error (error location is wrong for some reason): {}", nom_error),
 
+			Self::TrackDefDuplicate { track, existing_def_loc }
+					=> write!(f, "Definition for track \"{}\" is duplicate: definition already exists at {}.", track, existing_def_loc),
+	
 
-
+			Self::GrooveControllerTrackMustBeSingle => write!(f, "Groove controller track must be single."),
+			Self::GrooveTargetDuplicate { track, existing_assign_loc }
+					=> write!(f, "Groove controller track for track {} is duplicate: already assigned at {}.", track, existing_assign_loc),
 
 
 

@@ -81,7 +81,7 @@ const TAG_SEQUENCER: &str = "seq";
 #[derive(PartialEq)]
 enum MuteSolo { Mute, Solo }
 
-enum TrackSpec {
+enum TrackDef {
 	Instrument(NodeStructure),
 	Effect(HashSet<String>, NodeStructure),
 	Groove(NodeStructure),
@@ -94,10 +94,10 @@ struct PlayerContext {
 	ticks_per_bar: i32,
 	// トラックごとの instrument/effect
 	// （書かれた順序を保持するため Vec で持つ）
-	track_specs: Vec<(String, TrackSpec)>,
+	track_defs: Vec<(String, TrackDef, Location)>,
 	// effect に接続されていない、「末端」であるトラック。master でミックスする対象
 	terminal_tracks: HashSet<String>,
-	grooves: HashMap<String, String>, // トラックに対する Tick のタグ名
+	grooves: HashMap<String, (String, Location)>, // トラックに対する Tick のタグ名
 	groove_cycle: i32,
 	// トラックごとの MML を蓄積
 	mmls: BTreeMap<String, String>,
@@ -119,7 +119,7 @@ impl PlayerContext {
 			sample_rate,
 			tempo: 120f32,
 			ticks_per_bar: 384,
-			track_specs: vec![],
+			track_defs: vec![],
 			terminal_tracks: HashSet::new(),
 			grooves: HashMap::new(),
 			groove_cycle: 384,
@@ -132,18 +132,21 @@ impl PlayerContext {
 		}
 	}
 
-	fn get_track_spec(&self, track: &String) -> Option<&TrackSpec> {
-		self.track_specs.iter().find(|&elem| elem.0 == *track)
-				.map(|elem| &elem.1)
+	fn get_track_def(&self, track: &String) -> Option<(&TrackDef, &Location)> {
+		self.track_defs.iter().find(|&elem| elem.0 == *track)
+				.map(|elem| (&elem.1, &elem.2))
 	}
-	fn add_track_spec(&mut self, track: &String, spec: TrackSpec) -> ModdlResult<()> {
-		match self.get_track_spec(track) {
+	fn add_track_def(&mut self, track: &String, spec: TrackDef, loc: &Location) -> ModdlResult<()> {
+		match self.get_track_def(track) {
 			None => {
-				self.track_specs.push((track.clone(), spec));
+				self.track_defs.push((track.clone(), spec, loc.clone()));
 				Ok(())
 			}
-			Some(_) => {
-				Err(error(ErrorType::DirectiveDuplicate { msg: track.clone() }, Location::dummy()))
+			Some((_, ex_loc)) => {
+				Err(error(ErrorType::TrackDefDuplicate {
+					track: track.clone(),
+					existing_def_loc: ex_loc.clone(),
+				}, loc.clone()))
 			}
 		}
 	}
@@ -194,7 +197,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
 	// for (track, mml) in &pctx.mmls {
-	for (track, spec) in &pctx.track_specs {
+	for (track, spec, def_loc) in &pctx.track_defs {
 		let submachine_idx = nodes.add_submachine(track.clone());
 		let mml = &pctx.mmls.get(track).map(|mml| mml.as_str()).unwrap_or("");
 		let output_node = {
@@ -203,15 +206,15 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				Some(nodes.add_node(submachine_idx, Box::new(Constant::new(0f32))))
 			} else {
 				let seq_tag = match pctx.grooves.get(track) {
-					Some(g) => g.clone(),
+					Some((g, _)) => g.clone(),
 					None => even_tag.clone(),
 				};
-				match &spec {
-					TrackSpec::Instrument(structure) => {
+				match spec {
+					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
 								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle) ?)
 					}
-					TrackSpec::Effect(source_tracks, structure) => {
+					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
@@ -219,7 +222,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
 								&mut placeholders, None, timer, pctx.groove_cycle) ?)
 					}
-					TrackSpec::Groove(structure) => {
+					TrackDef::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN, &mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
@@ -368,7 +371,7 @@ pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> Modd
 	Ok(vars.entries().clone())
 }
 
-fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> ModdlResult<()> {
+fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
@@ -380,7 +383,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					// let instrm = & args[1];
 					for track in tracks {
 						let instrm = evaluate_arg_as_node_structure(&args, 1, &mut pctx.vars) ?;
-						pctx.add_track_spec(&track, TrackSpec::Instrument(instrm)) ?;
+						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
@@ -401,7 +404,7 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 
 					let effect = evaluate_arg_as_node_structure(&args, 2, &vars) ?;
 					for track in tracks {
-						pctx.add_track_spec(&track, TrackSpec::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone())) ?;
+						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
@@ -410,18 +413,21 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 				},
 				"groove" => {
 					let tracks = evaluate_arg_as_track_set(&args, 0, &mut pctx.vars) ?;
-					if tracks.len() != 1 { return Err(error(ErrorType::TooManyTracks, Location::dummy())); }
+					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
 					let target_tracks = evaluate_arg_as_track_set(&args, 1, &mut pctx.vars) ?;
 					let body = evaluate_arg_as_node_structure(&args, 2, &mut pctx.vars) ?;
-					pctx.add_track_spec(control_track, TrackSpec::Groove(body)) ?;
+					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-					pctx.grooves.insert(control_track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
+					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
 					for track in &target_tracks {
-						if pctx.grooves.contains_key(track) {
-							return Err(error(ErrorType::GrooveTargetDuplicate { track: track.clone() }, Location::dummy()));
+						if let Some((_, existing_assign_loc)) = pctx.grooves.get(track) {
+							return Err(error(ErrorType::GrooveTargetDuplicate {
+								track: track.clone(),
+								existing_assign_loc: existing_assign_loc.clone(),
+								}, stmt_loc.clone()));
 						}
-						pctx.grooves.insert(track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
+						pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
 					}
 				}
 				"let" => {
@@ -432,18 +438,14 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 				"waveform" => {
 					let name = evaluate_arg_as_identifier_literal(&args, 0, &mut pctx.vars) ?;
 					let (value, value_loc) = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					let path = value.as_string();
-					let waveform = if path.is_some() {
+					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
-						Ok(read_wav_file(path.unwrap().as_str(), None, None, None, None)
+						Ok(read_wav_file(path.as_str(), None, None, None, None)
 						.map_err(|e| error(e.into(), value_loc.clone())) ?)
+					} else if let Some(spec) = value.as_assoc() {
+						Ok(parse_waveform_spec(spec, &value_loc) ?)
 					} else {
-						let spec = value.as_assoc();
-						if spec.is_some() {
-							Ok(parse_waveform_spec(spec.unwrap()) ?)
-						} else {
-							Err(error(ErrorType::DirectiveArgTypeMismatch, value_loc.clone()))
-						}
+						Err(error(ErrorType::DirectiveArgTypeMismatch, value_loc.clone()))
 					} ?;
 					let index = pctx.waveforms.add(waveform);
 					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
@@ -493,9 +495,9 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 }
 
 // 仕様は #16 を参照のこと
-fn parse_waveform_spec(spec: &HashMap<String, Value>) -> ModdlResult<Waveform> {
+fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlResult<Waveform> {
 	let get_optional_value = |name: &str| spec.get(& name.to_string());
-	let get_required_value = |name: &str| get_optional_value(name).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.to_string() }, Location::dummy()));
+	let get_required_value = |name: &str| get_optional_value(name).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.to_string() }, loc.clone()));
 
 	let data_values = get_required_value("data")?.as_array()?.0;
 	let sample_rate = get_required_value("sampleRate")?.as_float()?.0 as i32;
@@ -554,7 +556,7 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>) -> Mo
 	if index < args.len() {
 		evaluate(&args[index], vars)
 	} else {
-		Err(error(ErrorType::DirectiveArgNotFound, Location::dummy()))
+		Err(error(ErrorType::DirectiveArgNotFound, args[index].loc.clone()))
 	}
 }
 // TODO マクロでまとめる？

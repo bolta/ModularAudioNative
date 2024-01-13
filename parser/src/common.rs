@@ -1,5 +1,7 @@
 extern crate nom;
 extern crate nom_locate;
+use std::fmt::Display;
+
 //use nom::regexp::str::*;
 use nom::{
 	branch::alt,
@@ -99,6 +101,11 @@ impl Location {
 	/// 位置情報をすぐに引っ張れないところはとりあえずこれにしておく。最終的には廃止するつもり
 	pub fn dummy() -> Self {
 		Self{ line: 0, column: 0 }
+	}
+}
+impl Display for Location {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "line {}, column {}", self.line, self.column)
 	}
 }
 

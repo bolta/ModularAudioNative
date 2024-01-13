@@ -2,7 +2,7 @@ use crate::common::{Location, Located};
 
 #[derive(Debug)]
 pub struct CompilationUnit {
-	pub statements: Vec<Statement>,
+	pub statements: Vec<(Statement, Location)>,
 }
 
 #[derive(Debug)]

@@ -101,7 +101,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			let function = evaluate(function, vars).map(|(v, _)| v.as_function())?.ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
-			let resolved_args = resolve_args(&arg_names, args) ?;
+			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
 			let mut value_args = HashMap::new();
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			for (name, expr) in &resolved_args {
@@ -122,7 +122,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 				NodeStructure::NodeFactory(factory) => factory.node_arg_specs(),
 				_ => return Err(error(ErrorType::TypeMismatch, expr.loc.clone())),
 			}.iter().map(|spec| spec.name.clone()).collect();
-			let resolved_args = resolve_args(&arg_names, args) ?;
+			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
 
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut value_args = HashMap::new();
@@ -152,12 +152,12 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 	arg: &Expr,
 	vars: &Rc<RefCell<Scope>>,
 ) -> ModdlResult<ValueBody> {
-	let (arg_val, _) = evaluate(arg, vars) ?;
+	let arg_val = evaluate(arg, vars) ?;
 
 	// 定数はコンパイル時に計算する。
 	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
-	if arg_val.label().is_none() {
-		match arg_val.as_float() {
+	if arg_val.0.label().is_none() {
+		match arg_val.0.as_float() {
 			Some(arg_float) => {
 				return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
 			}
@@ -177,13 +177,13 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	rhs: &Expr,
 	vars: &Rc<RefCell<Scope>>,
 ) -> ModdlResult<ValueBody> {
-	let (l_val, _) = evaluate(lhs, vars) ?;
-	let (r_val, _) = evaluate(rhs, vars) ?;
+	let ref l_val @ (ref l_body, _) = evaluate(lhs, vars) ?;
+	let ref r_val @ (ref r_body, _) = evaluate(rhs, vars) ?;
 
 	// 定数はコンパイル時に計算する。
 	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
-	if l_val.label().is_none() && r_val.label().is_none() {
-		match (l_val.as_float(), r_val.as_float()) {
+	if l_body.label().is_none() && r_body.label().is_none() {
+		match (l_body.as_float(), r_body.as_float()) {
 			(Some(l_float), Some(r_float)) => {
 				return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
 			}
@@ -191,8 +191,8 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 		}
 	}
 
-	let l_str = as_node_structure(&l_val) ?;
-	let r_str = as_node_structure(&r_val) ?;
+	let l_str = as_node_structure(l_val) ?;
+	let r_str = as_node_structure(r_val) ?;
 	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
@@ -202,9 +202,9 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<ValueBody> {
 	// cond が定数式の場合は短絡評価する。
 	// 式全体が定数式になるかどうかは、評価する方の枝の評価結果が定数式になるかどうかに拠る
-	let (cond_val, _) = evaluate(cond, vars) ?;
-	if cond_val.label().is_none() {
-		if let Some(cond_bool) = cond_val.as_boolean() {
+	let ref cond_val @ (ref cond_body, _) = evaluate(cond, vars) ?;
+	if cond_body.label().is_none() {
+		if let Some(cond_bool) = cond_body.as_boolean() {
 			return if cond_bool {
 				evaluate(then, vars).map(|(v, _)| v)
 			} else {
@@ -215,9 +215,9 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 
 	// cond が定数式でない場合は NodeStructure として演奏時に評価する。
 	// then と else も NodeStructure でなければならないので、定数式にはならない
-	let (then_val, _) = evaluate(then, vars) ?;
-	let (else_val, _) = evaluate(els, vars) ?;
-	let cond_str = as_node_structure(&cond_val) ?;
+	let then_val = evaluate(then, vars) ?;
+	let else_val = evaluate(els, vars) ?;
+	let cond_str = as_node_structure(cond_val) ?;
 	let then_str = as_node_structure(&then_val) ?;
 	let else_str = as_node_structure(&else_val) ?;
 	Ok(ValueBody::NodeStructure(NodeStructure::Condition {
@@ -227,22 +227,22 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 	}))
 }
 
-fn as_node_structure(val: &ValueBody) -> ModdlResult<NodeStructure> {
+fn as_node_structure((val, loc): &Value) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
-	Ok(val.as_node_structure().ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, Location::dummy())) ?)
+	Ok(val.as_node_structure().ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, loc.clone())) ?)
 }
 fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<NodeStructure> {
-	Ok(as_node_structure(& evaluate(expr, vars)?.0) ?)
+	Ok(as_node_structure(& evaluate(expr, vars)?) ?)
 }
 
 /**
  * 引数名を省略した実引数を、要求された引数リストと照合して解決することで、全ての引数を「引数名」と「式」の対応関係にする。
  * 引数の重複もチェックする（引数名が省略されていても解決してからチェックする）
  */
-fn resolve_args<'a>(arg_names: &'a Vec<String>, args: &'a Args) -> ModdlResult<HashMap<String, &'a Box<Expr>>> {
+fn resolve_args<'a>(arg_names: &'a Vec<String>, args: &'a Args, expr_loc: &Location) -> ModdlResult<HashMap<String, &'a Box<Expr>>> {
 	let mut result = HashMap::<String, &'a Box<Expr>>::new();
 	let mut add = |name: &String, expr: &'a Box<Expr>| -> ModdlResult<()> {
-		if result.contains_key(name) { return Err(error(ErrorType::EntryDuplicate { name: name.clone() }, Location::dummy())); }
+		if result.contains_key(name) { return Err(error(ErrorType::EntryDuplicate { name: name.clone() }, expr_loc.clone())); }
 
 		result.insert(name.clone(), expr);
 		Ok(())

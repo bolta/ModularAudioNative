@@ -607,11 +607,11 @@ parser![mml_statement, Statement, {
 				mml: mml.to_string() + "\n", // 改行は行コメントの終端に必要
 			}))
 }];
-parser![statement, Statement, {
-	alt((
+parser![statement, (Statement, Location), {
+	loc(alt((
 		directive_statement(),
 		mml_statement(),
-	))
+	)))
 }];
 
 pub_parser![compilation_unit, CompilationUnit, {
