@@ -21,8 +21,8 @@ use std::{
 pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 	let body = match &expr.body {
 		ExprBody::Connect { lhs, rhs } => {
-			let l_str = evaluate_as_node_structure(lhs, vars) ?;
-			let r_str = evaluate_as_node_structure(rhs, vars) ?;
+			let (l_str, _) = evaluate(lhs, vars)?.as_node_structure() ?;
+			let (r_str, _) = evaluate(rhs, vars)?.as_node_structure() ?;
 			Ok(ValueBody::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
 		},
 
@@ -88,7 +88,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 					(ValueBody::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
 			let result = Ok(ValueBody::NodeStructure(NodeStructure::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, &vars).map(|(v, _)| v.as_node_structure())?.ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?),
+				body: Box::new(evaluate(body, &vars)?.as_node_structure()?.0), // TODO loc も引き渡す
 			}));
 			result
 		},
@@ -98,7 +98,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
 		ExprBody::FunctionCall { function, args } => {
-			let function = evaluate(function, vars).map(|(v, _)| v.as_function())?.ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
+			let (function, _) = evaluate(function, vars)?.as_function() ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
@@ -111,16 +111,17 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			function.call(&value_args, &vars, expr.loc.clone()).map(|(v, _)| v)
 		},
 		ExprBody::PropertyAccess { assoc, name } => {
-			let (assoc_val, _) = evaluate(assoc, vars) ?;
-			let content = assoc_val.as_assoc().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
-			let val = content.get(name);
+			let assoc_val = evaluate(assoc, vars) ?;
+			let (assoc, _) = assoc_val.as_assoc() ?;
+			let val = assoc.get(name);
 			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, label, args } => {
-			let factory = evaluate_as_node_structure(node_def, vars) ?;
+			let (factory, _) = evaluate(node_def, vars)?.as_node_structure() ?;
 			let arg_names = match &factory {
 				NodeStructure::NodeFactory(factory) => factory.node_arg_specs(),
-				_ => return Err(error(ErrorType::TypeMismatch, expr.loc.clone())),
+				// TODO これで適切なエラーになるかどうか
+				_ => return Err(error(ErrorType::TypeMismatch { expected: ValueType::NodeFactory }, expr.loc.clone())),
 			}.iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
 
@@ -165,7 +166,7 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 		}
 	}
 
-	let arg_str = as_node_structure(&arg_val) ?;
+	let (arg_str, _) = arg_val.as_node_structure() ?;
 	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(arg_str)],
@@ -191,8 +192,8 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 		}
 	}
 
-	let l_str = as_node_structure(l_val) ?;
-	let r_str = as_node_structure(r_val) ?;
+	let (l_str, _) = l_val.as_node_structure() ?;
+	let (r_str, _) = r_val.as_node_structure() ?;
 	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
@@ -217,22 +218,14 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 	// then と else も NodeStructure でなければならないので、定数式にはならない
 	let then_val = evaluate(then, vars) ?;
 	let else_val = evaluate(els, vars) ?;
-	let cond_str = as_node_structure(cond_val) ?;
-	let then_str = as_node_structure(&then_val) ?;
-	let else_str = as_node_structure(&else_val) ?;
+	let (cond_str, _) = cond_val.as_node_structure() ?;
+	let (then_str, _) = then_val.as_node_structure() ?;
+	let (else_str, _) = else_val.as_node_structure() ?;
 	Ok(ValueBody::NodeStructure(NodeStructure::Condition {
 		cond: Box::new(cond_str),
 		then: Box::new(then_str),
 		els: Box::new(else_str),
 	}))
-}
-
-fn as_node_structure((val, loc): &Value) -> ModdlResult<NodeStructure> {
-	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
-	Ok(val.as_node_structure().ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, loc.clone())) ?)
-}
-fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<NodeStructure> {
-	Ok(as_node_structure(& evaluate(expr, vars)?) ?)
 }
 
 /**

@@ -9,7 +9,8 @@ use crate::{
 	core::node_factory::*,
 	wave::waveform_host::WaveformIndex,
 };
-
+use enum_display::EnumDisplay;
+use std::fmt::Display;
 use std::{
 	collections::HashMap,
 	rc::Rc,
@@ -78,24 +79,31 @@ pub trait ValueExtraction {
 	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 }
-fn extract<T>(val: Option<T>, loc: &Location) -> ModdlResult<(T, Location)> {
+fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
 	match val {
 		Some(val) => Ok((val, loc.clone())),
-		None => Err(error(ErrorType::TypeMismatch, loc.clone())),
+		None => Err(error(ErrorType::TypeMismatch { expected }, loc.clone())),
+	}
+}
+fn extract_any<T>(val: Option<T>, loc: &Location, expected: Vec<ValueType>) -> ModdlResult<(T, Location)> {
+	match val {
+		Some(val) => Ok((val, loc.clone())),
+		None => Err(error(ErrorType::TypeMismatchAny { expected }, loc.clone())),
 	}
 }
 impl ValueExtraction for Value {
-	fn as_float(&self) -> ModdlResult<(f32, Location)> { extract(self.0.as_float(), &self.1) }
-	fn as_boolean(&self) -> ModdlResult<(bool, Location)> { extract(self.0.as_boolean() , &self.1) }
-	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)> { extract(self.0.as_waveform_index() , &self.1) }
-	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)> { extract(self.0.as_track_set() , &self.1) }
-	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_identifier_literal() , &self.1) }
-	fn as_string(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_string() , &self.1) }
-	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1) }
-	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1) }
-	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)> { extract(self.0.as_node_structure() , &self.1) }
-	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1) }
-	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1) }
+	fn as_float(&self) -> ModdlResult<(f32, Location)> { extract(self.0.as_float(), &self.1, ValueType::Number) }
+	fn as_boolean(&self) -> ModdlResult<(bool, Location)> { extract(self.0.as_boolean() , &self.1, ValueType::Number) }
+	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)> { extract(self.0.as_waveform_index() , &self.1, ValueType::Waveform) }
+	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)> { extract(self.0.as_track_set() , &self.1, ValueType::TrackSet) }
+	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_identifier_literal() , &self.1, ValueType::QuotedIdentifier) }
+	fn as_string(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_string() , &self.1, ValueType::String) }
+	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1, ValueType::Array) }
+	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
+	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)> { extract_any(self.0.as_node_structure() , &self.1,
+			vec![ValueType::NodeStructure, ValueType::Number, ValueType::NodeFactory]) }
+	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeFactory) }
+	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 }
 
 #[derive(Clone)]
@@ -217,6 +225,20 @@ impl ValueBody {
 			_ => None,
 		}
 	}
+}
+
+#[derive(Copy, Clone, Debug, EnumDisplay)]
+pub enum ValueType {
+	Number,
+	Waveform,
+	TrackSet,
+	QuotedIdentifier,
+	String,
+	Array,
+	Assoc,
+	NodeStructure,
+	NodeFactory,
+	Function,
 }
 
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。

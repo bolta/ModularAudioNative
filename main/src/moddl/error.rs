@@ -4,8 +4,10 @@ use std::{
 };
 use std::fmt::Display;
 
+use itertools::Itertools;
 use parser::common::{Span, Located, Location};
 
+use super::value::ValueType;
 
 type NomError = nom::Err<nom::error::VerboseError<String>>;
 
@@ -22,7 +24,7 @@ pub enum ErrorType {
 	MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	DirectiveArgNotFound,
-	DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
+	// DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
 	TrackDefNotFound { track: String },
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
@@ -31,7 +33,9 @@ pub enum ErrorType {
 	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
-	TypeMismatch,
+	// TypeMismatchAny だけでもいい気はする
+	TypeMismatch { expected: ValueType },
+	TypeMismatchAny { expected: Vec<ValueType> },
 	ArgMissing { name: String },
 	SignatureMismatch, // map や filter に渡す関数の arity が 1 でないなど
 	EntryDuplicate { name: String },
@@ -44,7 +48,6 @@ pub enum ErrorType {
 	Playing,
 	File(io::Error),
 }
-
 impl Display for ErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		// write!(f, "{:?}", self)
@@ -55,7 +58,8 @@ impl Display for ErrorType {
 			Self::TrackDefNotFound { track } => write!(f, "MML is given for track ^{} but track definition is missing.", track),
 			Self::TrackDefDuplicate { track, existing_def_loc }
 					=> write!(f, "Definition for track ^{} is duplicate: definition already exists at {}.", track, existing_def_loc),
-	
+			Self::TypeMismatch { expected }=> write!(f, "Type mismatch: expected: {}", expected),
+			Self::TypeMismatchAny { expected }=> write!(f, "Type mismatch: expected one of: {}", expected.iter().join(", ")),
 
 			Self::GrooveControllerTrackMustBeSingle => write!(f, "Groove controller track must be single."),
 			Self::GrooveTargetDuplicate { track, existing_assign_loc }

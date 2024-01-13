@@ -1,5 +1,7 @@
 use parser::common::Location;
 
+use crate::wave::waveform_host::WaveformIndex;
+
 use super::{
 	error::*,
 	scope::*,
@@ -23,14 +25,16 @@ pub trait Function {
 // for experiments
 pub struct Twice { }
 impl Function for Twice {
-	fn signature(&self) -> FunctionSignature { vec!["arg0".to_string()] }
+	fn signature(&self) -> FunctionSignature { vec!["arg0".to_string()] } // TODO こういうどうでもいい名前でもつけないとだめか？
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
-		const ARG_NAME: &str = "arg0"; // TODO こういうどうでもいい名前でもつけないとだめか？
-		let (arg_val, arg_loc) = args.get(& ARG_NAME.to_string())
-				.ok_or_else(|| error(ErrorType::ArgMissing { name: ARG_NAME.to_string() }, call_loc.clone())) ?;
-		let arg = arg_val.as_float().ok_or_else(|| error(ErrorType::TypeMismatch, arg_loc.clone())) ?;
+		let (arg, _) = get_required_arg(args, "arg0", &call_loc)?.as_float() ?;
 		let result = arg * 2f32;
 
 		Ok((ValueBody::Float(result), call_loc))
 	}
+}
+
+pub fn get_required_arg<'a>(args: &'a HashMap<String, Value>, name: &str, call_loc: &Location) -> ModdlResult<&'a Value> {
+	args.get(& name.to_string())
+			.ok_or_else(|| error(ErrorType::ArgMissing { name: name.to_string() }, call_loc.clone()))
 }

@@ -376,20 +376,20 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_arg_as_float(&args, 0, &pctx.vars, stmt_loc) ?;
+					(*pctx).tempo = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc) ?;
+					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg_as_node_structure(&args, 1, &pctx.vars, stmt_loc) ?;
+						let instrm = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
 						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"effect" => {
-					let tracks = evaluate_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc) ?;
-					let source_tracks = evaluate_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc) ?;
+					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let source_tracks = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					let source_loc = &args[1].loc;
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
@@ -402,21 +402,21 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_arg_as_node_structure(&args, 2, &vars, stmt_loc) ?;
+					let effect = evaluate_arg(&args, 2, &vars, stmt_loc)?.as_node_structure()?.0;
 					for track in tracks {
 						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"grooveCycle" => {
-					(*pctx).groove_cycle = evaluate_arg_as_float(&args, 0, &pctx.vars, stmt_loc) ? as i32;
+					(*pctx).groove_cycle = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0 as i32;
 				},
 				"groove" => {
-					let tracks = evaluate_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc) ?;
+					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
-					let target_tracks = evaluate_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc) ?;
-					let body = evaluate_arg_as_node_structure(&args, 2, &pctx.vars, stmt_loc) ?;
+					let target_tracks = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let body = evaluate_arg(&args, 2, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
 					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
 					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
@@ -431,12 +431,12 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"let" => {
-					let name = evaluate_arg_as_identifier_literal(&args, 0, &pctx.vars, stmt_loc) ?;
+					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
 					let value = evaluate_arg(&args, 1, &mut pctx.vars, stmt_loc) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
 				"waveform" => {
-					let name = evaluate_arg_as_identifier_literal(&args, 0, &pctx.vars, stmt_loc) ?;
+					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
 					let (value, value_loc) = evaluate_arg(&args, 1, &pctx.vars, stmt_loc) ?;
 					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
@@ -445,31 +445,34 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					} else if let Some(spec) = value.as_assoc() {
 						Ok(parse_waveform_spec(spec, &value_loc) ?)
 					} else {
-						Err(error(ErrorType::DirectiveArgTypeMismatch, value_loc.clone()))
+						Err(error(ErrorType::TypeMismatchAny { expected: vec![
+							ValueType::String,
+							ValueType::Assoc,
+						]}, value_loc.clone()))
 					} ?;
 					let index = pctx.waveforms.add(waveform);
 					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 				}
 				"ticksPerBar" => {
-					let value = evaluate_arg_as_float(&args, 0, &pctx.vars, stmt_loc) ?;
+					let value = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_arg_as_float(&args, 0, &pctx.vars, stmt_loc) ?;
+					let value = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
 				"mute" => {
-					let tracks = evaluate_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc) ?;
+					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 				}
 				"solo" => {
-					let tracks = evaluate_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc) ?;
+					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
 				"import" => {
-					let path = evaluate_arg_as_string(&args, 0, &pctx.vars, stmt_loc) ?;
+					let path = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_string()?.0;
 					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
@@ -529,7 +532,10 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 				None => { end_offset = Some(data.len() as f32); },
 			}
 		} else {
-			return Err(error(ErrorType::TypeMismatch, v.1.clone()));
+			return Err(error(ErrorType::TypeMismatchAny { expected: vec![
+				ValueType::Number,
+				ValueType::Array,
+			]}, v.1.clone()));
 		}
 	}
 
@@ -561,27 +567,6 @@ fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_
 	} else {
 		Err(error(ErrorType::DirectiveArgNotFound, stmt_loc.clone()))
 	}
-}
-// TODO マクロでまとめる？
-fn evaluate_arg_as_float(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<f32> {
-	evaluate_arg(args, index, vars, stmt_loc)?.0.as_float()
-			.ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, args[index].loc.clone()))
-}
-fn evaluate_arg_as_track_set(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<Vec<String>> {
-	evaluate_arg(args, index, vars, stmt_loc)?.0.as_track_set()
-			.ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, args[index].loc.clone()))
-}
-fn evaluate_arg_as_node_structure(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<NodeStructure> {
-	evaluate_arg(args, index, vars, stmt_loc)?.0.as_node_structure()
-			.ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, args[index].loc.clone()))
-}
-fn evaluate_arg_as_string(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<String> {
-	evaluate_arg(args, index, vars, stmt_loc)?.0.as_string()
-			.ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, args[index].loc.clone()))
-}
-fn evaluate_arg_as_identifier_literal(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<String> {
-	evaluate_arg(args, index, vars, stmt_loc)?.0.as_identifier_literal()
-			.ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, args[index].loc.clone()))
 }
 
 struct EventIter {
@@ -761,7 +746,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// 引数ありのノード生成
 				let fact = match &**factory {
 					NodeStructure::NodeFactory(fact) => Ok(fact),
-					_ => { dbg!("poke"); Err(error(ErrorType::DirectiveArgTypeMismatch, Location::dummy())) },
+					_ => Err(error(ErrorType::TypeMismatch { expected: ValueType::NodeFactory }, Location::dummy())),
 				} ?;
 				let (node_args, delay) = make_node_args(args, fact/* , &label */) ?;
 
