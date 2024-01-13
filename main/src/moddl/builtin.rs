@@ -32,19 +32,20 @@ use std::{
 
 pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	let mut result = HashMap::<String, Value>::new();
+	// ビルトインは位置を持たない（dummy）
 	macro_rules! add_node_factory {
 		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), Value::NodeFactory(Rc::new($fact)));
+			result.insert($name.to_string(), (ValueBody::NodeFactory(Rc::new($fact)), Location::dummy()));
 		}
 	}
 	macro_rules! add_function {
 		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), Value::Function(Rc::new($fact)));
+			result.insert($name.to_string(), (ValueBody::Function(Rc::new($fact)), Location::dummy()));
 		}
 	}
 
-	result.insert("false".to_string(), VALUE_FALSE);
-	result.insert("true".to_string(), VALUE_TRUE);
+	result.insert("false".to_string(), false_value());
+	result.insert("true".to_string(), true_value());
 
 	add_node_factory!("sineOsc", SineOscFactory { });
 	add_node_factory!("triangleOsc", TriangleOscFactory { });
@@ -86,24 +87,26 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
 	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let wave_val = args.get(& "waveform".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
-		let wave = wave_val.as_waveform_index().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (wave_val, wave_loc) = args.get(& "waveform".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+		let wave = wave_val.as_waveform_index().ok_or_else(|| error(ErrorType::TypeMismatch, wave_loc.clone())) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
 
-		Ok(Value::NodeFactory(result))
+		Ok((ValueBody::NodeFactory(result), call_loc))
 	}
 }
 
 pub struct NesFreq { }
 impl Function for NesFreq {
 	fn signature(&self) -> FunctionSignature { vec!["triangle".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let triangle_val = args.get(& "triangle".to_string()).unwrap_or(&VALUE_FALSE);
-		let triangle = triangle_val.as_boolean().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let triangle = match args.get(& "triangle".to_string()) {
+			Some(v) => v.as_boolean()?.0,
+			None => false,
+		};
 		let result = Rc::new(NesFreqFactory::new(triangle));
 
-		Ok(Value::NodeFactory(result))
+		Ok((ValueBody::NodeFactory(result), call_loc))
 	}
 }
 
@@ -115,12 +118,12 @@ impl Delay {
 }
 impl Function for Delay {
 	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let max_time_val = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
-		let max_time = max_time_val.as_float().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (max_time_val, max_time_loc) = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
+		let max_time = max_time_val.as_float().ok_or_else(|| error(ErrorType::TypeMismatch, max_time_loc.clone())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
-		Ok(Value::NodeFactory(result))
+		Ok((ValueBody::NodeFactory(result), call_loc))
 	}
 }
 
@@ -131,19 +134,19 @@ macro_rules! unary_math_func {
 		pub struct $name { }
 		impl Function for $name {
 			fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
-			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-				let arg = args.get(& "arg".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+				let (arg, arg_loc) = args.get(& "arg".to_string()).ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
 				if let Some(val) = arg.as_float() {
-					Ok(Value::Float(<$calc_type>::calc(&vec![val])))
+					Ok((ValueBody::Float(<$calc_type>::calc(&vec![val])), call_loc))
 		
 				} else if let Some(val) = arg.as_node_structure() {
-					Ok(Value::NodeStructure(NodeStructure::Calc {
+					Ok((ValueBody::NodeStructure(NodeStructure::Calc {
 						node_factory: Rc::new(CalcNodeFactory::<$calc_type>::new()),
 						args: vec![Box::new(val)],
-					}))
+					}), call_loc))
 		
 				} else {
-					Err(error(ErrorType::TypeMismatch, Location::dummy()))
+					Err(error(ErrorType::TypeMismatch, arg_loc.clone()))
 				}
 			}
 		}
@@ -161,44 +164,44 @@ unary_math_func!(Tan, TanCalc);
 pub struct Map { }
 impl Function for Map {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let source_val = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?;
-		let source = source_val.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (source_val, source_loc) = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?;
+		let source = source_val.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, source_loc.clone())) ?;
 
-		let mapper_val = args.get(& "mapper".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "mapper".to_string() }, Location::dummy())) ?;
-		let mapper = mapper_val.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+		let (mapper_val, mapper_loc) = args.get(& "mapper".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "mapper".to_string() }, Location::dummy())) ?;
+		let mapper = mapper_val.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, mapper_loc.clone())) ?;
 
 		let sig = mapper.signature();
 		if sig.len() != 1 { return Err(error(ErrorType::SignatureMismatch, Location::dummy())); }
 
 		let mut result = vec![];
 		for elem in source {
-			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars) ?);
+			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, mapper_loc.clone()) ?);
 		}
-		Ok(Value::Array(result))
+		Ok((ValueBody::Array(result), call_loc))
 	}
 }
 
 pub struct Reduce { }
 impl Function for Reduce {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "initial".to_string(), "reducer".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-		let source = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?
-				.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
-		let init = args.get(& "initial".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "initial".to_string() }, Location::dummy())) ?;
-		let folder = args.get(& "reducer".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "reducer".to_string() }, Location::dummy())) ?
-				.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, Location::dummy())) ?;
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (source, source_loc) = args.get(& "source".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "source".to_string() }, Location::dummy())) ?;
+		let source_val = source.as_array().ok_or_else(|| error(ErrorType::TypeMismatch, source_loc.clone())) ?;
+		let (init, init_loc) = args.get(& "initial".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "initial".to_string() }, call_loc.clone())) ?;
+		let (reducer, reducer_loc) = args.get(& "reducer".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "reducer".to_string() }, Location::dummy())) ?;
+		let reducer_val = reducer.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, reducer_loc.clone())) ?;
 
-		let sig = folder.signature();
-		if sig.len() != 2 { return Err(error(ErrorType::SignatureMismatch, Location::dummy())); }
+		let sig = reducer_val.signature();
+		if sig.len() != 2 { return Err(error(ErrorType::SignatureMismatch, call_loc)); }
 
 		let mut result = init.clone();
-		for elem in source {
-			result = folder.call(& HashMap::from([
-				(sig[0].clone(), result),
-				(sig[1].clone(), elem.clone()),
-			]), vars) ?;
+		for (elem, elem_loc) in source_val {
+			result = reducer_val.call(& HashMap::from([
+				(sig[0].clone(), (result, reducer_loc.clone())), // 位置は便宜的なもの
+				(sig[1].clone(), (elem.clone(), elem_loc.clone())),
+			]), vars, reducer_loc.clone())?.0;
 		}
-		Ok(result)
+		Ok((result, call_loc))
 	}
 }

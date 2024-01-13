@@ -1,3 +1,6 @@
+use parser::common::Location;
+
+use super::error::{ModdlResult, error, ErrorType};
 use super::{
 	function::*,
 };
@@ -60,8 +63,43 @@ pub enum NodeStructure {
 	Placeholder { name: String },
 }
 
+pub type Value = (ValueBody, Location);
+
+pub trait ValueExtraction {
+	fn as_float(&self) -> ModdlResult<(f32, Location)>;
+	fn as_boolean(&self) -> ModdlResult<(bool, Location)>;
+	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)>;
+	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)>;
+	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)>;
+	fn as_string(&self) -> ModdlResult<(String, Location)>;
+	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
+	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
+	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)>;
+	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
+	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
+}
+fn extract<T>(val: Option<T>, loc: &Location) -> ModdlResult<(T, Location)> {
+	match val {
+		Some(val) => Ok((val, loc.clone())),
+		None => Err(error(ErrorType::TypeMismatch, loc.clone())),
+	}
+}
+impl ValueExtraction for Value {
+	fn as_float(&self) -> ModdlResult<(f32, Location)> { extract(self.0.as_float(), &self.1) }
+	fn as_boolean(&self) -> ModdlResult<(bool, Location)> { extract(self.0.as_boolean() , &self.1) }
+	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)> { extract(self.0.as_waveform_index() , &self.1) }
+	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)> { extract(self.0.as_track_set() , &self.1) }
+	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_identifier_literal() , &self.1) }
+	fn as_string(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_string() , &self.1) }
+	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1) }
+	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1) }
+	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)> { extract(self.0.as_node_structure() , &self.1) }
+	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1) }
+	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1) }
+}
+
 #[derive(Clone)]
-pub enum Value {
+pub enum ValueBody {
 	Float(f32),
 	WaveformIndex(WaveformIndex),
 	TrackSet(Vec<String>),
@@ -81,7 +119,7 @@ pub enum Value {
 	},
 }
 
-impl Value {
+impl ValueBody {
 	pub fn as_float(&self) -> Option<f32> {
 		match self.value() {
 			Self::Float(value) => Some(*value),
@@ -159,9 +197,9 @@ impl Value {
 		}
 	}
 
-	fn value(&self) -> &Value {
+	fn value(&self) -> &ValueBody {
 		let result = match self {
-			Self::Labeled { inner, .. } => inner.value(),
+			Self::Labeled { inner, .. } => inner.0.value(),
 			_ => self,
 		};
 
@@ -183,6 +221,5 @@ impl Value {
 
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
 // 代表の値として true = 1、false = -1 とする
-pub const VALUE_FALSE: Value = Value::Float(-1f32);
-pub const VALUE_TRUE: Value = Value::Float(1f32);
-
+pub fn false_value() -> Value { (ValueBody::Float(-1f32), Location::dummy()) }
+pub fn true_value() -> Value { (ValueBody::Float(1f32), Location::dummy()) }

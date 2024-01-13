@@ -33,7 +33,7 @@ impl LambdaFunction {
 }
 impl Function for LambdaFunction {
 	fn signature(&self) -> FunctionSignature { self.params.iter().map(|param| param.name.clone()).collect() }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
 		// 引数のスコープを追加
 		let mut child_vars = Scope::child_of(self.vars.clone());
 		self.params.iter().try_for_each(|param| {

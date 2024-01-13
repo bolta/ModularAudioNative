@@ -19,11 +19,11 @@ use std::{
 };
 
 pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
-	match &expr.body {
+	let body = match &expr.body {
 		ExprBody::Connect { lhs, rhs } => {
 			let l_str = evaluate_as_node_structure(lhs, vars) ?;
 			let r_str = evaluate_as_node_structure(rhs, vars) ?;
-			Ok(Value::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
+			Ok(ValueBody::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
 		},
 
 		ExprBody::Power { lhs, rhs } => evaluate_binary_structure::<PowCalc>(lhs, rhs, vars),
@@ -44,18 +44,18 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		ExprBody::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars),
 
 		ExprBody::Identifier(id) => {
-			let val = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
+			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
 			Ok(val.clone())
 		},
-		ExprBody::IdentifierLiteral(id) => Ok(Value::IdentifierLiteral(id.clone())),
-		ExprBody::StringLiteral(content) => Ok(Value::String(content.clone())),
+		ExprBody::IdentifierLiteral(id) => Ok(ValueBody::IdentifierLiteral(id.clone())),
+		ExprBody::StringLiteral(content) => Ok(ValueBody::String(content.clone())),
 		ExprBody::ArrayLiteral(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = vec![];
 			for elem in content {
 				result.push(evaluate(&*elem, vars) ?);
 			}
-			Ok(Value::Array(result))
+			Ok(ValueBody::Array(result))
 		},
 		ExprBody::AssocLiteral(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
@@ -63,7 +63,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			for (key, value_expr) in content {
 				result.insert(key.clone(), evaluate(&*value_expr, vars) ?);
 			}
-			Ok(Value::Assoc(result))
+			Ok(ValueBody::Assoc(result))
 		},
 		ExprBody::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
 		ExprBody::LambdaFunction { params, body } => {
@@ -80,24 +80,25 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			}) ?;
 			// Value 側で式を使う必要があるので、単純に式を clone して持たせておく。
 			// 何とかして参照した方が効率的だが
-			Ok(Value::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars))))
+			Ok(ValueBody::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars))))
 		}
 		ExprBody::LambdaNode { input_param, body } => {
 			let vars = Scope::child_of(vars.clone());
-			vars.borrow_mut().set(input_param, Value::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() })) ?;
-			let result = Ok(Value::NodeStructure(NodeStructure::Lambda {
+			vars.borrow_mut().set(input_param,
+					(ValueBody::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
+			let result = Ok(ValueBody::NodeStructure(NodeStructure::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, &vars)?.as_node_structure().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?),
+				body: Box::new(evaluate(body, &vars).map(|(v, _)| v.as_node_structure())?.ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?),
 			}));
 			result
 		},
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
-		ExprBody::FloatLiteral(value) => Ok(Value::Float(*value)),
-		ExprBody::TrackSetLiteral(tracks) => Ok(Value::TrackSet(tracks.clone())),
+		ExprBody::FloatLiteral(value) => Ok(ValueBody::Float(*value)),
+		ExprBody::TrackSetLiteral(tracks) => Ok(ValueBody::TrackSet(tracks.clone())),
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
 		ExprBody::FunctionCall { function, args } => {
-			let function = evaluate(function, vars)?.as_function().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
+			let function = evaluate(function, vars).map(|(v, _)| v.as_function())?.ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
 			let resolved_args = resolve_args(&arg_names, args) ?;
@@ -107,13 +108,13 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
-			function.call(&value_args, &vars)
+			function.call(&value_args, &vars, expr.loc.clone()).map(|(v, _)| v)
 		},
 		ExprBody::PropertyAccess { assoc, name } => {
-			let assoc_val = evaluate(assoc, vars) ?;
+			let (assoc_val, _) = evaluate(assoc, vars) ?;
 			let content = assoc_val.as_assoc().ok_or_else(|| error(ErrorType::TypeMismatch, expr.loc.clone())) ?;
 			let val = content.get(name);
-			Ok(val.ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
+			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, label, args } => {
 			let factory = evaluate_as_node_structure(node_def, vars) ?;
@@ -129,7 +130,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
-			Ok(Value::NodeStructure(NodeStructure::NodeWithArgs {
+			Ok(ValueBody::NodeStructure(NodeStructure::NodeWithArgs {
 				factory: Box::new(factory),
 				label: label.clone(),
 				args: value_args,
@@ -141,30 +142,31 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		ExprBody::Labeled { label, inner } => {
 			let inner_val = evaluate(inner, vars) ?;
 
-			Ok(Value::Labeled { label: label.clone(), inner: Box::new(inner_val) })
+			Ok(ValueBody::Labeled { label: label.clone(), inner: Box::new(inner_val) })
 		}
-	}
+	} ?;
+	Ok((body, expr.loc.clone()))
 }
 
 fn evaluate_unary_structure<C: Calc + 'static>(
 	arg: &Expr,
 	vars: &Rc<RefCell<Scope>>,
-) -> ModdlResult<Value> {
-	let arg_val = evaluate(arg, vars) ?;
+) -> ModdlResult<ValueBody> {
+	let (arg_val, _) = evaluate(arg, vars) ?;
 
 	// 定数はコンパイル時に計算する。
 	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
 	if arg_val.label().is_none() {
 		match arg_val.as_float() {
 			Some(arg_float) => {
-				return Ok(Value::Float(C::calc(&vec![arg_float])));
+				return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
 			}
 			_ => { } // 下へ
 		}
 	}
 
 	let arg_str = as_node_structure(&arg_val) ?;
-	Ok(Value::NodeStructure(NodeStructure::Calc {
+	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(arg_str)],
 	}))
@@ -174,16 +176,16 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
 	vars: &Rc<RefCell<Scope>>,
-) -> ModdlResult<Value> {
-	let l_val = evaluate(lhs, vars) ?;
-	let r_val = evaluate(rhs, vars) ?;
+) -> ModdlResult<ValueBody> {
+	let (l_val, _) = evaluate(lhs, vars) ?;
+	let (r_val, _) = evaluate(rhs, vars) ?;
 
 	// 定数はコンパイル時に計算する。
 	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
 	if l_val.label().is_none() && r_val.label().is_none() {
 		match (l_val.as_float(), r_val.as_float()) {
 			(Some(l_float), Some(r_float)) => {
-				return Ok(Value::Float(C::calc(&vec![l_float, r_float])));
+				return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
 			}
 			_ => { } // 下へ
 		}
@@ -191,46 +193,46 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 
 	let l_str = as_node_structure(&l_val) ?;
 	let r_str = as_node_structure(&r_val) ?;
-	Ok(Value::NodeStructure(NodeStructure::Calc {
+	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
 	}))
 }
 
-fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<ValueBody> {
 	// cond が定数式の場合は短絡評価する。
 	// 式全体が定数式になるかどうかは、評価する方の枝の評価結果が定数式になるかどうかに拠る
-	let cond_val = evaluate(cond, vars) ?;
+	let (cond_val, _) = evaluate(cond, vars) ?;
 	if cond_val.label().is_none() {
 		if let Some(cond_bool) = cond_val.as_boolean() {
 			return if cond_bool {
-				evaluate(then, vars)
+				evaluate(then, vars).map(|(v, _)| v)
 			} else {
-				evaluate(els, vars)
+				evaluate(els, vars).map(|(v, _)| v)
 			};
 		}
 	}
 
 	// cond が定数式でない場合は NodeStructure として演奏時に評価する。
 	// then と else も NodeStructure でなければならないので、定数式にはならない
-	let then_val = evaluate(then, vars) ?;
-	let else_val = evaluate(els, vars) ?;
+	let (then_val, _) = evaluate(then, vars) ?;
+	let (else_val, _) = evaluate(els, vars) ?;
 	let cond_str = as_node_structure(&cond_val) ?;
 	let then_str = as_node_structure(&then_val) ?;
 	let else_str = as_node_structure(&else_val) ?;
-	Ok(Value::NodeStructure(NodeStructure::Condition {
+	Ok(ValueBody::NodeStructure(NodeStructure::Condition {
 		cond: Box::new(cond_str),
 		then: Box::new(then_str),
 		els: Box::new(else_str),
 	}))
 }
 
-fn as_node_structure(val: &Value) -> ModdlResult<NodeStructure> {
+fn as_node_structure(val: &ValueBody) -> ModdlResult<NodeStructure> {
 	// TODO 型エラーはこれでいいのか。汎用の TypeMismatch エラーにすべきか
 	Ok(val.as_node_structure().ok_or_else(|| error(ErrorType::DirectiveArgTypeMismatch, Location::dummy())) ?)
 }
 fn evaluate_as_node_structure(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<NodeStructure> {
-	Ok(as_node_structure(& evaluate(expr, vars) ?) ?)
+	Ok(as_node_structure(& evaluate(expr, vars)?.0) ?)
 }
 
 /**
