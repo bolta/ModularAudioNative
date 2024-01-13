@@ -89,7 +89,7 @@ impl Function for WaveformPlayer {
 	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
 		let (wave_val, wave_loc) = args.get(& "waveform".to_string())
-				.ok_or_else(|| error(ErrorType::ArgMissing { name: "waveform".to_string() }, Location::dummy())) ?;
+				.ok_or_else(|| error(ErrorType::ArgMissing { name: "waveform".to_string() }, call_loc.clone())) ?;
 		let wave = wave_val.as_waveform_index()
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Waveform }, wave_loc.clone())) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
@@ -167,6 +167,15 @@ unary_math_func!(Tan, TanCalc);
 
 // 最低限の配列操作のため、とりあえず map と reduce を作っておく
 
+fn check_arity(sig: &FunctionSignature, expected: usize, loc: &Location) -> ModdlResult<()> {
+	let actual = sig.len();
+	if actual == expected {
+		Ok(())
+	} else {
+		Err(error(ErrorType::ArityMismatch { expected, actual }, loc.clone()))
+	}
+}
+
 pub struct Map { }
 impl Function for Map {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
@@ -175,7 +184,7 @@ impl Function for Map {
 		let (mapper, mapper_loc) = get_required_arg(args, "mapper", &call_loc)?.as_function() ?;
 
 		let sig = mapper.signature();
-		if sig.len() != 1 { return Err(error(ErrorType::SignatureMismatch, Location::dummy())); }
+		check_arity(&sig, 1, &mapper_loc) ?;
 
 		let mut result = vec![];
 		for elem in source {
@@ -195,7 +204,7 @@ impl Function for Reduce {
 		let (reducer, reducer_loc) = get_required_arg(args, "reducer", &call_loc)?.as_function() ?;
 
 		let sig = reducer.signature();
-		if sig.len() != 2 { return Err(error(ErrorType::SignatureMismatch, call_loc)); }
+		check_arity(&sig, 2, &reducer_loc) ?;
 
 		let mut result = init.clone();
 		for (elem, elem_loc) in source {

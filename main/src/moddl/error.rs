@@ -24,12 +24,10 @@ pub enum ErrorType {
 	MmlSyntax(NomError),
 	// TODO ↑テンポずれも同様のエラーで捕捉
 	DirectiveArgNotFound,
-	// DirectiveArgTypeMismatch, // TODO 今後 TypeMismatch に統合
 	TrackDefNotFound { track: String },
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
-	NodeFactoryNotFound,
-	NodeFactoryArgTypeMismatch, // TODO 今後 TypeMismatch に統合
+	NodeFactoryNotFound, // TODO 発生条件確認
 	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
@@ -37,7 +35,7 @@ pub enum ErrorType {
 	TypeMismatch { expected: ValueType },
 	TypeMismatchAny { expected: Vec<ValueType> },
 	ArgMissing { name: String },
-	SignatureMismatch, // map や filter に渡す関数の arity が 1 でないなど
+	ArityMismatch { expected: usize, actual: usize }, // map や filter に渡す関数の arity が 1 でないなど
 	EntryDuplicate { name: String },
 	EntryNotFound { name: String },
 	TooManyUnnamedArgs,
@@ -50,23 +48,30 @@ pub enum ErrorType {
 }
 impl Display for ErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		// write!(f, "{:?}", self)
 		match self {
 			Self::Syntax(nom_error) => write!(f, "ModDL syntax error: {}", nom_error),
-			Self::MmlSyntax(nom_error) => write!(f, "MML syntax error (error location is wrong for some reason): {}", nom_error),
+			Self::MmlSyntax(nom_error) => write!(f, "MML syntax error (sorry, error location is wrong for some reason): {}", nom_error),
 			Self::DirectiveArgNotFound => write!(f, "Not enough arguments are given for directive statement."),
 			Self::TrackDefNotFound { track } => write!(f, "MML is given for track ^{} but track definition is missing.", track),
 			Self::TrackDefDuplicate { track, existing_def_loc }
 					=> write!(f, "Definition for track ^{} is duplicate: definition already exists at {}.", track, existing_def_loc),
+			Self::VarNotFound { var } => write!(f, "Variable `{}` not found.", var),
+			// NodeFactoryNotFound,
+			// ChannelMismatch,
 			Self::TypeMismatch { expected }=> write!(f, "Type mismatch: expected: {}", expected),
 			Self::TypeMismatchAny { expected }=> write!(f, "Type mismatch: expected one of: {}", expected.iter().join(", ")),
-
+			Self::ArgMissing { name } => write!(f, "Function argument `{}` missing.", name),
+			Self::ArityMismatch { expected, actual }
+					=> write!(f, "Arity mismatch: Given function is expected to take {} argument{}, but actually takes {}.",
+							expected, if *expected == 1 { "" } else { "s" }, actual),
+			// EntryDuplicate { name: String },
+			// EntryNotFound { name: String },
+			// TooManyUnnamedArgs,
 			Self::GrooveControllerTrackMustBeSingle => write!(f, "Groove controller track must be single."),
 			Self::GrooveTargetDuplicate { track, existing_assign_loc }
 					=> write!(f, "Groove controller track for track {} is duplicate: already assigned at {}.", track, existing_assign_loc),
-
-
-
+			// Playing,
+			// File(io::Error),
 			// TODO 全種類ちゃんと作る
 			_ => write!(f, "{:?}", self),
 		}
