@@ -639,7 +639,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, Some($const_tag), placeholders) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders) };
 			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders) };
 		}
 		// 関数にすると（同上）
@@ -670,7 +670,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 					Err(error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
 				};
 				// ラベルが明示されていればそちらを使う
-				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten().unwrap_or(name.clone());
+				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()/* .unwrap_or(name.clone()) */;
 				let arg_node = recurse!(&strukt, input, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
