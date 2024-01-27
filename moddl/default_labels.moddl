@@ -1,0 +1,10 @@
+// この option を有効にしないと duty の変更は効かない
+// @option `defaultLabels`
+@tempo 120
+
+@instrument ^a, pulseOsc { duty: 0.25 } * adsrEnv
+
+a o4l8v15
+a cdef
+a yduty,0.5
+a cdef
