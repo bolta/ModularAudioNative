@@ -46,6 +46,7 @@ use crate::{
 };
 extern crate parser;
 use graphviz_rust::attributes::start;
+use nom::Err;
 use parser::{
 	mml::default_mml_parser,
 	moddl::ast::*,
@@ -106,6 +107,10 @@ struct PlayerContext {
 	mute_solo_tracks: HashSet<String>,
 	vars: Rc<RefCell<Scope>>,
 	seq_tags: HashSet<String>,
+	// ソースファイルの先頭でだけオプションを許すためのフラグ
+	allows_option_here: bool,
+	// #21 パラメータ名を暗黙にラベルにする。互換動作
+	use_default_labels: bool,
 }
 impl PlayerContext {
 	fn init(moddl_path: &str, sample_rate: i32) -> Self {
@@ -129,6 +134,8 @@ impl PlayerContext {
 			mute_solo_tracks: HashSet::new(),
 			vars,
 			seq_tags: HashSet::new(),
+			allows_option_here: true,
+			use_default_labels: false,
 		}
 	}
 
@@ -212,7 +219,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				match spec {
 					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
@@ -220,10 +227,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, timer, pctx.groove_cycle) ?)
+								&mut placeholders, None, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
 					TrackDef::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN, &mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle)
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle, pctx.use_default_labels)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -478,6 +486,23 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;
 				}
+				"option" => {
+					if ! pctx.allows_option_here {
+						return Err(error(ErrorType::OptionNotAllowedHere, stmt_loc.clone()));
+					}
+
+					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					match name.as_str() {
+						"defaultLabels" => {
+							pctx.use_default_labels = true;
+						},
+						other => {
+							// 前方互換性のため警告にとどめる
+							warn(format!("unknown option ignored: {}", other));
+						}
+					}
+					// let value = evaluate_arg(&args, 1, &pctx.vars, stmt_loc);
+				}
 				other => {
 					println!("unknown directive: {}", other);
 				}
@@ -495,6 +520,11 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				}
 			}
 		}
+	}
+
+	match stmt {
+		Statement::Directive { name, args: _ } if name.as_str() == "option" => { }
+		_ => { 	pctx.allows_option_here = false; }
 	}
 
 	Ok(())
@@ -578,7 +608,7 @@ impl Iterator for EventIter {
 }
 
 // TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
 		-> ModdlResult<NodeId> {
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -608,7 +638,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		input = freq_detuned;
 	}
 	
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders) ?;
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels) ?;
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
@@ -634,13 +664,13 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, use_default_labels: bool) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, use_default_labels: bool) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, use_default_labels) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, use_default_labels) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -670,7 +700,8 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 					Err(error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
 				};
 				// ラベルが明示されていればそちらを使う
-				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()/* .unwrap_or(name.clone()) */;
+				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
+						.or_else(|| if use_default_labels { Some(name.clone()) } else { None })/* .unwrap_or(name.clone()) */;
 				let arg_node = recurse!(&strukt, input, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
@@ -770,7 +801,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, use_default_labels)
 }
 
 /// 入力のチャンネル数が指定の数になるよう、必要に応じて変換をかます。

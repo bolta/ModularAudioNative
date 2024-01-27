@@ -41,6 +41,7 @@ pub enum ErrorType {
 	TooManyUnnamedArgs,
 	GrooveControllerTrackMustBeSingle,
 	GrooveTargetDuplicate { track: String, existing_assign_loc: Location },
+	OptionNotAllowedHere,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,
@@ -70,6 +71,7 @@ impl Display for ErrorType {
 			Self::GrooveControllerTrackMustBeSingle => write!(f, "Groove controller track must be single."),
 			Self::GrooveTargetDuplicate { track, existing_assign_loc }
 					=> write!(f, "Groove controller track for track {} is duplicate: already assigned at {}.", track, existing_assign_loc),
+			Self::OptionNotAllowedHere => write!(f, "Options must be placed at the head of a source file."),
 			// Playing,
 			// File(io::Error),
 			// TODO 全種類ちゃんと作る
