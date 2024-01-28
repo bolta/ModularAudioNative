@@ -182,7 +182,7 @@ fn generate_sequence(
 						// TODO 無限ループに : が含まれている。エラーにする
 					}
 
-					// context1 をコンパイルした続きの状態でコンパイルする
+					// content1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
 					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
 					seq.push(Instruction::Call { seq_name: content2_name });
