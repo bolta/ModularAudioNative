@@ -7,7 +7,7 @@ use crate::{
 		instruction::*,
 		sequence::*,
 	},
-	mml::default::feature::*,
+	mml::default::feature::*, moddl::console::warn,
 };
 extern crate parser;
 use parser::mml::ast::*;
@@ -34,26 +34,54 @@ const PARAM_NAME_VELOCITY: &str = "#velocity";
 const PARAM_NAME_DETUNE: &str = "#detune";
 const PARAM_NAME_TEMPO: &str = "#tempo";
 
+pub fn scan_features(CompilationUnit { commands }: &CompilationUnit) -> HashSet<Feature> {
+	let mut result = HashSet::new();
+	scan_features_(commands, &mut result);
+
+	result
+}
+
+fn scan_features_(commands: &Vec<Command>, result: &mut HashSet<Feature>) {
+	for cmd in commands {
+		// Feature を使うコマンドと、内容を持つコマンドだけ処理
+		match cmd {
+			Command::Volume(_) => { result.insert(Feature::Volume); },
+			Command::Velocity(_) => { result.insert(Feature::Velocity); },
+			Command::Detune(_) => { result.insert(Feature::Detune); },
+
+			Command::Loop { content1, content2, .. } => {
+				scan_features_(content1, result);
+				if let Some(content2) = content2 {
+					scan_features_(content2, result);
+				}
+			},
+			Command::Stack { content } => { scan_features_(content, result); },
+			Command::MacroDef { content, .. } => { scan_features_(content, result); },
+			_ => { },
+		}
+	}
+}
+
 pub fn generate_sequences(
 	CompilationUnit { commands }: &CompilationUnit,
 	ticks_per_bar: i32,
 	tag_set: &TagSet,
 	param_prefix: &str,
-) -> (HashMap<String, Sequence>, HashSet<Feature>) {
-	let mut stack = init_stack();
+	param_initials: &HashMap<String, f32>,
+) -> HashMap<String, Sequence> {
+	let mut stack = init_stack(param_initials);
 	let mut var_seq = 0;
 	let mut seq_seq = 0;
 	let mut sequences = HashMap::new();
-	let mut features = HashSet::new();
 	let mut used_skip = false;
 
-	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences, &mut features,
+	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences,
 			&mut used_skip, param_prefix);
 	if used_skip {
 		sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
 	}
 
-	return (sequences, features);
+	sequences
 }
 
 fn make_name(prefix: &str, count: &mut i32) -> String {
@@ -71,18 +99,17 @@ fn generate_sequence(
 	var_seq: &mut i32,
 	seq_seq: &mut i32,
 	sequences: &mut HashMap<String, Sequence>,
-	features: &mut HashSet<Feature>,
 	used_skip: &mut bool,
 	param_prefix: &str,
 ) {
 	let mut seq = vec![];
 	for command in commands {
 		match command {
-			Command::Octave(val) => { stack.mml_state().octave = *val; }
-			Command::OctaveIncr => { stack.mml_state().octave += 1; }
-			Command::OctaveDecr => { stack.mml_state().octave -= 1; }
-			Command::Length(val) => { stack.mml_state().length = *val; }
-			Command::GateRate(val) => { stack.mml_state().gate_rate = val.max(0f32).min(MAX_GATE_RATE); }
+			Command::Octave(val) => { stack.mml_state_mut().octave = *val; }
+			Command::OctaveIncr => { stack.mml_state_mut().octave += 1; }
+			Command::OctaveDecr => { stack.mml_state_mut().octave -= 1; }
+			Command::Length(val) => { stack.mml_state_mut().length = *val; }
+			Command::GateRate(val) => { stack.mml_state_mut().gate_rate = val.max(0f32).min(MAX_GATE_RATE); }
 			Command::Tone { tone_name, length, slur } => {
 				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, stack.mml_state().length);
 				let gate_ticks = (step_ticks as f32 * stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
@@ -104,7 +131,7 @@ fn generate_sequence(
 					seq.push(Instruction::Wait(step_ticks - gate_ticks));
 				}
 
-				stack.mml_state().slur = *slur;
+				stack.mml_state_mut().slur = *slur;
 			}
 			Command::Rest(val) => {
 				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length);
@@ -113,25 +140,22 @@ fn generate_sequence(
 			Command::Parameter { name, value } => {
 				// TODO ここで track prefix をかますことで MML には書かないでいいように
 				// seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
-				seq.push(make_param_instrc(param_prefix, &name, *value));
+				push_param_instrc(&mut seq, stack, param_prefix, &name, *value);
 			}
 			Command::Volume(value) => {
-				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VOLUME, *value / MAX_VOLUME));
-				features.insert(Feature::Volume);
+				push_param_instrc(&mut seq, stack, param_prefix, PARAM_NAME_VOLUME, *value / MAX_VOLUME);
 			}
 			Command::Velocity(value) => {
-				seq.push(make_param_instrc(param_prefix, PARAM_NAME_VELOCITY, *value / MAX_VELOCITY));
-				features.insert(Feature::Velocity);
+				push_param_instrc(&mut seq, stack, param_prefix, PARAM_NAME_VELOCITY, *value / MAX_VELOCITY);
 			}
 			Command::Detune(value) => {
-				seq.push(make_param_instrc(param_prefix, PARAM_NAME_DETUNE, *value));
-				features.insert(Feature::Detune);
+				push_param_instrc(&mut seq, stack, param_prefix, PARAM_NAME_DETUNE, *value);
 			}
 			Command::Tempo(value) => {
-				seq.push(make_param_instrc("" /* global */, PARAM_NAME_TEMPO, *value));
+				push_param_instrc(&mut seq, stack, "" /* global */, PARAM_NAME_TEMPO, *value);
 			}
 			Command::MacroCall { name } => {
-				stack.push_clone(); // TODO Some() の中で行いたいが借用のエラーになる
+				push(stack);
 				let seq_name = stack.macro_names().get(name);
 				match seq_name {
 					None => unimplemented!("macro not found"), // TODO エラーにする
@@ -139,7 +163,8 @@ fn generate_sequence(
 						seq.push(Instruction::Call { seq_name: seq_name.clone() });
 					},
 				}
-				stack.pop();
+
+				pop_and_restore_params(stack, param_prefix, &mut seq);
 			}
 			Command::Loop { times, content1, content2 } => {
 				/*
@@ -166,9 +191,9 @@ fn generate_sequence(
 					None
 				};
 				let loop_start = seq.len();
-				stack.push_clone();
+				push(stack);
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -184,7 +209,7 @@ fn generate_sequence(
 
 					// content1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix);
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
@@ -203,22 +228,24 @@ fn generate_sequence(
 				if let Some(var_name) = &var_name {
 					seq.push(Instruction::DeleteVar { name: var_name.clone() });
 				}
-				stack.pop();
+				pop_and_restore_params(stack, param_prefix, &mut seq);
 			}
 			Command::Stack { content } => {
-				stack.push_clone();
+				push(stack);
 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
 				let content_name = make_name("seq", seq_seq);
-				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content_name });
-				stack.pop();
+				pop_and_restore_params(stack, param_prefix, &mut seq)
 			}
 			Command::MacroDef { name, content } => {
-				stack.push_clone();
+				push(stack);
 				let seq_name = make_name("seq", seq_seq);
-				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, features, used_skip, param_prefix);
+				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix);
+				// コンパイルするだけなので params の復元は不要
+				// pop_and_restore_params(stack, param_prefix, &mut seq);
 				stack.pop();
-				stack.macro_names().insert(name.clone(), seq_name);
+				stack.macro_names_mut().insert(name.clone(), seq_name);
 			}
 			Command::Skip => {
 				seq.push(Instruction::ExitSkipMode);
@@ -235,8 +262,47 @@ fn generate_sequence(
 	sequences.insert(seq_name.to_string(), seq);
 }
 
+fn push(stack: &mut Stack) {
+	let mml_state = stack.mml_state().clone();
+	let params = HashMap::new();
+	// TODO params と同様、新規にして参照時に検索するようにしたい
+	let macro_names = stack.macro_names().clone();
+
+	stack.push(StackFrame {
+		mml_state,
+		params,
+		macro_names,
+	});
+}
+
+/// スタックのトップで設定したパラメータについて以前の値を復元する instrc 列を生成しつつ、
+/// スタックを pop する
+fn pop_and_restore_params(stack: &mut Stack, param_prefix: &str, seq: &mut Vec<Instruction>) {
+	let names_to_restore = stack.params().keys();
+	let restore_instrcs: Vec<_> = names_to_restore.map(|name| {
+		// 現在の（これから pop する）フレームは除き、それ以前で設定された値を探す
+		let prev_value = stack.iter_frames().skip(1).find_map(|frame| frame.params.get(name));
+		if prev_value.is_none() {
+			warn(format!("Could not find the previous value of {} (maybe a bug)", name));
+		}
+
+		prev_value.map(|value| make_param_instrc(param_prefix, name, *value))
+	}).filter(|i| i.is_some())
+			.map(|i| i.unwrap())
+			.collect();
+
+	stack.pop();
+
+	for i in restore_instrcs { seq.push(i) }
+}
+
 fn make_param_instrc(param_prefix: &str, name: &str, value: f32) -> Instruction {
 	Instruction::Value { tag: format!("{}{}", param_prefix, name), value }
+}
+fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_prefix: &str, name: &str, value: f32) {
+	seq.push(make_param_instrc(param_prefix, &name, value));
+	// TODO stack.params にも prefix つきで入れる必要がある（でないと t をスタックで扱えない）
+	stack.params_mut().insert(name.to_string(), value);
 }
 
 fn calc_ticks_from_length(Length { elements: length_spec }: &Length, ticks_per_bar: i32, default: i32) -> i32 {
@@ -304,23 +370,32 @@ impl MmlState {
 #[derive(Clone)]
 struct StackFrame {
 	mml_state: MmlState,
-	// TODO parameters
+	params: HashMap<String, f32>,
 	macro_names: HashMap<String, String>,
 }
 
 type Stack = stack::Stack<StackFrame>;
 
-fn init_stack() -> Stack {
+fn init_stack(param_initials: &HashMap<String, f32>) -> Stack {
 	Stack::init(StackFrame {
 		mml_state: MmlState::init(),
+		params: param_initials.clone(),
 		macro_names: HashMap::new(),
 	})
 }
 trait StackShortcut {
-	fn mml_state(&mut self) -> &mut MmlState;
-	fn macro_names(&mut self) -> &mut HashMap<String, String>;
+	fn mml_state(&self) -> &MmlState;
+	fn params(&self) -> &HashMap<String, f32>;
+	fn macro_names(&self) -> &HashMap<String, String>;
+	fn mml_state_mut(&mut self) -> &mut MmlState;
+	fn params_mut(&mut self) -> &mut HashMap<String, f32>;
+	fn macro_names_mut(&mut self) -> &mut HashMap<String, String>;
 }
 impl StackShortcut for Stack {
-	fn mml_state(&mut self) -> &mut MmlState { &mut self.top_mut().mml_state }
-	fn macro_names(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
+	fn mml_state(&self) -> &MmlState { &self.top().mml_state }
+	fn params(&self) -> &HashMap<String, f32> { &self.top().params }
+	fn macro_names(&self) -> &HashMap<String, String> { &self.top().macro_names }
+	fn mml_state_mut(&mut self) -> &mut MmlState { &mut self.top_mut().mml_state }
+	fn params_mut(&mut self) -> &mut HashMap<String, f32> { &mut self.top_mut().params }
+	fn macro_names_mut(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
 }

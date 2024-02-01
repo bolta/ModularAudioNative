@@ -614,12 +614,16 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
 	let freq_tag = format!("{}_freq", track);
 
-	let tag_set = TagSet {
-		freq: freq_tag.clone(),
-		note: track.to_string(),
-	};
-	let (seqs, features) = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
-	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), seqs)));
+	// #22 generate_sequences() に各 Var の初期値が必要になったので、
+	// build_instrument() で初期値が判明した後で行うことにしたが、一方 build_instrument() の入力ノードは
+	// generate_sequences() によって得られていた features に依存しており、循環依存が発生してしまったので、
+	// feature の有無確認を generate_sequences() から切り離して先に行うようにした
+
+	const VELOCITY_INIT: f32 = 1f32;
+	const VOLUME_INIT: f32 = 1f32;
+	const DETUNE_INIT: f32 = 0f32;
+
+	let features = scan_features(&ast);
 
 	let mut input = match override_input {
 		Some(input) => input,
@@ -629,7 +633,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		// セント単位のデチューン
 		// freq_detuned = freq * 2 ^ (detune / 1200)
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(NodeBase::new(0), 0f32)));
+		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(NodeBase::new(0), DETUNE_INIT)));
 		let cents_per_oct = nodes.add_node(submachine_idx, Box::new(Constant::new(1200f32)));
 		let detune_oct = divide(Some(track), nodes, submachine_idx, detune, cents_per_oct) ?; // 必ず成功するはず
 		let const_2 = nodes.add_node(submachine_idx, Box::new(Constant::new(2f32)));
@@ -638,20 +642,31 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		input = freq_detuned;
 	}
 	
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels) ?;
+	let mut inits = vec![
+		("#velocity", VELOCITY_INIT),
+		("#volume", VOLUME_INIT),
+		("#detune", DETUNE_INIT),
+		// TODO tempo も
+	].iter().map(|(name, value)| (name.to_string(), *value)).collect();
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels, &mut inits) ?;
+
+	let tag_set = TagSet {
+		freq: freq_tag.clone(),
+		note: track.to_string(),
+	};
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits);
+	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), seqs)));
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(NodeBase::new(0), 1f32)));
+		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(NodeBase::new(0), VELOCITY_INIT)));
 		let output_vel = multiply(Some(track), nodes, submachine_idx, output, vel) ?; // 必ず成功するはず
 		output = output_vel;
 	}
 	if features.contains(&Feature::Volume) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(NodeBase::new(0), 1f32)));
+		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(NodeBase::new(0), VOLUME_INIT)));
 		let output_vol = multiply(Some(track), nodes, submachine_idx, output, vol) ?; // 必ず成功するはず
 		output = output_vol;
 	}
@@ -664,13 +679,13 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, use_default_labels: bool) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, use_default_labels: bool) -> ModdlResult<NodeId> {
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, use_default_labels) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, use_default_labels) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, use_default_labels, inits) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, use_default_labels, inits) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -789,7 +804,10 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
-					Some(tag) => Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node)),
+					Some(tag) => {
+						inits.insert(local_tag.unwrap().clone(), *value); // TODO tag.clone() にする
+						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
+					},
 					None => add_node!(node),
 				}
 				
@@ -801,7 +819,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, use_default_labels)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, use_default_labels, inits)
 }
 
 /// 入力のチャンネル数が指定の数になるよう、必要に応じて変換をかます。
