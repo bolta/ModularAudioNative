@@ -164,7 +164,7 @@ fn generate_sequence(
 					},
 				}
 
-				pop_and_restore_params(stack, param_prefix, &mut seq);
+				pop_and_restore_params(stack, &mut seq);
 			}
 			Command::Loop { times, content1, content2 } => {
 				/*
@@ -228,7 +228,7 @@ fn generate_sequence(
 				if let Some(var_name) = &var_name {
 					seq.push(Instruction::DeleteVar { name: var_name.clone() });
 				}
-				pop_and_restore_params(stack, param_prefix, &mut seq);
+				pop_and_restore_params(stack, &mut seq);
 			}
 			Command::Stack { content } => {
 				push(stack);
@@ -236,7 +236,7 @@ fn generate_sequence(
 				let content_name = make_name("seq", seq_seq);
 				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix);
 				seq.push(Instruction::Call { seq_name: content_name });
-				pop_and_restore_params(stack, param_prefix, &mut seq)
+				pop_and_restore_params(stack, &mut seq)
 			}
 			Command::MacroDef { name, content } => {
 				push(stack);
@@ -277,7 +277,7 @@ fn push(stack: &mut Stack) {
 
 /// スタックのトップで設定したパラメータについて以前の値を復元する instrc 列を生成しつつ、
 /// スタックを pop する
-fn pop_and_restore_params(stack: &mut Stack, param_prefix: &str, seq: &mut Vec<Instruction>) {
+fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
 	let names_to_restore = stack.params().keys();
 	let restore_instrcs: Vec<_> = names_to_restore.map(|name| {
 		// 現在の（これから pop する）フレームは除き、それ以前で設定された値を探す
@@ -286,7 +286,7 @@ fn pop_and_restore_params(stack: &mut Stack, param_prefix: &str, seq: &mut Vec<I
 			warn(format!("Could not find the previous value of {} (maybe a bug)", name));
 		}
 
-		prev_value.map(|value| make_param_instrc(param_prefix, name, *value))
+		prev_value.map(|value| Instruction::Value { tag: name.clone(), value: *value })
 	}).filter(|i| i.is_some())
 			.map(|i| i.unwrap())
 			.collect();
@@ -296,13 +296,14 @@ fn pop_and_restore_params(stack: &mut Stack, param_prefix: &str, seq: &mut Vec<I
 	for i in restore_instrcs { seq.push(i) }
 }
 
-fn make_param_instrc(param_prefix: &str, name: &str, value: f32) -> Instruction {
-	Instruction::Value { tag: format!("{}{}", param_prefix, name), value }
+fn qualified_param_name(prefix: &str, name: &str) -> String {
+	format!("{}{}", prefix, name)
 }
+
 fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_prefix: &str, name: &str, value: f32) {
-	seq.push(make_param_instrc(param_prefix, &name, value));
-	// TODO stack.params にも prefix つきで入れる必要がある（でないと t をスタックで扱えない）
-	stack.params_mut().insert(name.to_string(), value);
+	let param_name = qualified_param_name(param_prefix, name);
+	seq.push(Instruction::Value { tag: param_name.clone(), value });
+	stack.params_mut().insert(param_name, value);
 }
 
 fn calc_ticks_from_length(Length { elements: length_spec }: &Length, ticks_per_bar: i32, default: i32) -> i32 {

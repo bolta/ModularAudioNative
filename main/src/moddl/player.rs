@@ -219,7 +219,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				match spec {
 					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
@@ -227,11 +227,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
+								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
 					TrackDef::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle, pctx.use_default_labels)
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -608,7 +608,8 @@ impl Iterator for EventIter {
 }
 
 // TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
 		-> ModdlResult<NodeId> {
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -643,11 +644,11 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	}
 	
 	let mut inits = vec![
-		("#velocity", VELOCITY_INIT),
-		("#volume", VOLUME_INIT),
-		("#detune", DETUNE_INIT),
-		// TODO tempo も
-	].iter().map(|(name, value)| (name.to_string(), *value)).collect();
+		(format!("{}.#velocity", &track), VELOCITY_INIT),
+		(format!("{}.#volume", &track), VOLUME_INIT),
+		(format!("{}.#detune", &track), DETUNE_INIT),
+		("#tempo".to_string(), tempo),
+	].into_iter().collect();
 	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels, &mut inits) ?;
 
 	let tag_set = TagSet {
@@ -805,7 +806,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
 					Some(tag) => {
-						inits.insert(local_tag.unwrap().clone(), *value); // TODO tag.clone() にする
+						inits.insert(tag.clone(), *value);
 						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
 					},
 					None => add_node!(node),
