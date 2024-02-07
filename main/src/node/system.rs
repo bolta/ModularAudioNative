@@ -44,7 +44,7 @@ impl Node for Terminator {
 		}
 		// TODO 無音が続いていたら、も追加
 		if self.thread_count <= 0 {
-			env.post_event(Box::new(TerminateEvent { }));
+			env.broadcast_event(context.elapsed_samples(), Box::new(TerminateEvent { }));
 		}
 	}
 }
