@@ -225,7 +225,7 @@ impl Machine {
 			context.sample_elapsed();
 		}
 
-		println!("finalizing...");
+		println!("{}: finalizing...", &self.name);
 		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
 
 		let end = std::time::Instant::now();
