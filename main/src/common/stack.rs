@@ -7,8 +7,10 @@ pub struct Stack<T: Clone> {
 impl <T: Clone> Stack<T> {
 	pub fn init(init: T) -> Self { Self { stack: vec![init] }}
 	pub fn push_clone(&mut self) {
-		let new_frame = self.top().clone();
-		self.stack.push(new_frame);
+		self.stack.push(self.top().clone());
+	}
+	pub fn push(&mut self, elem: T) {
+		self.stack.push(elem);
 	}
 	pub fn pop(&mut self) {
 		if self.is_bottom() {
@@ -26,4 +28,9 @@ impl <T: Clone> Stack<T> {
 		&mut self.stack[len - 1]
 	}
 	pub fn is_bottom(&self) -> bool { self.stack.len() == 1 }
+
+	/// top から順にフレームを列挙する
+	pub fn iter_frames(&self) -> impl Iterator<Item = &T> + '_ {
+		self.stack.iter().rev()
+	}
 }

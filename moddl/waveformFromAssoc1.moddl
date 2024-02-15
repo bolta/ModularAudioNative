@@ -1,0 +1,11 @@
+@tempo 120
+
+@waveform `vib1`, {
+	data: x[00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 [123456789abcdefedcba9876543210 <123456789abcdefedcba9876543210]],
+	sampleRate: 60,
+}
+
+@instrument ^a, (node (f) f * 2 ^ (waveformPlayer(vib1) * 10 / 1200)) | pulseOsc * adsrEnv
+
+a o4l1v15
+a c1^1^1^1

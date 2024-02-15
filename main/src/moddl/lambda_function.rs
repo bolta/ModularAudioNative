@@ -7,7 +7,7 @@ use super::{
 };
 
 // extern crate parser;
-use parser::moddl::ast::*;
+use parser::{moddl::ast::*, common::Location};
 
 use std::{
 	cell::RefCell,
@@ -33,11 +33,12 @@ impl LambdaFunction {
 }
 impl Function for LambdaFunction {
 	fn signature(&self) -> FunctionSignature { self.params.iter().map(|param| param.name.clone()).collect() }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
 		// 引数のスコープを追加
 		let mut child_vars = Scope::child_of(self.vars.clone());
 		self.params.iter().try_for_each(|param| {
-			let value = args.get(&param.name).or(param.default.as_ref()).ok_or_else(|| Error::ArgMissing { name: param.name.clone() }) ?;
+			let value = args.get(&param.name).or(param.default.as_ref())
+					.ok_or_else(|| error(ErrorType::ArgMissing { name: param.name.clone() }, call_loc.clone())) ?;
 			child_vars.borrow_mut().set(&param.name, value.clone()) ?;
 			ModdlResult::Ok(())
 		}) ?;

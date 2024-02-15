@@ -1,7 +1,9 @@
 use super::{
 	builtin::*,
+	console::*,
 	error::*,
 	evaluator::*,
+	io::Io,
 	path::*,
 	player_option::*,
 	scope::*,
@@ -41,14 +43,16 @@ use crate::{
 	},
 	wave::{
 		waveform_host::*,
-		wav_reader::*,
+		wav_reader::*, waveform::Waveform,
 	}
 };
 extern crate parser;
+use graphviz_rust::attributes::start;
+use nom::Err;
 use parser::{
 	mml::default_mml_parser,
 	moddl::ast::*,
-	moddl::parser::compilation_unit,
+	moddl::parser::compilation_unit, common::{Span, Location},
 };
 
 use std::{
@@ -80,7 +84,7 @@ const TAG_SEQUENCER: &str = "seq";
 #[derive(PartialEq)]
 enum MuteSolo { Mute, Solo }
 
-enum TrackSpec {
+enum TrackDef {
 	Instrument(NodeStructure),
 	Effect(HashSet<String>, NodeStructure),
 	Groove(NodeStructure),
@@ -93,10 +97,10 @@ struct PlayerContext {
 	ticks_per_bar: i32,
 	// トラックごとの instrument/effect
 	// （書かれた順序を保持するため Vec で持つ）
-	track_specs: Vec<(String, TrackSpec)>,
+	track_defs: Vec<(String, TrackDef, Location)>,
 	// effect に接続されていない、「末端」であるトラック。master でミックスする対象
 	terminal_tracks: HashSet<String>,
-	grooves: HashMap<String, String>, // トラックに対する Tick のタグ名
+	grooves: HashMap<String, (String, Location)>, // トラックに対する Tick のタグ名
 	groove_cycle: i32,
 	// トラックごとの MML を蓄積
 	mmls: BTreeMap<String, String>,
@@ -105,6 +109,10 @@ struct PlayerContext {
 	mute_solo_tracks: HashSet<String>,
 	vars: Rc<RefCell<Scope>>,
 	seq_tags: HashSet<String>,
+	// ソースファイルの先頭でだけオプションを許すためのフラグ
+	allows_option_here: bool,
+	// #21 パラメータ名を暗黙にラベルにする。互換動作
+	use_default_labels: bool,
 }
 impl PlayerContext {
 	fn init(moddl_path: &str, sample_rate: i32) -> Self {
@@ -118,7 +126,7 @@ impl PlayerContext {
 			sample_rate,
 			tempo: 120f32,
 			ticks_per_bar: 384,
-			track_specs: vec![],
+			track_defs: vec![],
 			terminal_tracks: HashSet::new(),
 			grooves: HashMap::new(),
 			groove_cycle: 384,
@@ -128,21 +136,26 @@ impl PlayerContext {
 			mute_solo_tracks: HashSet::new(),
 			vars,
 			seq_tags: HashSet::new(),
+			allows_option_here: true,
+			use_default_labels: false,
 		}
 	}
 
-	fn get_track_spec(&self, track: &String) -> Option<&TrackSpec> {
-		self.track_specs.iter().find(|&elem| elem.0 == *track)
-				.map(|elem| &elem.1)
+	fn get_track_def(&self, track: &String) -> Option<(&TrackDef, &Location)> {
+		self.track_defs.iter().find(|&elem| elem.0 == *track)
+				.map(|elem| (&elem.1, &elem.2))
 	}
-	fn add_track_spec(&mut self, track: &String, spec: TrackSpec) -> ModdlResult<()> {
-		match self.get_track_spec(track) {
+	fn add_track_def(&mut self, track: &String, spec: TrackDef, loc: &Location) -> ModdlResult<()> {
+		match self.get_track_def(track) {
 			None => {
-				self.track_specs.push((track.clone(), spec));
+				self.track_defs.push((track.clone(), spec, loc.clone()));
 				Ok(())
 			}
-			Some(_) => {
-				Err(Error::DirectiveDuplicate { msg: track.clone() })
+			Some((_, ex_loc)) => {
+				Err(error(ErrorType::TrackDefDuplicate {
+					track: track.clone(),
+					existing_def_loc: ex_loc.clone(),
+				}, loc.clone()))
 			}
 		}
 	}
@@ -151,8 +164,8 @@ impl PlayerContext {
 fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<PlayerContext> {
 	let mut pctx = PlayerContext::init(moddl_path, sample_rate);
 
-	// TODO パーズエラーをちゃんと処理
-	let (_, CompilationUnit { statements }) = compilation_unit()(moddl) ?;
+	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new(moddl))
+	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
 
 	for stmt in &statements {
 		process_statement(&stmt, &mut pctx) ?;
@@ -162,9 +175,9 @@ fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlR
 }
 
 fn read_file(path: &str) -> ModdlResult<String> {
-	let mut file = File::open(path) ?;
+	let mut file = File::open(path).map_err(|e| error(e.into(), Location::dummy())) ?;
 	let mut moddl = String::new();
-	file.read_to_string(&mut moddl) ?;
+	file.read_to_string(&mut moddl).map_err(|e| error(e.into(), Location::dummy())) ?;
 
 	Ok(moddl)
 }
@@ -193,7 +206,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
 	// for (track, mml) in &pctx.mmls {
-	for (track, spec) in &pctx.track_specs {
+	for (track, spec, def_loc) in &pctx.track_defs {
 		let submachine_idx = nodes.add_submachine(track.clone());
 		let mml = &pctx.mmls.get(track).map(|mml| mml.as_str()).unwrap_or("");
 		let output_node = {
@@ -202,24 +215,25 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				Some(nodes.add_node(submachine_idx, Box::new(Constant::new(0f32))))
 			} else {
 				let seq_tag = match pctx.grooves.get(track) {
-					Some(g) => g.clone(),
+					Some((g, _)) => g.clone(),
 					None => even_tag.clone(),
 				};
 				match spec {
-					TrackSpec::Instrument(structure) => {
+					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, timer, pctx.groove_cycle) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
-					TrackSpec::Effect(source_tracks, structure) => {
+					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, timer, pctx.groove_cycle) ?)
+								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
 					}
-					TrackSpec::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN, &mut PlaceholderStack::init(HashMap::new()), Some(timer), timer, pctx.groove_cycle)
+					TrackDef::Groove(structure) => {
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -310,8 +324,9 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
 	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
 
+	// デバッグ用機能なのでとりあえず蓋をしておく
 	// TODO コマンドオプションで指定されたときだけ出力する
-	output_structure(&nodes_result, &sends_to_receives);
+	// output_structure(&nodes_result, &sends_to_receives);
 
 	let waveforms = Arc::new(pctx.waveforms);
 	let joins: Vec<_> = nodes_result.into_iter()
@@ -366,30 +381,26 @@ pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> Modd
 	Ok(vars.entries().clone())
 }
 
-fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> ModdlResult<()> {
+fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_arg(&args, 0, &mut pctx.vars)?.as_float()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1, &mut pctx.vars)?.as_node_structure()
-								.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-						pctx.add_track_spec(&track, TrackSpec::Instrument(instrm)) ?;
+						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"effect" => {
-					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let source_tracks = evaluate_arg(&args, 1, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let source_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let source_loc = &args[1].loc;
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
 					// 定義を評価する際、source_tracks の各々を placeholder として定義しておく。
@@ -397,82 +408,102 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 					
 					for source_track in &source_tracks {
 						pctx.vars.borrow_mut().set(source_track,
-								Value::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() })) ?;
+								(ValueBody::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() }), source_loc.clone())) ?;
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_arg(&args, 2, &vars)?.as_node_structure()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc)?.as_node_structure()?.0;
 					for track in tracks {
-						pctx.add_track_spec(&track, TrackSpec::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone())) ?;
+						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"grooveCycle" => {
-					(*pctx).groove_cycle = evaluate_arg(&args, 0, &mut pctx.vars)?.as_float()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ? as i32;
+					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0 as i32;
 				},
 				"groove" => {
-					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					if tracks.len() != 1 { return Err(Error::TooManyTracks); }
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
-					let target_tracks = evaluate_arg(&args, 1, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let body = evaluate_arg(&args, 2, &mut pctx.vars)?.as_node_structure()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					pctx.add_track_spec(control_track, TrackSpec::Groove(body)) ?;
+					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-					pctx.grooves.insert(control_track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
+					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
 					for track in &target_tracks {
-						if pctx.grooves.contains_key(track) { return Err(Error::GrooveTargetDuplicate { track: track.clone() }); }
-						pctx.grooves.insert(track.clone(), make_seq_tag(Some(&control_track), &mut pctx.seq_tags));
+						if let Some((_, existing_assign_loc)) = pctx.grooves.get(track) {
+							return Err(error(ErrorType::GrooveTargetDuplicate {
+								track: track.clone(),
+								existing_assign_loc: existing_assign_loc.clone(),
+								}, stmt_loc.clone()));
+						}
+						pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
 					}
 				}
 				"let" => {
-					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
 				"waveform" => {
-					let name = evaluate_arg(&args, 0, &mut pctx.vars)?.as_identifier_literal()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					let value = evaluate_arg(&args, 1, &mut pctx.vars) ?;
-					let path = value.as_string().ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
-					// TODO 読み込み失敗時のエラー処理
-					let index = pctx.waveforms.add(read_wav_file(path.as_str(), None, None, None, None) ?);
-					pctx.vars.borrow_mut().set(&name, Value::WaveformIndex(index));
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc) ?;
+					let waveform = if let Some(path) = value.as_string() {
+						// TODO 読み込み失敗時のエラー処理
+						Ok(read_wav_file(path.as_str(), None, None, None, None)
+						.map_err(|e| error(e.into(), value_loc.clone())) ?)
+					} else if let Some(spec) = value.as_assoc() {
+						Ok(parse_waveform_spec(spec, &value_loc) ?)
+					} else {
+						Err(error(ErrorType::TypeMismatchAny { expected: vec![
+							ValueType::String,
+							ValueType::Assoc,
+						]}, value_loc.clone()))
+					} ?;
+					let index = pctx.waveforms.add(waveform);
+					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 				}
 				"ticksPerBar" => {
-					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_float()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
 				"mute" => {
-					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 				}
 				"solo" => {
-					let tracks = evaluate_arg(&args, 0, &mut pctx.vars)?.as_track_set()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
 				"import" => {
-					let path = evaluate_arg(&args, 0, &mut pctx.vars) ?.as_string()
-							.ok_or_else(|| Error::DirectiveArgTypeMismatch) ?;
+					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_string()?.0;
 					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;
+				}
+				"option" => {
+					if ! pctx.allows_option_here {
+						return Err(error(ErrorType::OptionNotAllowedHere, stmt_loc.clone()));
+					}
+
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					match name.as_str() {
+						"defaultLabels" => {
+							pctx.use_default_labels = true;
+						},
+						other => {
+							// 前方互換性のため警告にとどめる
+							warn(format!("unknown option ignored: {}", other));
+						}
+					}
+					// let value = evaluate_arg(&args, 1, &pctx.vars, stmt_loc);
 				}
 				other => {
 					println!("unknown directive: {}", other);
@@ -481,6 +512,9 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 		}
 		Statement::Mml { tracks, mml } => {
 			for track in tracks {
+				if pctx.get_track_def(track).is_none() {
+					return Err(error(ErrorType::TrackDefNotFound { track: track.clone() }, stmt_loc.clone()));
+				}
 				if let Some(mml_concat) = pctx.mmls.get_mut(track) {
 					mml_concat.push_str(mml.as_str());
 				} else {
@@ -490,8 +524,56 @@ fn process_statement<'a>(stmt: &'a Statement, pctx: &mut PlayerContext) -> Moddl
 		}
 	}
 
+	match stmt {
+		Statement::Directive { name, args: _ } if name.as_str() == "option" => { }
+		_ => { 	pctx.allows_option_here = false; }
+	}
+
 	Ok(())
 }
+
+// 仕様は #16 を参照のこと
+fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlResult<Waveform> {
+	let get_optional_value = |name: &str| spec.get(& name.to_string());
+	let get_required_value = |name: &str| get_optional_value(name).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.to_string() }, loc.clone()));
+
+	let data_values = get_required_value("data")?.as_array()?.0;
+	let sample_rate = get_required_value("sampleRate")?.as_float()?.0 as i32;
+	let master_freq = get_optional_value("masterFreq").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let start_offset = get_optional_value("startOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+
+	// TODO ステレオ対応
+	let channels = 1;
+	let mut data = vec![];
+	for v in data_values {
+		if let Ok((f, _)) = v.as_float() {
+			data.push(f);
+		} else if let Ok((looop, _)) = v.as_array() {
+			match loop_offset {
+				Some(_) => { warn("duplicate loop offset"); }, // assoc に明記されていればそちらが優先
+				None => { loop_offset = Some(data.len() as f32); },
+			}
+			for v in looop {
+				let (f, _) = v.as_float() ?;
+				data.push(f);
+			}
+			match end_offset {
+				Some(_) => { warn("duplicate end offset"); }, // assoc に明記されていればそちらが優先
+				None => { end_offset = Some(data.len() as f32); },
+			}
+		} else {
+			return Err(error(ErrorType::TypeMismatchAny { expected: vec![
+				ValueType::Number,
+				ValueType::Array,
+			]}, v.1.clone()));
+		}
+	}
+
+	Ok(Waveform::new_with_details(channels, sample_rate, data, master_freq, start_offset, end_offset, loop_offset))
+}
+
 /// シーケンサのタグ名を生成する。また生成したタグ名を記録する
 fn make_seq_tag(track: Option<&String>, tags: &mut HashSet<String>) -> String {
 	let tag = match track {
@@ -511,11 +593,22 @@ fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerCon
 	});
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<Value> {
 	if index < args.len() {
-		evaluate(&args[index], vars)
-	} else {
-		Err(Error::DirectiveArgNotFound)
+		let mut value = evaluate(&args[index], vars) ?;
+		// while let (ValueBody::Io(io), loc) = value {
+		// 	value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+		// }
+		// TODO ↑value が Labeled だったときに失敗する。↓汚いので書き直す
+		while value.as_io().is_ok() {
+			let (io, loc) = value.as_io().unwrap();
+			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+		}
+
+		Ok(value)
+
+} else {
+		Err(error(ErrorType::DirectiveArgNotFound, stmt_loc.clone()))
 	}
 }
 
@@ -528,17 +621,23 @@ impl Iterator for EventIter {
 }
 
 // TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>, timer: NodeId, groove_cycle: i32)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
 		-> ModdlResult<NodeId> {
-	let (_, ast) = default_mml_parser::compilation_unit()(mml) ?; // TODO パーズエラーをちゃんとラップする
+	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
+	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
 	let freq_tag = format!("{}_freq", track);
 
-	let tag_set = TagSet {
-		freq: freq_tag.clone(),
-		note: track.to_string(),
-	};
-	let (seqs, features) = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str());
-	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), seqs)));
+	// #22 generate_sequences() に各 Var の初期値が必要になったので、
+	// build_instrument() で初期値が判明した後で行うことにしたが、一方 build_instrument() の入力ノードは
+	// generate_sequences() によって得られていた features に依存しており、循環依存が発生してしまったので、
+	// feature の有無確認を generate_sequences() から切り離して先に行うようにした
+
+	const VELOCITY_INIT: f32 = 1f32;
+	const VOLUME_INIT: f32 = 1f32;
+	const DETUNE_INIT: f32 = 0f32;
+
+	let features = scan_features(&ast);
 
 	let mut input = match override_input {
 		Some(input) => input,
@@ -548,7 +647,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		// セント単位のデチューン
 		// freq_detuned = freq * 2 ^ (detune / 1200)
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(NodeBase::new(0), 0f32)));
+		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(NodeBase::new(0), DETUNE_INIT)));
 		let cents_per_oct = nodes.add_node(submachine_idx, Box::new(Constant::new(1200f32)));
 		let detune_oct = divide(Some(track), nodes, submachine_idx, detune, cents_per_oct) ?; // 必ず成功するはず
 		let const_2 = nodes.add_node(submachine_idx, Box::new(Constant::new(2f32)));
@@ -557,20 +656,31 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		input = freq_detuned;
 	}
 	
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders) ?;
+	let mut inits = vec![
+		(format!("{}.#velocity", &track), VELOCITY_INIT),
+		(format!("{}.#volume", &track), VOLUME_INIT),
+		(format!("{}.#detune", &track), DETUNE_INIT),
+		("#tempo".to_string(), tempo),
+	].into_iter().collect();
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels, &mut inits) ?;
+
+	let tag_set = TagSet {
+		freq: freq_tag.clone(),
+		note: track.to_string(),
+	};
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits);
+	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), track.to_string(), seqs)));
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(NodeBase::new(0), 1f32)));
+		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(NodeBase::new(0), VELOCITY_INIT)));
 		let output_vel = multiply(Some(track), nodes, submachine_idx, output, vel) ?; // 必ず成功するはず
 		output = output_vel;
 	}
 	if features.contains(&Feature::Volume) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		// Var に渡す 1 は velocity, volume の初期値（1 が最大）
-		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(NodeBase::new(0), 1f32)));
+		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(NodeBase::new(0), VOLUME_INIT)));
 		let output_vol = multiply(Some(track), nodes, submachine_idx, output, vol) ?; // 必ず成功するはず
 		output = output_vol;
 	}
@@ -583,13 +693,13 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack) -> ModdlResult<NodeId> {
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, Some($const_tag), placeholders) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, use_default_labels, inits) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, use_default_labels, inits) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -606,23 +716,27 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 			for NodeArgSpec { name, channels, default } in specs {
 				let arg_val = args.iter().find(|(n, _)| **n == *name );
 				let strukt = if let Some(arg_val) = arg_val {
-					arg_val.1.as_node_structure()
-							// node_args に指定された引数なのに NodeStructure に変換できない
-							.ok_or_else(|| Error::NodeFactoryNotFound) ?
+					// arg_val.1.as_node_structure()
+					// 		// node_args に指定された引数なのに NodeStructure に変換できない
+					// 		.ok_or_else(|| error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
+
+					// 変更前のコード↑では NodeFactoryNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
+					arg_val.1.as_node_structure().map(|v| v.0)?
 				} else if let Some(default) = default {
-					Value::Float(default).as_node_structure().unwrap()
+					ValueBody::Float(default).as_node_structure().unwrap()
 				} else {
 					// 必要な引数が与えられていない
-					Err(Error::NodeFactoryNotFound) ?
+					Err(error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
 				};
 				// ラベルが明示されていればそちらを使う
-				let arg_name = arg_val.map(|(_, value)| value.label()).flatten().unwrap_or(name.clone());
+				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
+						.or_else(|| if use_default_labels { Some(name.clone()) } else { None })/* .unwrap_or(name.clone()) */;
 				let arg_node = recurse!(&strukt, input, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
 					// モノラルであるべき node_arg にステレオが与えられた場合、
 					// 勝手にモノラルに変換するとロスが発生するのでエラーにする
-					None => Err(Error::ChannelMismatch),
+					None => Err(error(ErrorType::ChannelMismatch, Location::dummy())),
 				} ?;
 				// node_args.insert(name.clone(), ensure_on_machine(nodes, coerced_arg_node, submachine_idx));
 				let (node_idx, delay) = ensure_on_machine(nodes, coerced_arg_node, submachine_idx);
@@ -681,7 +795,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 
 			// NodeStructure::Identifier(id) => {
 			// 	// id は今のところ引数なしのノード生成しかない
-			// 	let fact = factories.get(id).ok_or_else(|| Error::NodeFactoryNotFound) ?;
+			// 	let fact = factories.get(id).ok_or_else(|| ErrorType::NodeFactoryNotFound) ?;
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			NodeStructure::NodeFactory(fact) => {
@@ -692,7 +806,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// 引数ありのノード生成
 				let fact = match &**factory {
 					NodeStructure::NodeFactory(fact) => Ok(fact),
-					_ => { dbg!("poke"); Err(Error::DirectiveArgTypeMismatch) },
+					_ => Err(error(ErrorType::TypeMismatch { expected: ValueType::NodeFactory }, Location::dummy())),
 				} ?;
 				let (node_args, delay) = make_node_args(args, fact/* , &label */) ?;
 
@@ -704,7 +818,10 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
-					Some(tag) => Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node)),
+					Some(tag) => {
+						inits.insert(tag.clone(), *value);
+						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
+					},
 					None => add_node!(node),
 				}
 				
@@ -716,7 +833,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, use_default_labels, inits)
 }
 
 /// 入力のチャンネル数が指定の数になるよう、必要に応じて変換をかます。
@@ -746,7 +863,7 @@ fn coerce_input(
 		},
 		(2, 1) => None, // ステレオの入力をモノラルに入れる場合、状況によってすべきことが異なるので、呼び出し元に任せる
 		(2, 2) => Some(Ok(input)),
-		_ => Some(Err(Error::ChannelMismatch)),
+		_ => Some(Err(error(ErrorType::ChannelMismatch, Location::dummy()))),
 	}
 }
 
@@ -990,7 +1107,7 @@ fn create_calc_node(
 			}
 			add_node!(node_factory.create_stereo(NodeBase::new(max_delay), coerced_arg_nodes))
 		},
-		ChannelCombination::Other => { Err(Error::ChannelMismatch) },
+		ChannelCombination::Other => { Err(error(ErrorType::ChannelMismatch, Location::dummy())) },
 	}
 }
 

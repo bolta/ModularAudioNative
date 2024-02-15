@@ -1,7 +1,9 @@
 pub mod builtin;
+pub mod console;
 pub mod error;
 pub mod evaluator;
 pub mod function;
+pub mod io;
 pub mod lambda_function;
 pub mod path;
 pub mod player;

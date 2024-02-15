@@ -43,7 +43,7 @@ fn main() {
 				// output: PlayerOutput::Wav { path: "out.wav".to_string() },
 				output: PlayerOutput::Audio,
 			}) {
-				eprintln!("An error occurred: {:?}", e);
+				println!("error: {}: {}", e.loc, e.body);
 				exit(1);
 			}
 		}

@@ -1,0 +1,6 @@
+@tempo 120
+
+@instrument ^a, pulseOsc { duty: 0.125@d } * adsrEnv
+
+a o4l4v15
+a cde { yd,0.5 cde { yd,0.25 cde { v5 fgf } edc } edc } edc

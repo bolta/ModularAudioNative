@@ -33,10 +33,10 @@ impl Node for Terminator {
 	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		// TODO 無音検知
 	}
-	fn process_event(&mut self, event: &dyn Event, _context: &Context, env: &mut Environment) {
+	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
 		if event.event_type() == EVENT_TYPE_JOB_STARTING {
-			println!("{} -> job starting", self.thread_count);
 			self.thread_count += 1;
+			println!("job starting -> {}", self.thread_count);
 		}
 		if event.event_type() == EVENT_TYPE_JOB_ENDED {
 			self.thread_count -= 1;
@@ -44,26 +44,30 @@ impl Node for Terminator {
 		}
 		// TODO 無音が続いていたら、も追加
 		if self.thread_count <= 0 {
-			env.post_event(Box::new(TerminateEvent { }));
+			env.broadcast_event(context.elapsed_samples(), Box::new(TerminateEvent { }));
 		}
 	}
 }
 
 #[derive(Clone)]
 pub struct JobEvent {
+	/// イベントがどこから発生したか。デバッグ用途を想定しており、内容の詳細は規定しない
+	source_name: String,
 	target: EventTarget,
 	event_type: &'static str,
 }
 impl JobEvent {
-	pub fn starting() -> Self {
+	pub fn starting(source_name: String) -> Self {
 		JobEvent {
+			source_name,
 			// TODO グローバルな名前だが、こんなのでいいか？
 			target: EventTarget::Tag("terminator".to_string()),
 			event_type: EVENT_TYPE_JOB_STARTING,
 		}
 	}
-	pub fn ended() -> Self {
+	pub fn ended(source_name: String) -> Self {
 		JobEvent {
+			source_name,
 			target: EventTarget::Tag("terminator".to_string()),
 			event_type: EVENT_TYPE_JOB_ENDED,
 		}

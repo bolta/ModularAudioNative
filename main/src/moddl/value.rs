@@ -1,3 +1,7 @@
+use parser::common::Location;
+
+use super::error::{ModdlResult, error, ErrorType};
+use super::io::Io;
 use super::{
 	function::*,
 };
@@ -6,7 +10,9 @@ use crate::{
 	core::node_factory::*,
 	wave::waveform_host::WaveformIndex,
 };
-
+use enum_display::EnumDisplay;
+use std::cell::RefCell;
+use std::fmt::Display;
 use std::{
 	collections::HashMap,
 	rc::Rc,
@@ -60,26 +66,73 @@ pub enum NodeStructure {
 	Placeholder { name: String },
 }
 
+pub type Value = (ValueBody, Location);
+
+pub trait ValueExtraction {
+	fn as_float(&self) -> ModdlResult<(f32, Location)>;
+	fn as_boolean(&self) -> ModdlResult<(bool, Location)>;
+	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)>;
+	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)>;
+	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)>;
+	fn as_string(&self) -> ModdlResult<(String, Location)>;
+	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
+	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
+	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)>;
+	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
+	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
+	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
+}
+fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
+	match val {
+		Some(val) => Ok((val, loc.clone())),
+		None => Err(error(ErrorType::TypeMismatch { expected }, loc.clone())),
+	}
+}
+fn extract_any<T>(val: Option<T>, loc: &Location, expected: Vec<ValueType>) -> ModdlResult<(T, Location)> {
+	match val {
+		Some(val) => Ok((val, loc.clone())),
+		None => Err(error(ErrorType::TypeMismatchAny { expected }, loc.clone())),
+	}
+}
+impl ValueExtraction for Value {
+	fn as_float(&self) -> ModdlResult<(f32, Location)> { extract(self.0.as_float(), &self.1, ValueType::Number) }
+	fn as_boolean(&self) -> ModdlResult<(bool, Location)> { extract(self.0.as_boolean() , &self.1, ValueType::Number) }
+	fn as_waveform_index(&self) -> ModdlResult<(WaveformIndex, Location)> { extract(self.0.as_waveform_index() , &self.1, ValueType::Waveform) }
+	fn as_track_set(&self) -> ModdlResult<(Vec<String>, Location)> { extract(self.0.as_track_set() , &self.1, ValueType::TrackSet) }
+	fn as_identifier_literal(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_identifier_literal() , &self.1, ValueType::QuotedIdentifier) }
+	fn as_string(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_string() , &self.1, ValueType::String) }
+	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1, ValueType::Array) }
+	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
+	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)> { extract_any(self.0.as_node_structure() , &self.1,
+			vec![ValueType::NodeStructure, ValueType::Number, ValueType::NodeFactory]) }
+	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeFactory) }
+	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
+	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
+}
+
 #[derive(Clone)]
-pub enum Value {
+pub enum ValueBody {
 	Float(f32),
 	WaveformIndex(WaveformIndex),
 	TrackSet(Vec<String>),
 	IdentifierLiteral(String),
 	String(String),
+	Array(Vec<Value>),
+	Assoc(HashMap<String, Value>),
 	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
+	Io(Rc<RefCell<dyn Io>>),
 	Labeled {
 		label: String,
 		inner: Box<Value>,
 	},
 }
 
-impl Value {
+impl ValueBody {
 	pub fn as_float(&self) -> Option<f32> {
 		match self.value() {
 			Self::Float(value) => Some(*value),
@@ -115,6 +168,20 @@ impl Value {
 		}
 	}
 
+	pub fn as_array(&self) -> Option<&Vec<Value>> {
+		match self.value() {
+			Self::Array(content) => Some(content),
+			_ => None,
+		}
+	}
+
+	pub fn as_assoc(&self) -> Option<&HashMap<String, Value>> {
+		match self.value() {
+			Self::Assoc(content) => Some(content),
+			_ => None,
+		}
+	}
+
 	pub fn as_node_structure(&self) -> Option<NodeStructure> {
 		// Value から直接 Node に変換しようとすると NodeHost が必要になったり、
 		// Node をタグ付きで生成したいときに困ったりとよろしくないことが多いので、
@@ -143,9 +210,16 @@ impl Value {
 		}
 	}
 
-	fn value(&self) -> &Value {
+	pub fn as_io(&self) -> Option<Rc<RefCell<dyn Io>>> {
+		match self.value() {
+			Self::Io(io) => Some(io.clone()),
+			_ => None,
+		}
+	}
+
+	fn value(&self) -> &ValueBody {
 		let result = match self {
-			Self::Labeled { inner, .. } => inner.value(),
+			Self::Labeled { inner, .. } => inner.0.value(),
 			_ => self,
 		};
 
@@ -165,8 +239,22 @@ impl Value {
 	}
 }
 
+#[derive(Copy, Clone, Debug, EnumDisplay)]
+pub enum ValueType {
+	Number,
+	Waveform,
+	TrackSet,
+	QuotedIdentifier,
+	String,
+	Array,
+	Assoc,
+	NodeStructure,
+	NodeFactory,
+	Function,
+	Io,
+}
+
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
 // 代表の値として true = 1、false = -1 とする
-pub const VALUE_FALSE: Value = Value::Float(-1f32);
-pub const VALUE_TRUE: Value = Value::Float(1f32);
-
+pub fn false_value() -> Value { (ValueBody::Float(-1f32), Location::dummy()) }
+pub fn true_value() -> Value { (ValueBody::Float(1f32), Location::dummy()) }

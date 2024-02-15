@@ -30,11 +30,12 @@ pub struct Sequencer {
 	context: Context,
 }
 impl Sequencer {
-	pub fn new(base: NodeBase, sequences: HashMap<String, Sequence>) -> Self {
+	pub fn new(base: NodeBase, name: String, sequences: HashMap<String, Sequence>) -> Self {
 		Self {
 			base_: base,
 			sequences,
 			context: Context {
+				name,
 				stack: Stack::init(StackFrame {
 					seq_idx: SequenceName(SEQUENCE_NAME_MAIN.to_string()),
 					instrc_idx: 0,
@@ -78,6 +79,7 @@ struct StackFrame {
 }
 
 struct Context {
+	name: String,
 	stack: Stack,
 	wait: i32,
 }
@@ -93,7 +95,7 @@ impl Context {
 			let instrc_idx = self.stack.top_mut().instrc_idx as usize;
 			// TODO 無限ループで先頭に戻ったときも開始扱いになってしまう
 			if instrc_idx == 0usize && self.stack.is_bottom() {
-				env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::starting()));
+				env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::starting(self.name.clone())));
 			}
 			// TODO 毎回ハッシュテーブルを引くと遅いか？
 			let mut sequence = sequences.get(& self.stack.top().seq_idx.0).unwrap();
@@ -109,7 +111,7 @@ impl Context {
 
 				// シーケンスの終わりに達した
 				if self.stack.is_bottom() {
-					env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::ended()));
+					env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::ended(self.name.clone())));
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
 					self.stack.pop(); // 呼び出し元の続きに復帰

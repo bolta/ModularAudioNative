@@ -225,7 +225,7 @@ impl Machine {
 			context.sample_elapsed();
 		}
 
-		println!("finalizing...");
+		println!("{}: finalizing...", &self.name);
 		for node in nodes.nodes_mut().iter_mut().rev() { node.finalize(context, &mut env); }
 
 		let end = std::time::Instant::now();
@@ -251,7 +251,7 @@ impl Machine {
 				let delay_down = nodes[NodeIndex(i)].delay_samples();
 				let delay_up = nodes[upstream_idx.unchanneled()].delay_samples();
 				let delay_idx = delay_up as i32 - delay_down as i32;
-				if delay_idx > 0 { panic!("delay_idx must be non_positive") };
+				if delay_idx > 0 { panic!("delay_idx must be non-positive") };
 
 				let instrcs = (0 .. count).map(move |j| Instruction::Load {
 					to: InputIndex(input_idx.0 + j),
