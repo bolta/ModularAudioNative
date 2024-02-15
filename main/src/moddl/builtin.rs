@@ -2,9 +2,11 @@ use parser::common::Location;
 
 /// ビルトイン変数を提供する。今後プラグインの読み込みなどをここでやる想定
 use super::{
+	error::*,
 	function::*,
+	io::*,
 	scope::*,
-	value::*, error::{error, ErrorType, ModdlResult},
+	value::*,
 };
 use crate::{
 	core::{
@@ -47,6 +49,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	result.insert("false".to_string(), false_value());
 	result.insert("true".to_string(), true_value());
 
+	// musical
 	add_node_factory!("sineOsc", SineOscFactory { });
 	add_node_factory!("triangleOsc", TriangleOscFactory { });
 	add_node_factory!("sawOsc", SawOscFactory { });
@@ -66,18 +69,24 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("nesFreq", NesFreq { });
 	add_function!("delay", Delay::new(sample_rate));
 
+	// numerical
 	add_function!("log", Log { });
 	add_function!("log10", Log10 { });
 	add_function!("sin", Sin { });
 	add_function!("cos", Cos { });
 	add_function!("tan", Tan { });
 
+	// functional
 	add_function!("map", Map { });
 	add_function!("reduce", Reduce { });
+
+	// io
+	add_function!("then", Then { });
 
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_function!("twice", Twice { });
+	add_function!("rand", Rand { });
 
 	result
 }
@@ -167,15 +176,6 @@ unary_math_func!(Tan, TanCalc);
 
 // 最低限の配列操作のため、とりあえず map と reduce を作っておく
 
-fn check_arity(sig: &FunctionSignature, expected: usize, loc: &Location) -> ModdlResult<()> {
-	let actual = sig.len();
-	if actual == expected {
-		Ok(())
-	} else {
-		Err(error(ErrorType::ArityMismatch { expected, actual }, loc.clone()))
-	}
-}
-
 pub struct Map { }
 impl Function for Map {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
@@ -214,5 +214,24 @@ impl Function for Reduce {
 			]), vars, reducer_loc.clone())?.0;
 		}
 		Ok((result, call_loc))
+	}
+}
+
+pub struct Rand { }
+impl Function for Rand {
+	fn signature(&self) -> FunctionSignature { vec![] }
+	fn call(&self, _args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		Ok((ValueBody::Io(Rc::new(RefCell::new(RandIo::new()))), call_loc))
+	}
+}
+
+pub struct Then { }
+impl Function for Then {
+	fn signature(&self) -> FunctionSignature { vec!["predecessor".to_string(), "successor".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (predecessor, _) = get_required_arg(args, "predecessor", &call_loc)?.as_io() ?;
+		let (successor, _) = get_required_arg(args, "successor", &call_loc)?.as_function() ?;
+
+		Ok((ValueBody::Io(Rc::new(RefCell::new(ThenIo::new(predecessor.clone(), successor.clone(), vars.clone())))), call_loc))
 	}
 }

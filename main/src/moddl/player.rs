@@ -1,11 +1,13 @@
 use super::{
 	builtin::*,
 	console::*,
+	error::*,
 	evaluator::*,
+	io::Io,
 	path::*,
 	player_option::*,
 	scope::*,
-	value::*, error::{error, ErrorType, ModdlResult, nom_error_to_owned},
+	value::*,
 };
 use crate::{
 	calc::*,
@@ -384,20 +386,20 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 				},
 				"instrument" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
 						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"effect" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
-					let source_tracks = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let source_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					let source_loc = &args[1].loc;
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
@@ -410,21 +412,21 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_arg(&args, 2, &vars, stmt_loc)?.as_node_structure()?.0;
+					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc)?.as_node_structure()?.0;
 					for track in tracks {
 						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"grooveCycle" => {
-					(*pctx).groove_cycle = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0 as i32;
+					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0 as i32;
 				},
 				"groove" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
-					let target_tracks = evaluate_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
-					let body = evaluate_arg(&args, 2, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
 					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
 					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
@@ -439,13 +441,13 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"let" => {
-					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
-					let value = evaluate_arg(&args, 1, &mut pctx.vars, stmt_loc) ?;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
 				"waveform" => {
-					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
-					let (value, value_loc) = evaluate_arg(&args, 1, &pctx.vars, stmt_loc) ?;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc) ?;
 					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
 						Ok(read_wav_file(path.as_str(), None, None, None, None)
@@ -462,25 +464,25 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 				}
 				"ticksPerBar" => {
-					let value = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
 				"mute" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 				}
 				"solo" => {
-					let tracks = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
 				"import" => {
-					let path = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_string()?.0;
+					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_string()?.0;
 					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
@@ -491,7 +493,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						return Err(error(ErrorType::OptionNotAllowedHere, stmt_loc.clone()));
 					}
 
-					let name = evaluate_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
 					match name.as_str() {
 						"defaultLabels" => {
 							pctx.use_default_labels = true;
@@ -591,10 +593,21 @@ fn set_mute_solo(mute_solo: MuteSolo, tracks: &Vec<String>, pctx: &mut PlayerCon
 	});
 }
 
-fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<Value> {
+fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<Value> {
 	if index < args.len() {
-		evaluate(&args[index], vars)
-	} else {
+		let mut value = evaluate(&args[index], vars) ?;
+		// while let (ValueBody::Io(io), loc) = value {
+		// 	value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+		// }
+		// TODO ↑value が Labeled だったときに失敗する。↓汚いので書き直す
+		while value.as_io().is_ok() {
+			let (io, loc) = value.as_io().unwrap();
+			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+		}
+
+		Ok(value)
+
+} else {
 		Err(error(ErrorType::DirectiveArgNotFound, stmt_loc.clone()))
 	}
 }

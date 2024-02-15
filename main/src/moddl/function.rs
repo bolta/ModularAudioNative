@@ -22,6 +22,15 @@ pub trait Function {
 	// TODO 副作用が必要な場合もあるので引数はもっと増える
 }
 
+pub fn check_arity(sig: &FunctionSignature, expected: usize, loc: &Location) -> ModdlResult<()> {
+	let actual = sig.len();
+	if actual == expected {
+		Ok(())
+	} else {
+		Err(error(ErrorType::ArityMismatch { expected, actual }, loc.clone()))
+	}
+}
+
 // for experiments
 pub struct Twice { }
 impl Function for Twice {

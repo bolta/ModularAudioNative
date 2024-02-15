@@ -1,6 +1,7 @@
 use parser::common::Location;
 
 use super::error::{ModdlResult, error, ErrorType};
+use super::io::Io;
 use super::{
 	function::*,
 };
@@ -10,6 +11,7 @@ use crate::{
 	wave::waveform_host::WaveformIndex,
 };
 use enum_display::EnumDisplay;
+use std::cell::RefCell;
 use std::fmt::Display;
 use std::{
 	collections::HashMap,
@@ -78,6 +80,7 @@ pub trait ValueExtraction {
 	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)>;
 	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
+	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
 }
 fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
 	match val {
@@ -104,6 +107,7 @@ impl ValueExtraction for Value {
 			vec![ValueType::NodeStructure, ValueType::Number, ValueType::NodeFactory]) }
 	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeFactory) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
+	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
 }
 
 #[derive(Clone)]
@@ -121,6 +125,7 @@ pub enum ValueBody {
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
+	Io(Rc<RefCell<dyn Io>>),
 	Labeled {
 		label: String,
 		inner: Box<Value>,
@@ -205,6 +210,13 @@ impl ValueBody {
 		}
 	}
 
+	pub fn as_io(&self) -> Option<Rc<RefCell<dyn Io>>> {
+		match self.value() {
+			Self::Io(io) => Some(io.clone()),
+			_ => None,
+		}
+	}
+
 	fn value(&self) -> &ValueBody {
 		let result = match self {
 			Self::Labeled { inner, .. } => inner.0.value(),
@@ -239,6 +251,7 @@ pub enum ValueType {
 	NodeStructure,
 	NodeFactory,
 	Function,
+	Io,
 }
 
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
