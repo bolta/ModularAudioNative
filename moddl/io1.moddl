@@ -1,9 +1,9 @@
 // 100 ～ 250 のランダムなテンポで演奏する。意味はないがラベルもつける
-@tempo rand()->then(func (r) 100 + 150 * r)@t
+@tempo rand->then(func (r) 100 + 150 * r)@t
 
 // o4c ～ o5c のランダムなキーで演奏する。
 // 全てのトラックの定義は同一にもかかわらず、キーは各トラックでバラバラになる（r の値が都度異なる）
-@instrument ^abc, rand()->then(func (r) node (f) (f * (r + 1)) | pulseOsc * adsrEnv)
+@instrument ^abc, rand->then(func (r) node (f) (f * (r + 1)) | pulseOsc * adsrEnv)
 
 abc o4l8v15
 

@@ -12,15 +12,15 @@ pub trait Io {
 	fn perform(&mut self, loc: &Location) -> ModdlResult<Value>;
 }
 
-pub struct RandIo {
+pub struct Rand {
 	gen: StdRng,
 }
-impl RandIo {
+impl Rand {
 	pub fn new() -> Self {
 		Self { gen: StdRng::from_entropy() }
 	}
 }
-impl Io for RandIo {
+impl Io for Rand {
 	fn perform(&mut self, loc: &Location) -> ModdlResult<Value> {
 		Ok((ValueBody::Float(self.gen.gen()), loc.clone()))
 	}

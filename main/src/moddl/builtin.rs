@@ -45,6 +45,11 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 			result.insert($name.to_string(), (ValueBody::Function(Rc::new($fact)), Location::dummy()));
 		}
 	}
+	macro_rules! add_io {
+		($name: expr, $io: expr) => {
+			result.insert($name.to_string(), (ValueBody::Io(Rc::new(RefCell::new($io))), Location::dummy()));
+		}
+	}
 
 	result.insert("false".to_string(), false_value());
 	result.insert("true".to_string(), true_value());
@@ -86,7 +91,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_function!("twice", Twice { });
-	add_function!("rand", Rand { });
+	add_io!("rand", Rand::new());
 
 	result
 }
@@ -214,14 +219,6 @@ impl Function for Reduce {
 			]), vars, reducer_loc.clone())?.0;
 		}
 		Ok((result, call_loc))
-	}
-}
-
-pub struct Rand { }
-impl Function for Rand {
-	fn signature(&self) -> FunctionSignature { vec![] }
-	fn call(&self, _args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
-		Ok((ValueBody::Io(Rc::new(RefCell::new(RandIo::new()))), call_loc))
 	}
 }
 
