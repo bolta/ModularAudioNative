@@ -5,9 +5,10 @@
 
 // http://ngs.no.coocan.jp/doc/wiki.cgi/datapack?page=3%2E4+YM2413%28OPLL%29
 // 式 7.3
-@let `a`, 1
-@let `b`, 0.9
-@let `fm`, feedback->then(func (fb) (a * sin(phase + b * fb->at(1))) | fb->at(0))
+@let `fm`,
+	a = 1;
+	b = 0.9;
+	feedback->then(func (fb) (a * sin(phase + b * fb->at(1))) | fb->at(0))
 
 @instrument ^a, fm * adsrEnv
 

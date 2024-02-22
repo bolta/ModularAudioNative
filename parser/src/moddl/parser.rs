@@ -250,6 +250,33 @@ parser![lambda_func_expr, Box<Expr>, {
 	)
 }];
 
+parser![let_expr, Box<Expr>, {
+	map_res(
+		loc(tuple((
+			terminated(
+				si!(identifier()),
+				ss!(char('=')),
+			),
+			terminated(
+				ss!(expr()),
+				ss!(char(';')),
+			),
+			si!(expr()),
+		))),
+		// <id> = <def>; <body> は (<id> => <body>)(<def>) の糖衣構文
+		|((id, def, body), loc)| { ok(Box::new(Expr::new(ExprBody::FunctionCall {
+			function: Box::new(Expr::new(ExprBody::LambdaFunction {
+				params: vec![FunctionParam { name: id.to_string(), default: None }],
+				body,
+			}, loc.clone())),
+			args: Args {
+				unnamed: vec![def],
+				named: vec![],
+			}
+}		, loc))) }
+	)
+}];
+
 parser![lambda_node_expr, Box<Expr>, {
 	map_res(
 		loc(preceded(
@@ -313,6 +340,7 @@ parser![primary_expr, Box<Expr>, {
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
 		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
+		let_expr(),
 		identifier_expr(),
 		negative_expr(),
 		parenthesized_expr(),
@@ -583,9 +611,9 @@ parser![expr, Box<Expr>, {
 parser![directive_statement, Statement, {
 	map_res(
 			tuple((
-				si!(char('@')),
+				ss!(char('@')),
 				si!(identifier()),
-				opt(separated_list0(si!(char(',')), si!(expr()))),
+				opt(separated_list0(ss!(char(',')), si!(expr()))),
 				statement_ending(),
 			)),
 			|(_, name, args, _)| ok(Statement::Directive {
