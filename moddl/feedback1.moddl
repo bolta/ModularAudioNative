@@ -8,7 +8,10 @@
 @let `fm`,
 	a = 1;
 	b = 0.9;
-	feedback->then(func (fb) (a * sin(phase + b * fb->at(1))) | fb->at(0))
+	fb = do feedback;
+	fbIn = fb->at(0);
+	fbOut = fb->at(1);
+	(a * sin(phase + b * fbOut)) | fbIn
 
 @instrument ^a, fm * adsrEnv
 
