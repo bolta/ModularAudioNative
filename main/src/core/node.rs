@@ -73,7 +73,11 @@ pub enum Activeness {
 	Active,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FeedbackId(pub usize);
+
 /// 利用者側で特別扱いが必要な Node の場合に設定する
 pub enum Feature {
-	FeedbackIn { out: ChanneledNodeIndex },
+	FeedbackIn { id: FeedbackId },
+	FeedbackOut { id: FeedbackId },
 }

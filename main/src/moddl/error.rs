@@ -42,6 +42,7 @@ pub enum ErrorType {
 	GrooveControllerTrackMustBeSingle,
 	GrooveTargetDuplicate { track: String, existing_assign_loc: Location },
 	OptionNotAllowedHere,
+	IndexOutOfBounds,
 
 	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
 	Playing,

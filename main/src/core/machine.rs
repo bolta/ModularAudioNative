@@ -101,6 +101,7 @@ impl Machine {
 		let mut update_flags = make_update_flags(&activenesses);
 // dbg!(&update_flags);
 		// let mut values = vec_with_length(value_count.0);
+		let feedback_routes = make_feedback_routes(nodes, self.name.as_str());
 
 		// NodeIndex -> Delay
 		// 各ノードが最大何サンプル遅れて参照されるか
@@ -137,7 +138,7 @@ impl Machine {
 		// TODO 結果的に active, evential になるノードと、evential なノードがどの変数に依存するかを求める
 		// 
 
-		let instructions = self.compile(nodes, &upstreams, &value_offsets);
+		let instructions = self.compile(nodes, &upstreams, &value_offsets, &feedback_routes);
 		let events = RingBuffer::<Box<dyn Event>>::new(EVENT_QUEUE_CAPACITY);
 		let (mut events_prod, mut events_cons) = events.split();
 
@@ -237,7 +238,8 @@ impl Machine {
 	}
 
 	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<ChanneledNodeIndex>>,
-			value_offsets: &HashMap<NodeIndex, ValueIndex>) -> Vec<Instruction> {
+			value_offsets: &HashMap<NodeIndex, ValueIndex>,
+			feedback_routes: &HashMap<FeedbackInIndex, FeedbackOutIndex>) -> Vec<Instruction> {
 		// nodes が topologically sorted であることを期待している。
 		// 普通に構築すればそうなるはず…
 		(0usize .. nodes.count()).flat_map(|i| {
@@ -273,12 +275,14 @@ impl Machine {
 					})
 					.chain(node.features().iter().filter_map(|f| {
 						match f {
-							&Feature::FeedbackIn { out } => {
-								let to = value_of(out.unchanneled()).expect("Feedback OUT node must have value index");
+							&Feature::FeedbackIn { .. } => {
+								// TODO 必ずあるはずだが、今一度確認
+								let to = value_of(feedback_routes.get(&FeedbackInIndex(node_idx)).unwrap().0)
+										.expect("Feedback OUT node must have value index");
 								let from = value_of(node_idx).expect("Feedback IN node must have value index");
 								Some(Instruction::Copy { to, from })
 							},
-							// _ => None, // unreachable so far
+							_ => None,
 						}
 					}).collect::<Vec<_>>())
 					.chain(if node.implements_update() {
@@ -534,6 +538,50 @@ fn make_update_flags(activenesses: &Vec<ComputedActiveness>) -> UpdateFlags {
 	});
 
 	UpdateFlags::new(init, event_patterns)
+}
+
+// TODO channeled にする
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct FeedbackInIndex(NodeIndex);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct FeedbackOutIndex(NodeIndex);
+fn make_feedback_routes(nodes: &NodeHost, machine_name: &str) -> HashMap<FeedbackInIndex, FeedbackOutIndex> {
+	// TODO 全体的に書き方がださいので改善する
+	let ins = {
+		let mut ins = HashMap::new();
+		for (in_idx, node) in nodes.nodes().iter().enumerate() {
+			for feature in node.features() {
+				match feature {
+					Feature::FeedbackIn { id } => {
+						ins.insert(id, FeedbackInIndex(NodeIndex(in_idx)));
+						// TODO break
+					},
+					_ => { },
+				}
+			}
+		}
+		ins
+	};
+	let outs = {
+		let mut outs = HashMap::new();
+		for (out_idx, node) in nodes.nodes().iter().enumerate() {
+			for feature in node.features() {
+				match feature {
+					Feature::FeedbackOut { id } => {
+						outs.insert(id, FeedbackOutIndex(NodeIndex(out_idx)));
+						// TODO out が複数ある場合に対応できていないが、対応必要か？
+					},
+					_ => { },
+				}
+			}
+		}
+		outs
+	};
+
+	ins.iter().map(|(id, in_idx)| {
+		let out_idx = outs.get(id).unwrap(); // TODO in だけがあり out がない場合。ちゃんとエラー処理する
+		(in_idx.clone(), out_idx.clone())
+	}).collect()
 }
 
 

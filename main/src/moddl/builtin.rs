@@ -22,7 +22,7 @@ use crate::{
 		noise::*,
 		osc::*,
 		transit::*,
-		wave::*,
+		wave::*, feedback::FeedbackIo,
 	},
 };
 
@@ -81,12 +81,17 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("cos", Cos { });
 	add_function!("tan", Tan { });
 
+	add_function!("at", At { });
+
 	// functional
 	add_function!("map", Map { });
 	add_function!("reduce", Reduce { });
 
 	// io
 	add_function!("then", Then { });
+
+	// feedback
+	add_io!("feedback", FeedbackIo::new());
 
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
@@ -180,6 +185,18 @@ unary_math_func!(Cos, CosCalc);
 unary_math_func!(Tan, TanCalc);
 
 // 最低限の配列操作のため、とりあえず map と reduce を作っておく
+
+// TODO [] 演算子にしたい
+pub struct At { }
+impl Function for At {
+	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "index".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
+		let (index, _) = get_required_arg(args, "index", &call_loc)?.as_float() ?;
+
+		source.get(index as usize).map(|elem| elem.clone()).ok_or_else(|| error(ErrorType::IndexOutOfBounds, call_loc.clone()))
+	}
+}
 
 pub struct Map { }
 impl Function for Map {
