@@ -1,0 +1,15 @@
+@tempo 120
+
+@let `pi`, 3.14159265358979
+@let `phase`, (sawOsc + 1) * pi
+
+// http://ngs.no.coocan.jp/doc/wiki.cgi/datapack?page=3%2E4+YM2413%28OPLL%29
+// 式 7.3
+@let `a`, 1
+@let `b`, 0.9
+@let `fm`, feedback->then(func (fb) (a * sin(phase + b * fb->at(1))) | fb->at(0))
+
+@instrument ^a, fm * adsrEnv
+
+a o4l8v15
+a cdefg2

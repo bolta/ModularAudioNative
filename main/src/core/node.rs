@@ -34,6 +34,7 @@ pub trait Node: Send {
 	fn channels(&self) -> i32;
 	fn upstreams(&self) -> Upstreams;
 	fn activeness(&self) -> Activeness;
+	fn features(&self) -> Vec<Feature> { vec![] }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }
 	// TODO inputs も output と同様にスライスでいいはず
 	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) { }
@@ -70,4 +71,13 @@ pub enum Activeness {
 
 	/// 常に更新が必要（状態を持っていて勝手に出力が変わる）
 	Active,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FeedbackId(pub usize);
+
+/// 利用者側で特別扱いが必要な Node の場合に設定する
+pub enum Feature {
+	FeedbackIn { id: FeedbackId },
+	FeedbackOut { id: FeedbackId },
 }
