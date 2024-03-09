@@ -620,6 +620,8 @@ impl Iterator for EventIter {
 	fn next(&mut self) -> Option<Box<dyn crate::core::event::Event>> { None }
 }
 
+const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこから取るようにする
+
 // TODO 引数を整理できるか
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
 		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
@@ -636,6 +638,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	const VELOCITY_INIT: f32 = 1f32;
 	const VOLUME_INIT: f32 = 1f32;
 	const DETUNE_INIT: f32 = 0f32;
+	// let var_default_key = 
 
 	let features = scan_features(&ast);
 
@@ -655,20 +658,26 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		let freq_detuned = multiply(Some(track), nodes, submachine_idx, input, freq_ratio) ?; // 必ず成功するはず
 		input = freq_detuned;
 	}
-	
-	let mut inits = vec![
-		(format!("{}.#velocity", &track), VELOCITY_INIT),
-		(format!("{}.#volume", &track), VOLUME_INIT),
-		(format!("{}.#detune", &track), DETUNE_INIT),
-		("#tempo".to_string(), tempo),
+
+	let mut inits: HashMap<(String, String), Sample> = vec![
+		((format!("{}.#velocity", &track), VAR_DEFAULT_KEY.to_string()), VELOCITY_INIT),
+		((format!("{}.#volume", &track), VAR_DEFAULT_KEY.to_string()), VOLUME_INIT),
+		((format!("{}.#detune", &track), VAR_DEFAULT_KEY.to_string()), DETUNE_INIT),
+		(("#tempo".to_string(), VAR_DEFAULT_KEY.to_string()), tempo),
 	].into_iter().collect();
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, use_default_labels, &mut inits) ?;
+	let mut label_defaults: HashMap<String, String> = inits.iter().map(|((label, key), _)| (label.clone(), key.clone())).into_iter().collect();
+	// TODO DRY
+	label_defaults.insert(format!("{}_freq", track), VAR_DEFAULT_KEY.to_string());
+	/* let label_defaults =  */collect_label_defaults(instrm_def, track, use_default_labels, &mut label_defaults);
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, use_default_labels, &mut inits) ?;
+
+	// let label_defaults = collect_label_defaults(instrm_def, track);
 
 	let tag_set = TagSet {
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits);
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults);
 	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), track.to_string(), seqs)));
 
 	let mut output = instrm;
@@ -691,15 +700,69 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	Ok(output)
 }
 
+fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) /* -> HashMap<String, String> */ {
+	fn visit_struct(strukt: &NodeStructure, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) {
+		match strukt {
+			NodeStructure::NodeCreation { factory, args, label } => {
+				for (_, (arg, _)) in args {
+					if let ValueBody::NodeStructure(arg) = arg {
+						visit_struct(arg, track, use_default_labels, result);
+					}
+				}
+				if let (Some(label), Some(default_key)) = (label, factory.default_prop_key()) {
+					// TODO ラベル名をトラック名で修飾する処理は共通化する
+					result.insert(format!("{}.{}", track, label), default_key.clone());
+				}
+				// 互換性対応：全て Var と見なす
+				if use_default_labels {
+					for arg_spec in factory.node_arg_specs() {
+						// TODO ラベル名をトラック名で修飾する処理は共通化する
+						result.insert(format!("{}.{}", track, arg_spec.name), VAR_DEFAULT_KEY.to_string());
+					}
+				}
+			},
+			NodeStructure::Calc { args, .. } => {
+				for arg in args { visit_struct(arg, track, use_default_labels, result); }
+			},
+			NodeStructure::Connect(lhs, rhs) => {
+				visit_struct(lhs, track, use_default_labels, result);
+				visit_struct(rhs, track, use_default_labels, result);
+			},
+			NodeStructure::Condition { cond, then, els } => {
+				visit_struct(cond, track, use_default_labels, result);
+				visit_struct(then, track, use_default_labels, result);
+				visit_struct(els, track, use_default_labels, result);
+			},
+			NodeStructure::Lambda { body, .. } => {
+				visit_struct(body, track, use_default_labels, result);
+			},
+			NodeStructure::Constant { label, .. } => {
+				if let Some(label) = label {
+					// TODO ラベル名をトラック名で修飾する処理は共通化する
+					// TODO VarFactory から取った方が統一感ある
+					result.insert(format!("{}.{}", track, label), VAR_DEFAULT_KEY.to_string());
+				}
+			},
+			NodeStructure::Placeholder { .. } => { },
+
+		}
+	}
+
+	// let mut result = HashMap::new();
+	visit_struct(instrm_def, track, use_default_labels, result);
+
+	// result
+}
+
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, use_default_labels: bool, inits: &mut HashMap<String, f32>) -> ModdlResult<NodeId> {
+fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, use_default_labels, inits) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, use_default_labels, inits) };
+			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits) };
+			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -798,28 +861,32 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 			// 	let fact = factories.get(id).ok_or_else(|| ErrorType::NodeFactoryNotFound) ?;
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
-			NodeStructure::NodeFactory(fact) => {
-				let (node_args, delay) = make_node_args(&HashMap::new(), fact) ?;
-				apply_input(Some(track), nodes, submachine_idx, fact, delay, &node_args, input)
-			},
-			NodeStructure::NodeWithArgs { factory, label: _, args } => {
-				// 引数ありのノード生成
-				let fact = match &**factory {
-					NodeStructure::NodeFactory(fact) => Ok(fact),
-					_ => Err(error(ErrorType::TypeMismatch { expected: ValueType::NodeFactory }, Location::dummy())),
-				} ?;
-				let (node_args, delay) = make_node_args(args, fact/* , &label */) ?;
+			NodeStructure::NodeCreation { factory, args, label } => {
+				let (node_args, delay) = make_node_args(args, factory) ?;
 
-				apply_input(Some(track), nodes, submachine_idx, fact, delay, &node_args, input)
-			},
+				let local_tag = label.as_ref().or(default_tag.as_ref());
+				// TODO 共通化
+				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
+				if let Some(tag) = &full_tag {
+					for (key, value) in factory.initial_values() {
+						inits.insert((tag.clone(), key), value);
+					}
+				}
+
+				apply_input(Some(track), nodes, submachine_idx, factory, delay, &node_args, full_tag,input)
+			}
+			// TODO Constant は、NodeCreation で VarFactory を使ったのと同じにできるはず。共通化する
 			NodeStructure::Constant { value, label } => {
 				let node = Box::new(Var::new(NodeBase::new(0), *value));
 				let local_tag = label.as_ref().or(default_tag.as_ref());
+				// TODO 共通化
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
 					Some(tag) => {
-						inits.insert(tag.clone(), *value);
+						// TODO ここで label_defaults から見つからないことはありえないはずだが、補足できるエラー（内部エラー的な）として軟着陸させた方がよさそう
+						let default = label_defaults.get(&tag).unwrap();
+						inits.insert((tag.clone(), default.clone()), *value);
 						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
 					},
 					None => add_node!(node),
@@ -833,8 +900,23 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, use_default_labels, inits)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits)
 }
+
+// fn create_node_by_factory(factory: &Rc<dyn NodeFactory>, args: &HashMap<String, Value>) {
+// 	let (node_args, delay) = make_node_args(args, factory) ?;
+
+// 	let local_tag = label.as_ref().or(default_tag.as_ref());
+// 	// TODO 共通化
+// 	let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
+// 	if let Some(tag) = &full_tag {
+// 		for (key, value) in factory.initial_values() {
+// 			inits.insert((tag.clone(), key), value);
+// 		}
+// 	}
+
+// 	apply_input(Some(track), nodes, submachine_idx, factory, delay, &node_args, full_tag,input)
+// }
 
 /// 入力のチャンネル数が指定の数になるよう、必要に応じて変換をかます。
 /// 変換が必要なければ入力をそのまま返す。
@@ -875,16 +957,22 @@ fn apply_input(
 	fact: &Rc<dyn NodeFactory>,
 	max_node_arg_delay: u32,
 	node_args: &NodeArgs,
+	label: Option<String>,
 	input: NodeId,
 ) -> ModdlResult<NodeId> {
 	// TODO 共通化
 	macro_rules! add_node {
 		// トラックに属する node は全てトラック名のタグをつける
-		($new_node: expr) => {
-			Ok(match track {
-				Some(track) => nodes.add_node_with_tag(submachine_idx, track.to_string(), $new_node),
-				None => nodes.add_node(submachine_idx, $new_node),
-			})
+		($label: expr, $new_node: expr) => {
+			{
+				let label: &Option<String> = &$label;
+				// let mut add_node = |is_labeled_node, new_node| Ok::<NodeId, Error>({
+				let mut tags: Vec<String> = vec![];
+				if let Some(full_tag) = label { tags.push(full_tag.clone()); }
+				if let Some(track) = track { tags.push(track.to_string()); }
+
+				Ok(nodes.add_node_with_tags(submachine_idx, tags, $new_node))
+			}
 		}
 	}
 
@@ -894,34 +982,34 @@ fn apply_input(
 			// add_node!(fact.create_node(node_args, coerced_input.node(submachine_idx)))
 			let (input_idx, input_delay) = ensure_on_machine(nodes, coerced_input, submachine_idx);
 			let max_delay = max_node_arg_delay.max(input_delay);
-			add_node!(fact.create_node(NodeBase::new(max_delay), node_args, input_idx))
+			add_node!(label, fact.create_node(NodeBase::new(max_delay), node_args, input_idx))
 		},
 		None => {
 			// 一旦型を明記した変数に取らないとなぜか E0282 になる
 			// TODO ここも Some の場合と同様に ensure_on_machine が必要？
 			let (input_idx, input_delay) = ensure_on_machine(nodes, input, submachine_idx);
 			let input_l = {
-				let result: ModdlResult<NodeId> = add_node!(Box::new(
+				let result: ModdlResult<NodeId> = add_node!(None, Box::new(
 						Split::new(NodeBase::new(input_delay), input_idx.as_stereo(), 0)));
 				result ?
 			};
 			let input_r = {
-				let result: ModdlResult<NodeId> = add_node!(Box::new(
+				let result: ModdlResult<NodeId> = add_node!(None, Box::new(
 						Split::new(NodeBase::new(input_delay), input_idx.as_stereo(), 1)));
 				result ?
 			};
 			let max_delay = max_node_arg_delay.max(input_delay);
 			let result_l = {
-				let result: ModdlResult<NodeId> = add_node!(
+				let result: ModdlResult<NodeId> = add_node!(label, 
 						fact.create_node(NodeBase::new(max_delay), node_args, input_l.node(submachine_idx)));
 				result ?
 			};
 			let result_r = {
-				let result: ModdlResult<NodeId> = add_node!(
+				let result: ModdlResult<NodeId> = add_node!(label, 
 						fact.create_node(NodeBase::new(max_delay), node_args, input_r.node(submachine_idx)));
 				result ?
 			};
-			add_node!(Box::new(Join::new(NodeBase::new(max_delay), vec![result_l.node(submachine_idx).as_mono(), result_r.node(submachine_idx).as_mono()])))
+			add_node!(None, Box::new(Join::new(NodeBase::new(max_delay), vec![result_l.node(submachine_idx).as_mono(), result_r.node(submachine_idx).as_mono()])))
 		}
 	}
 }

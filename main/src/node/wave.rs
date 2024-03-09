@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
 	core::{
 		common::*,
@@ -14,6 +16,8 @@ use crate::{
 	},
 };
 use node_macro::node_impl;
+
+use super::var::{SetEvent, EVENT_TYPE_SET};
 
 pub struct WaveformPlayer {
 	base_: NodeBase,
@@ -83,17 +87,26 @@ impl Node for WaveformPlayer {
 	}
 
 	fn process_event(&mut self, event: &dyn Event, _context: &Context, env: &mut Environment) {
-		// TODO 波形を切り替えるイベント
+		match event.event_type() {
+			EVENT_TYPE_NOTE => {
+				let event = event.downcast_ref::<NoteEvent>().unwrap();
+				if event.note_on() {
+					self.state = WaveformPlayerState::Note;
+					// TODO WaveformHost の範囲チェック、どこに入れるか
+					self.offset = env.waveforms()[self.index].start_offset();
+				} else {
+					self.state = WaveformPlayerState::Idle;
+				}
+			},
 
-		if event.event_type() != EVENT_TYPE_NOTE { return; }
+			EVENT_TYPE_SET => {
+				let event = event.downcast_ref::<SetEvent>().unwrap();
+				if event.key() == "waveform" {
+					self.index = WaveformIndex(event.value() as usize);
+				}
+			}
 
-		let event = event.downcast_ref::<NoteEvent>().unwrap();
-		if event.note_on() {
-			self.state = WaveformPlayerState::Note;
-			// TODO WaveformHost の範囲チェック、どこに入れるか
-			self.offset = env.waveforms()[self.index].start_offset();
-		} else {
-			self.state = WaveformPlayerState::Idle;
+			_ => { },
 		}
 	}
 }
@@ -111,6 +124,12 @@ impl WaveformPlayerFactory {
 impl NodeFactory for WaveformPlayerFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
+	fn default_prop_key(&self) -> Option<String> { Some("waveform".to_string()) }
+	fn initial_values(&self) -> HashMap<String, Sample> {
+		vec![
+			("waveform".to_string(), self.waveform_index.0 as Sample)
+		].into_iter().collect()
+	}
 	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
 		Box::new(WaveformPlayer::new(base, 1, self.waveform_index, freq))

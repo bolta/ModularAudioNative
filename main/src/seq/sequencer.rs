@@ -130,8 +130,8 @@ impl Context {
 			Instruction::Note { tag, note_on } => {
 				env.broadcast_event(context.elapsed_samples(), Box::new(NoteEvent::new(EventTarget::Tag(tag.clone()), *note_on)));
 			}
-			Instruction::Value { tag, value } => {
-				env.broadcast_event(context.elapsed_samples(), Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), *value)));
+			Instruction::Value { tag, key, value } => {
+				env.broadcast_event(context.elapsed_samples(), Box::new(SetEvent::new(EventTarget::Tag(tag.clone()), key.clone(), *value)));
 			}
 			Instruction::Wait(wait) => {
 				self.wait = *wait;

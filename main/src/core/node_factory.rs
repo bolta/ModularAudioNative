@@ -40,6 +40,8 @@ pub type NodeArgs = HashMap<String, ChanneledNodeIndex>;
 pub trait NodeFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec>;
 	fn input_channels(&self) -> i32;
+	fn default_prop_key(&self) -> Option<String> { None }
+	fn initial_values(&self) -> HashMap<String, Sample> { HashMap::new() }
 	/// piped_upstream は接続の前段となっているノード
 	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node>;
 }

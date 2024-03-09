@@ -56,7 +56,7 @@ pub enum ExprBody {
 	LambdaNode { input_param: String, body: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
 	PropertyAccess { assoc: Box<Expr>, name: String },
-	NodeWithArgs { node_def: Box<Expr>, label: String, args: Args },
+	NodeWithArgs { node_def: Box<Expr>, args: Args },
 
 	FloatLiteral(f32),
 	TrackSetLiteral(Vec<String>),

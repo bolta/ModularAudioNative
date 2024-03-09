@@ -93,9 +93,14 @@ parser![parameter_command, Command, {
 	map_res(
 		tuple((
 			preceded(ss!(char('y')), ss!(path())),
+			opt(preceded(ss!(char(':')), ss!(identifier()))),
 			preceded(ss!(char(',')), ss!(float())),
 		)),
-		|(name, value)| ok(Command::Parameter { name: name.to_string(), value }),
+		|(name, key, value)| ok(Command::Parameter {
+			name: name.to_string(),
+			key: key.map(|k| k.to_string()),
+			value,
+		}),
 	)
 }];
 

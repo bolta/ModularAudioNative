@@ -11,7 +11,7 @@ pub enum Instruction {
 	Nop,
 	// TODO tag は intern した文字列にする
 	Note { tag: String, note_on: bool },
-	Value { tag: String, value: Sample },
+	Value { tag: String, key: String, value: Sample },
 	Wait(i32),
 
 	NewVar { name: String, value: i32 }, // TODO 型をつける

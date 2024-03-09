@@ -16,7 +16,7 @@ pub enum Command {
 	Detune(f32),
 	Tone { tone_name: ToneName, length: Length, slur: bool },
 	Rest(Length),
-	Parameter { name: String, value: f32 },
+	Parameter { name: String, key: Option<String>, value: f32 },
 	Tempo(f32),
 	MacroCall { name: String },
 	/// times は Some(n) で有限、None で無限、

@@ -12,7 +12,6 @@ use crate::{
 };
 use enum_display::EnumDisplay;
 use std::cell::RefCell;
-use std::fmt::Display;
 use std::{
 	collections::HashMap,
 	rc::Rc,
@@ -52,18 +51,24 @@ pub enum NodeStructure {
 	Connect(Box<NodeStructure>, Box<NodeStructure>),
 	Condition { cond: Box<NodeStructure>, then: Box<NodeStructure>, els: Box<NodeStructure> },
 	Lambda { input_param: String, body: Box<NodeStructure> },
-	NodeWithArgs {
-		factory: Box<NodeStructure>,
-		label: String,
+	NodeCreation {
+		factory: Rc<dyn NodeFactory>,
 		args: HashMap<String, Value>,
+		label: Option<String>,
 	},
-	NodeFactory(Rc<dyn NodeFactory>),
-	// Constant(f32),
 	Constant {
 		value: f32,
 		label: Option<String>,
 	},
 	Placeholder { name: String },
+}
+impl NodeStructure {
+	pub fn label(&self) -> Option<String> {
+		match self {
+			NodeStructure::NodeCreation { label, .. } | NodeStructure::Constant { label, .. } => label.clone(),
+			_ => None,
+		}
+	}
 }
 
 pub type Value = (ValueBody, Location);
@@ -119,22 +124,17 @@ pub enum ValueBody {
 	String(String),
 	Array(Vec<Value>),
 	Assoc(HashMap<String, Value>),
-	// Node(NodeIndex),
 	/// ノードの構造に関するツリー表現
 	NodeStructure(NodeStructure),
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
-	Labeled {
-		label: String,
-		inner: Box<Value>,
-	},
 }
 
 impl ValueBody {
 	pub fn as_float(&self) -> Option<f32> {
-		match self.value() {
+		match self {
 			Self::Float(value) => Some(*value),
 			_ => None,
 		}
@@ -143,40 +143,40 @@ impl ValueBody {
 		self.as_float().map(|v| v > 0f32)
 	}
 	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
-		match self.value() {
+		match self {
 			Self::WaveformIndex(value) => Some(*value),
 			_ => None,
 		}
 	}
 	pub fn as_track_set(&self) -> Option<Vec<String>> {
-		match self.value() {
+		match self {
 			Self::TrackSet(tracks) => Some(tracks.clone()),
 			_ => None,
 		}
 	}
 	pub fn as_identifier_literal(&self) -> Option<String> {
-		match self.value() {
+		match self {
 			Self::IdentifierLiteral(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_string(&self) -> Option<String> {
-		match self.value() {
+		match self {
 			Self::String(content) => Some(content.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_array(&self) -> Option<&Vec<Value>> {
-		match self.value() {
+		match self {
 			Self::Array(content) => Some(content),
 			_ => None,
 		}
 	}
 
 	pub fn as_assoc(&self) -> Option<&HashMap<String, Value>> {
-		match self.value() {
+		match self {
 			Self::Assoc(content) => Some(content),
 			_ => None,
 		}
@@ -189,51 +189,41 @@ impl ValueBody {
 		// 代わりに、Node の一歩手前というか、ノードグラフの設計図となる NodeStructure を提供し、
 		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
 		// 数値や変数参照から Node への暗黙の変換もここで提供する
-		match self.value() {
+		match self {
 			Self::NodeStructure(str) => Some(str.clone()),
-			Self::Float(value) => Some(NodeStructure::Constant { value: *value, label: self.label() }),
-			Self::NodeFactory(fact) => Some(NodeStructure::NodeFactory(fact.clone())),
+			Self::Float(value) => Some(NodeStructure::Constant { value: *value, label: None }),
+			Self::NodeFactory(fact) => Some(NodeStructure::NodeCreation {
+				factory: fact.clone(),
+				args: HashMap::new(),
+				label: None,
+			}),
 			_ => None,
 		}
 	}
 	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
-		match self.value() {
+		match self {
 			Self::NodeFactory(fact) => Some(fact.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_function(&self) -> Option<Rc<dyn Function>> {
-		match self.value() {
+		match self {
 			Self::Function(func) => Some(func.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_io(&self) -> Option<Rc<RefCell<dyn Io>>> {
-		match self.value() {
+		match self {
 			Self::Io(io) => Some(io.clone()),
 			_ => None,
 		}
 	}
 
-	fn value(&self) -> &ValueBody {
-		let result = match self {
-			Self::Labeled { inner, .. } => inner.0.value(),
-			_ => self,
-		};
-
-		match result {
-			Self::Labeled { .. } => assert!(false),
-			_ => { },
-		}
-
-		result
-	}
-
 	pub fn label(&self) -> Option<String> {
 		match self {
-			Self::Labeled { label, .. } => Some(label.clone()),
+			Self::NodeStructure(strukt) => strukt.label(),
 			_ => None,
 		}
 	}

@@ -1,8 +1,5 @@
 use super::{
-	error::*,
-	lambda_function::*,
-	scope::*,
-	value::*,
+	console::warn, error::*, lambda_function::*, scope::*, value::*
 };
 
 extern crate parser;
@@ -116,13 +113,10 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			let val = assoc.get(name);
 			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
-		ExprBody::NodeWithArgs { node_def, label, args } => {
-			let (factory, _) = evaluate(node_def, vars)?.as_node_structure() ?;
-			let arg_names = match &factory {
-				NodeStructure::NodeFactory(factory) => factory.node_arg_specs(),
-				// TODO これで適切なエラーになるかどうか
-				_ => return Err(error(ErrorType::TypeMismatch { expected: ValueType::NodeFactory }, expr.loc.clone())),
-			}.iter().map(|spec| spec.name.clone()).collect();
+		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
+			let (factory, _) = evaluate(node_def, vars)?.as_node_factory() ?;
+
+			let arg_names = factory.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
 
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
@@ -131,9 +125,9 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 				value_args.insert(name.clone(), evaluate(expr, vars) ?);
 			}
 
-			Ok(ValueBody::NodeStructure(NodeStructure::NodeWithArgs {
-				factory: Box::new(factory),
-				label: label.clone(),
+			Ok(ValueBody::NodeStructure(NodeStructure::NodeCreation {
+				factory,
+				label: None,
 				args: value_args,
 			}))
 		},
@@ -141,9 +135,39 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		ExprBody::MmlLiteral(_) => unimplemented!(),
 
 		ExprBody::Labeled { label, inner } => {
-			let inner_val = evaluate(inner, vars) ?;
+			let (inner_val, inner_loc) = evaluate(inner, vars) ?;
 
-			Ok(ValueBody::Labeled { label: label.clone(), inner: Box::new(inner_val) })
+			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label, &expr.loc));
+
+			// ラベルをつけれる対象は、数値定数、引数なしの NodeFactory、引数ありの NodeFactory（NodeCreation）の 3 つ。
+			// 上記の値にラベルをつけると、結果は必ず NodeStructure になる。
+			// 上記以外にラベルをつけるのは無意味であり、警告とともにラベルは無視される
+			// 数値定数はラベルをつけると NodeStructure になるので、表現としては Float と NodeStructure::Constant の 2 通りある。
+			// すでにラベルがついている値にさらにラベルをつけるのは問題ない
+			let new_val = match inner_val {
+				ValueBody::Float(value) => ValueBody::NodeStructure(
+					NodeStructure::Constant { value, label: Some(label.clone()) },
+				),
+				ValueBody::NodeFactory(factory) => ValueBody::NodeStructure(
+					NodeStructure::NodeCreation { factory, args: HashMap::new(), label: Some(label.clone()) },
+				),
+				ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(
+					match strukt {
+						NodeStructure::Constant { value, label: _ } => NodeStructure::Constant { value, label: Some(label.clone()) },
+						NodeStructure::NodeCreation { factory, args, label: _ } => NodeStructure::NodeCreation { factory, args, label: Some(label.clone()) },
+						_ => {
+							warn_ineffective_label();
+							strukt
+						},
+					},
+				),
+				_ => {
+					warn_ineffective_label();
+					inner_val
+				}
+			};
+
+			Ok(new_val)
 		}
 	} ?;
 	Ok((body, expr.loc.clone()))
@@ -155,15 +179,10 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 ) -> ModdlResult<ValueBody> {
 	let arg_val = evaluate(arg, vars) ?;
 
-	// 定数はコンパイル時に計算する。
-	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
-	if arg_val.0.label().is_none() {
-		match arg_val.0.as_float() {
-			Some(arg_float) => {
-				return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
-			}
-			_ => { } // 下へ
-		}
+	// ラベルのついていない定数はコンパイル時に計算する。
+	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
+	if let Some(arg_float) = arg_val.0.as_float() {
+		return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
 	}
 
 	let (arg_str, _) = arg_val.as_node_structure() ?;
@@ -181,15 +200,10 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	let ref l_val @ (ref l_body, _) = evaluate(lhs, vars) ?;
 	let ref r_val @ (ref r_body, _) = evaluate(rhs, vars) ?;
 
-	// 定数はコンパイル時に計算する。
-	// ただしラベルがついているときは演奏中の設定の対象になるため計算しない
-	if l_body.label().is_none() && r_body.label().is_none() {
-		match (l_body.as_float(), r_body.as_float()) {
-			(Some(l_float), Some(r_float)) => {
-				return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
-			}
-			_ => { } // 下へ
-		}
+	// ラベルのついていない定数はコンパイル時に計算する。
+	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
+	if let (Some(l_float), Some(r_float)) = (l_body.as_float(), r_body.as_float()) {
+		return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
 	}
 
 	let (l_str, _) = l_val.as_node_structure() ?;
@@ -204,14 +218,12 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 	// cond が定数式の場合は短絡評価する。
 	// 式全体が定数式になるかどうかは、評価する方の枝の評価結果が定数式になるかどうかに拠る
 	let ref cond_val @ (ref cond_body, _) = evaluate(cond, vars) ?;
-	if cond_body.label().is_none() {
-		if let Some(cond_bool) = cond_body.as_boolean() {
-			return if cond_bool {
-				evaluate(then, vars).map(|(v, _)| v)
-			} else {
-				evaluate(els, vars).map(|(v, _)| v)
-			};
-		}
+	if let Some(cond_bool) = cond_body.as_boolean() {
+		return if cond_bool {
+			evaluate(then, vars).map(|(v, _)| v)
+		} else {
+			evaluate(els, vars).map(|(v, _)| v)
+		};
 	}
 
 	// cond が定数式でない場合は NodeStructure として演奏時に評価する。

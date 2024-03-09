@@ -600,7 +600,6 @@ parser![node_with_args_expr, Box<Expr>, {
 			Some(args) => {
 				Box::new(Expr::new(ExprBody::NodeWithArgs {
 					node_def: x,
-					label: "".to_string(), // 未使用
 					args,
 				}, loc))
 			},
