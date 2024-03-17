@@ -50,9 +50,7 @@ extern crate parser;
 use graphviz_rust::attributes::start;
 use nom::Err;
 use parser::{
-	mml::default_mml_parser,
-	moddl::ast::*,
-	moddl::parser::compilation_unit, common::{Span, Location},
+	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::*, parser::{compilation_unit, expr}}
 };
 
 use std::{
@@ -221,7 +219,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				match spec {
 					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
@@ -229,11 +227,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels) ?)
+								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars) ?)
 					}
 					TrackDef::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels)
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -624,7 +622,7 @@ const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこか�
 
 // TODO 引数を整理できるか
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
-		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool)
+		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>)
 		-> ModdlResult<NodeId> {
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -677,7 +675,32 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults);
+	let evaluate_expr = |expr_str: &str| {
+		// TODO 位置情報の補正が必要
+		let (_, expr) = expr()(Span::new(expr_str))
+		.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
+		// match evaluate(&*expr)?.0 {
+			
+		// }
+		// TODO evaluate_and_perform_arg と共通化
+		let mut value = evaluate(&*expr, vars) ?;
+		while value.as_io().is_ok() {
+			let (io, loc) = value.as_io().unwrap();
+			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+		}
+
+		let body = value.0;
+		match body {
+			ValueBody::Float(f) => Ok(f),
+			ValueBody::WaveformIndex(i) => Ok(i.0 as f32),
+			_ => Err(error(ErrorType::TypeMismatchAny { expected: vec![
+				ValueType::Number,
+				ValueType::Waveform,
+			]}, value.1.clone()))
+		}
+	};
+
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &evaluate_expr) ?;
 	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), track.to_string(), seqs)));
 
 	let mut output = instrm;

@@ -638,7 +638,7 @@ binary_expr![logical_expr, comparison_expr, r"&&|\|\|", |lhs, op, rhs| match op 
 
 
 
-parser![expr, Box<Expr>, {
+pub_parser![expr, Box<Expr>, {
 	// 効果ない？
 	|input| {
 		let (input, result) = logical_expr()(input)?;

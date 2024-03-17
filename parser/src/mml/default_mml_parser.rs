@@ -94,7 +94,7 @@ parser![parameter_command, Command, {
 		tuple((
 			preceded(ss!(char('y')), ss!(path())),
 			opt(preceded(ss!(char(':')), ss!(identifier()))),
-			preceded(ss!(char(',')), ss!(float())),
+			preceded(ss!(char(',')), ss!(number_or_expr())),
 		)),
 		|(name, key, value)| ok(Command::Parameter {
 			name: name.to_string(),
@@ -155,20 +155,28 @@ parser![macro_def_command, Command, {
 	}
 }];
 
+parser![number_or_expr, NumberOrExpr, {
+	alt((
+		map_res(float(), |num| ok(NumberOrExpr::Number(num))),
+		map_res(delimited(char('='), many0(none_of(";")), char(';')),
+				|chars| ok(NumberOrExpr::Expr(chars.into_iter().collect())))
+	))
+}];
+
 parser![command, Command, {
 	alt((
-		unary_command!(char('o'), integer(), Command::Octave),
+		unary_command!(char('o'), number_or_expr(), Command::Octave),
 		nullary_command!(char('>'), Command::OctaveIncr),
 		nullary_command!(char('<'), Command::OctaveDecr),
 		unary_command!(alt((char('l'), char('L'))), integer(), Command::Length),
-		unary_command!(char('q'), float(), Command::GateRate),
-		unary_command!(char('V'), float(), Command::Volume),
-		unary_command!(char('v'), float(), Command::Velocity),
-		unary_command!(re_find(re(r"@d")), float(), Command::Detune),
+		unary_command!(char('q'), number_or_expr(), Command::GateRate),
+		unary_command!(char('V'), number_or_expr(), Command::Volume),
+		unary_command!(char('v'), number_or_expr(), Command::Velocity),
+		unary_command!(re_find(re(r"@d")), number_or_expr(), Command::Detune),
 		tone_command(),
 		unary_command!(char('r'), length(), Command::Rest),
 		parameter_command(),
-		unary_command!(char('t'), float(), Command::Tempo),
+		unary_command!(char('t'), number_or_expr(), Command::Tempo),
 		unary_command!(char('$'), identifier(), |name: &str| Command::MacroCall { name: name.to_string() }),
 		loop_command(),
 		stack_command(),

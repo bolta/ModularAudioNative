@@ -1,13 +1,9 @@
 use crate::{
-	common::{
-		stack,
-	},
-	seq::{
+	common::stack, mml::default::feature::*, moddl::{console::warn, error::ModdlResult}, seq::{
 		common::*,
 		instruction::*,
 		sequence::*,
-	},
-	mml::default::feature::*, moddl::console::warn,
+	}
 };
 extern crate parser;
 use parser::mml::ast::*;
@@ -72,7 +68,8 @@ pub fn generate_sequences(
 	param_initials: &HashMap<ParamSignature, f32>,
 	param_default_keys: &HashMap<String, String>,
 // TODO Result にしてちゃんとエラー処理できるように
-) -> HashMap<String, Sequence> {
+	evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>,
+) -> ModdlResult<HashMap<String, Sequence>> {
 	let mut stack = init_stack(param_initials);
 	let mut var_seq = 0;
 	let mut seq_seq = 0;
@@ -80,12 +77,12 @@ pub fn generate_sequences(
 	let mut used_skip = false;
 
 	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences,
-			&mut used_skip, param_prefix, param_default_keys);
+			&mut used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
 	if used_skip {
 		sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
 	}
 
-	sequences
+	Ok(sequences)
 }
 
 fn make_name(prefix: &str, count: &mut i32) -> String {
@@ -106,15 +103,16 @@ fn generate_sequence(
 	used_skip: &mut bool,
 	param_prefix: &str,
 	param_default_keys: &HashMap<String, String>,
-) {
+	evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>,
+) -> ModdlResult<()> {
 	let mut seq = vec![];
 	for command in commands {
 		match command {
-			Command::Octave(val) => { stack.mml_state_mut().octave = *val; }
-			Command::OctaveIncr => { stack.mml_state_mut().octave += 1; }
-			Command::OctaveDecr => { stack.mml_state_mut().octave -= 1; }
+			Command::Octave(val) => { stack.mml_state_mut().octave = evaluate(val, evaluate_expr) ?; }
+			Command::OctaveIncr => { stack.mml_state_mut().octave += 1f32; }
+			Command::OctaveDecr => { stack.mml_state_mut().octave -= 1f32; }
 			Command::Length(val) => { stack.mml_state_mut().length = *val; }
-			Command::GateRate(val) => { stack.mml_state_mut().gate_rate = val.max(0f32).min(MAX_GATE_RATE); }
+			Command::GateRate(val) => { stack.mml_state_mut().gate_rate = evaluate(val, evaluate_expr)?.max(0f32).min(MAX_GATE_RATE); }
 			Command::Tone { tone_name, length, slur } => {
 				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, stack.mml_state().length);
 				let gate_ticks = (step_ticks as f32 * stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
@@ -147,19 +145,19 @@ fn generate_sequence(
 			Command::Parameter { name, key, value } => {
 				// TODO ここで track prefix をかますことで MML には書かないでいいように
 				// seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
-				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, &name, key, *value);
+				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, &name, key, evaluate(value, evaluate_expr) ?);
 			}
 			Command::Volume(value) => {
-				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VOLUME, &None, *value / MAX_VOLUME);
+				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VOLUME, &None, evaluate(value, evaluate_expr) ? / MAX_VOLUME);
 			}
 			Command::Velocity(value) => {
-				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VELOCITY, &None, *value / MAX_VELOCITY);
+				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VELOCITY, &None, evaluate(value, evaluate_expr) ? / MAX_VELOCITY);
 			}
 			Command::Detune(value) => {
-				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_DETUNE, &None, *value);
+				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_DETUNE, &None, evaluate(value, evaluate_expr) ?);
 			}
 			Command::Tempo(value) => {
-				push_param_instrc(&mut seq, stack, param_default_keys, "" /* global */, PARAM_NAME_TEMPO, &None, *value);
+				push_param_instrc(&mut seq, stack, param_default_keys, "" /* global */, PARAM_NAME_TEMPO, &None, evaluate(value, evaluate_expr) ?);
 			}
 			Command::MacroCall { name } => {
 				push(stack);
@@ -200,7 +198,7 @@ fn generate_sequence(
 				let loop_start = seq.len();
 				push(stack);
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys);
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -216,7 +214,7 @@ fn generate_sequence(
 
 					// content1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys);
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
@@ -241,14 +239,14 @@ fn generate_sequence(
 				push(stack);
 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
 				let content_name = make_name("seq", seq_seq);
-				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys);
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
 				seq.push(Instruction::Call { seq_name: content_name });
 				pop_and_restore_params(stack, &mut seq)
 			}
 			Command::MacroDef { name, content } => {
 				push(stack);
 				let seq_name = make_name("seq", seq_seq);
-				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys);
+				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
 				// コンパイルするだけなので params の復元は不要
 				// pop_and_restore_params(stack, param_prefix, &mut seq);
 				stack.pop();
@@ -267,6 +265,8 @@ fn generate_sequence(
 		seq.push(Instruction::Nop);
 	}
 	sequences.insert(seq_name.to_string(), seq);
+
+	Ok(())
 }
 
 fn push(stack: &mut Stack) {
@@ -339,12 +339,12 @@ fn divide_ticks(ticks: i32, denominator: i32) -> i32 {
 	result
 }
 
-fn calc_freq_from_tone(octave: i32,
+fn calc_freq_from_tone(octave: f32,
 		ToneName { base_name, accidental }: &ToneName) -> f32 {
-	let note_a4 = 69;
+	let note_a4 = 69f32;
 	let freq_a4 = 440f32;
 	// とりあえず平均律のみ…
-	let note_number = 12 * (octave + 1) + match base_name {
+	let note_number = 12f32 * (octave + 1f32) + (match base_name {
 		ToneBaseName::C => 0,
 		ToneBaseName::D => 2,
 		ToneBaseName::E => 4,
@@ -352,14 +352,14 @@ fn calc_freq_from_tone(octave: i32,
 		ToneBaseName::G => 7,
 		ToneBaseName::A => 9,
 		ToneBaseName::B => 11,
-	} + *accidental;
+	} + *accidental) as f32;
 
 	freq_a4 * 2f32.powf((note_number - note_a4) as f32 / 12f32)
 }
 
 #[derive(Clone)]
 struct MmlState {
-	octave: i32,
+	octave: f32,
 	length: i32,
 	/// スラーの途中（前の音符にスラーがついていた）かどうか
 	slur: bool,
@@ -369,7 +369,7 @@ struct MmlState {
 impl MmlState {
 	fn init() -> Self {
 		Self {
-			octave: 4,
+			octave: 4f32,
 			length: 4,
 			slur: false,
 			gate_rate: MAX_GATE_RATE,
@@ -408,4 +408,11 @@ impl StackShortcut for Stack {
 	fn mml_state_mut(&mut self) -> &mut MmlState { &mut self.top_mut().mml_state }
 	fn params_mut(&mut self) -> &mut HashMap<ParamSignature, f32> { &mut self.top_mut().params }
 	fn macro_names_mut(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
+}
+
+fn evaluate(number_or_expr: &NumberOrExpr, evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>) -> ModdlResult<f32> {
+	match number_or_expr {
+		NumberOrExpr::Number(num) => Ok(*num),
+		NumberOrExpr::Expr(expr) => evaluate_expr(expr.as_str()),
+	}
 }

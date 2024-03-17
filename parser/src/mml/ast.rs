@@ -4,20 +4,26 @@ pub struct CompilationUnit {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum NumberOrExpr {
+	Number(f32),
+	Expr(String),
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Command {
 	// コマンドの名前が値の名前そのものである場合はパラメータ名を省略
-	Octave(i32),
+	Octave(NumberOrExpr),
 	OctaveIncr,
 	OctaveDecr,
 	Length(i32),
-	GateRate(f32),
-	Volume(f32),
-	Velocity(f32),
-	Detune(f32),
+	GateRate(NumberOrExpr),
+	Volume(NumberOrExpr),
+	Velocity(NumberOrExpr),
+	Detune(NumberOrExpr),
 	Tone { tone_name: ToneName, length: Length, slur: bool },
 	Rest(Length),
-	Parameter { name: String, key: Option<String>, value: f32 },
-	Tempo(f32),
+	Parameter { name: String, key: Option<String>, value: NumberOrExpr },
+	Tempo(NumberOrExpr),
 	MacroCall { name: String },
 	/// times は Some(n) で有限、None で無限、
 	/// content1 は : より前（: がない場合は全部）、content 2 は : より後（: がない場合は None）
