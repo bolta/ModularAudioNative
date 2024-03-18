@@ -1,12 +1,12 @@
 use crate::{
-	common::stack, mml::default::feature::*, moddl::{console::warn, error::ModdlResult}, seq::{
+	common::stack, mml::default::feature::*, moddl::{console::warn, error::{error, ErrorType, ModdlResult}}, seq::{
 		common::*,
 		instruction::*,
 		sequence::*,
 	}
 };
 extern crate parser;
-use parser::mml::ast::*;
+use parser::{common::Location, mml::ast::*};
 
 use std::{
 	collections::{
@@ -67,7 +67,6 @@ pub fn generate_sequences(
 	param_prefix: &str,
 	param_initials: &HashMap<ParamSignature, f32>,
 	param_default_keys: &HashMap<String, String>,
-// TODO Result にしてちゃんとエラー処理できるように
 	evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>,
 ) -> ModdlResult<HashMap<String, Sequence>> {
 	let mut stack = init_stack(param_initials);
@@ -114,7 +113,7 @@ fn generate_sequence(
 			Command::Length(val) => { stack.mml_state_mut().length = *val; }
 			Command::GateRate(val) => { stack.mml_state_mut().gate_rate = evaluate(val, evaluate_expr)?.max(0f32).min(MAX_GATE_RATE); }
 			Command::Tone { tone_name, length, slur } => {
-				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, stack.mml_state().length);
+				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, stack.mml_state().length) ?;
 				let gate_ticks = (step_ticks as f32 * stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
 
 
@@ -139,7 +138,7 @@ fn generate_sequence(
 				stack.mml_state_mut().slur = *slur;
 			}
 			Command::Rest(val) => {
-				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length);
+				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length) ?;
 				seq.push(Instruction::Wait(ticks));
 			}
 			Command::Parameter { name, key, value } => {
@@ -315,28 +314,28 @@ fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_defaul
 	stack.params_mut().insert((param_name, key.clone()), value);
 }
 
-fn calc_ticks_from_length(Length { elements: length_spec }: &Length, ticks_per_bar: i32, default: i32) -> i32 {
+fn calc_ticks_from_length(length_spec: &Length, ticks_per_bar: i32, default: i32) -> ModdlResult<i32> {
 	if length_spec.is_empty() {
-		return divide_ticks(ticks_per_bar, default);
+		return divide_ticks(ticks_per_bar, default, length_spec);
 	}
 
-	let calc_ticks_from_length_element = |e: &LengthElement| -> i32 {
+	let calc_ticks_from_length_element = |e: &LengthElement| -> ModdlResult<i32> {
 		let number = e.number.unwrap_or(default);
-		let number_ticks = divide_ticks(ticks_per_bar, number);
+		let number_ticks = divide_ticks(ticks_per_bar, number, length_spec) ?;
 		// n 個の付点（n >= 0）が付くと、音長は元の音長の 2 倍から元の音長の 2^(n+1) 分の 1 を引いた長さになる
-		number_ticks * 2 - divide_ticks(number_ticks, 2i32.pow(e.dots as u32))
+		Ok(number_ticks * 2 - divide_ticks(number_ticks, 2i32.pow(e.dots as u32), length_spec) ?)
 	};
 
 	length_spec.iter().map(calc_ticks_from_length_element).sum()
 }
-fn divide_ticks(ticks: i32, denominator: i32) -> i32 {
+fn divide_ticks(ticks: i32, denominator: i32, length_spec: &Length) -> ModdlResult<i32> {
 	let result = ticks / denominator;
-	if result * denominator != ticks {
-		// TODO ちゃんとエラー処理
-		panic!("テンポずれ");
+	if result * denominator == ticks {
+		Ok(result)
+	} else {
+		// テンポずれ
+		Err(error(ErrorType::TickUnderflow { length: length_spec.clone() }, Location::dummy()))
 	}
-
-	result
 }
 
 fn calc_freq_from_tone(octave: f32,

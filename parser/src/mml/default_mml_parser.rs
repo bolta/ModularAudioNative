@@ -54,7 +54,7 @@ parser![length_element, LengthElement, {
 parser![length, Length, {
 	map_res(
 		separated_list0(ss!(char('^')), ss!(length_element())),
-		|elements| ok(Length { elements }),
+		ok,
 	)
 }];
 

@@ -35,12 +35,9 @@ pub enum Command {
 	ExpandMacro { name: String },
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Length {
-	pub elements: Vec<LengthElement>,
-}
+pub type Length = Vec<LengthElement>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LengthElement {
 	/// 音長を示す数値。省略の場合は None。音長 4. に対して 4、.. に対して None となる
 	pub number: Option<i32>,

@@ -6,6 +6,7 @@ use std::fmt::Display;
 
 use itertools::Itertools;
 use parser::common::{Span, Located, Location};
+use parser::mml::ast::Length;
 
 use super::value::ValueType;
 
@@ -44,7 +45,8 @@ pub enum ErrorType {
 	OptionNotAllowedHere,
 	IndexOutOfBounds,
 
-	// TODO イベントキューあふれとかテンポずれとか、演奏時のエラーをラップする
+	TickUnderflow { length: Length },
+	// TODO イベントキューあふれとか、演奏時のエラーをラップする
 	Playing,
 	File(io::Error),
 }
