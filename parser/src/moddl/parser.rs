@@ -285,7 +285,8 @@ parser![do_expr, Box<Expr>, {
 parser![let_expr, Box<Expr>, {
 	map_res(
 		loc(tuple((
-			terminated(
+			delimited(
+				ss!(tag("let")),
 				si!(identifier()),
 				ss!(char('=')),
 			),

@@ -11,11 +11,11 @@
 // 式 7.3
 @let `fm`,
 	// スタックオーバーフローを起こす場合は a, b をグローバルに移す
-	a = 1;
-	b = 0.9;
+	let a = 1;
+	let b = 0.9;
 	do fb <- feedback;
-	fbIn = fb->at(0);
-	fbOut = fb->at(1);
+	let fbIn = fb->at(0);
+	let fbOut = fb->at(1);
 	(a * sin(phase + b * fbOut)) | fbIn
 
 @instrument ^a, fm * adsrEnv
