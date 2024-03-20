@@ -253,25 +253,18 @@ parser![lambda_func_expr, Box<Expr>, {
 parser![do_expr, Box<Expr>, {
 	map_res(
 		loc(tuple((
-			terminated(
-				si!(identifier()),
-				ss!(char('=')),
-			),
 			delimited(
-				// TODO 今後、do を演算子にする可能性がある（JS の await と同様）。
-				// そのときに演算子としての優先度と齟齬を来さないよう、expr 全部ではなく postfix_expr のみ許しておく
-				// ………つもりだったが、postfix_expr() にするとエラーになる（原因未調査）ため、expr() にしておく。
-				// このため、現状では var = do someIo + 1; のような記述をすると、誤った意味で通ってしまう
-				// （将来 do が演算子になれば (do someIo) + 1 と解釈されるべきだが、現状では do (someIo + 1) として通ってしまう）
-				// （もっとも、someIo + 1 が Io であることを要求するので構築時エラーになるはずで、実害はないか僅かと思われるが）
 				ss!(tag("do")),
-				// ss!(postfix_expr()),
+				ss!(identifier()),
+				ss!(tag("<-")),
+			),
+			terminated(
 				ss!(expr()),
 				ss!(char(';')),
 			),
 			si!(expr()),
 		))),
-		// <id> = do <io>; <body> は <io>->then(<id> => <body>) の糖衣構文
+		// do <id> <- <io>; <body> は <io>->then(<id> => <body>) の糖衣構文
 		// さらには then(<io>, <id> => <body>) の糖衣構文
 		|((id, io, body), loc)| { ok(Box::new(Expr::new(ExprBody::FunctionCall {
 			function: Box::new(Expr::new(ExprBody::Identifier("then".to_string()), loc.clone())),
@@ -285,7 +278,7 @@ parser![do_expr, Box<Expr>, {
 				],
 				named: vec![],
 			}
-}		, loc))) }
+		}, loc))) }
 	)
 }];
 
