@@ -218,28 +218,32 @@ parser![conditional_expr, Box<Expr>, {
 		|((cond, then, els), loc)| ok(Box::new(Expr::new(ExprBody::Condition { cond, then, els }, loc))),
 	)
 }];
+
 parser![lambda_func_expr, Box<Expr>, {
 	map_res(
-		loc(preceded(
-			ss!(tag("func")),
-			tuple((
-				delimited(
-					ss!(char('(')),
-					// 引数が 1 つもない関数は禁止でもいいかも（純粋関数だと無意味なので）
-					separated_list0(ss!(char(',')), tuple((
-						ss!(identifier()),
-						opt(
-							preceded(
-								ss!(char('=')),
-								ss!(expr()),
+		loc(tuple((
+			terminated(
+				alt((
+					delimited(
+						ss!(char('(')),
+						// 引数が 1 つもない関数は禁止でもいいかも（純粋関数だと無意味なので）
+						separated_list0(ss!(char(',')), tuple((
+							ss!(identifier()),
+							opt(
+								preceded(
+									ss!(char('=')),
+									ss!(expr()),
+								)
 							)
-						)
-					))),
-					ss!(char(')')),
-				),
-				si!(expr()),
-			)),
-		)),
+						))),
+						ss!(char(')')),
+					),
+					map_res(si!(identifier()), |id| ok(vec![(id, None)])),
+				)),
+				ss!(tag("=>")),
+			),
+			si!(expr()),
+		))),
 		|((params, body), loc)| { ok(Box::new(Expr::new(ExprBody::LambdaFunction {
 			params: params.into_iter().map(|(name, default)| FunctionParam {
 				name: name.to_string(),
