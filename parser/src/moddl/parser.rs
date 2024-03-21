@@ -375,7 +375,7 @@ parser![primary_expr, Box<Expr>, {
 		data_array_literal_signed("sxx", 2),
 		assoc_literal(),
 		conditional_expr(), // キーワード if を処理するため identifier_expr よりも先に試す
-		lambda_func_expr(), // キーワード func を処理するため identifier_expr よりも先に試す
+		lambda_func_expr(),
 		lambda_node_expr(), // キーワード node を処理するため identifier_expr よりも先に試す
 		do_expr(),
 		let_expr(),
