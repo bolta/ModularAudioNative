@@ -317,12 +317,11 @@ parser![let_expr, Box<Expr>, {
 parser![lambda_node_expr, Box<Expr>, {
 	map_res(
 		loc(preceded(
-			ss!(tag("node")),
+			ss!(char('=')),
 			tuple((
-				delimited(
-					ss!(char('(')),
+				terminated(
 					ss!(identifier()),
-					ss!(char(')')),
+					ss!(tag("=>")),
 				),
 				si!(expr()),
 			)),
