@@ -1,5 +1,5 @@
 use super::{
-	console::warn, error::*, lambda_function::*, scope::*, value::*
+	console::warn, error::*, import_cache::ImportCache, lambda_function::*, scope::*, value::*
 };
 
 extern crate parser;
@@ -15,30 +15,31 @@ use std::{
 	rc::Rc,
 };
 
-pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
+pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<Value> {
+// dbg!(expr as *const Expr);
 	let body = match &expr.body {
 		ExprBody::Connect { lhs, rhs } => {
-			let (l_str, _) = evaluate(lhs, vars)?.as_node_structure() ?;
-			let (r_str, _) = evaluate(rhs, vars)?.as_node_structure() ?;
+			let (l_str, _) = evaluate(lhs, vars, imports)?.as_node_structure() ?;
+			let (r_str, _) = evaluate(rhs, vars, imports)?.as_node_structure() ?;
 			Ok(ValueBody::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
 		},
 
-		ExprBody::Power { lhs, rhs } => evaluate_binary_structure::<PowCalc>(lhs, rhs, vars),
-		ExprBody::Multiply { lhs, rhs } => evaluate_binary_structure::<MulCalc>(lhs, rhs, vars),
-		ExprBody::Divide { lhs, rhs } => evaluate_binary_structure::<DivCalc>(lhs, rhs, vars),
-		ExprBody::Remainder { lhs, rhs } => evaluate_binary_structure::<RemCalc>(lhs, rhs, vars),
-		ExprBody::Add { lhs, rhs } => evaluate_binary_structure::<AddCalc>(lhs, rhs, vars),
-		ExprBody::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars),
-		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars),
-		ExprBody::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars),
-		ExprBody::Equal { lhs, rhs } => evaluate_binary_structure::<EqCalc>(lhs, rhs, vars),
-		ExprBody::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeCalc>(lhs, rhs, vars),
-		ExprBody::Greater { lhs, rhs } => evaluate_binary_structure::<GtCalc>(lhs, rhs, vars),
-		ExprBody::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeCalc>(lhs, rhs, vars),
-		ExprBody::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars),
-		ExprBody::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars),
+		ExprBody::Power { lhs, rhs } => evaluate_binary_structure::<PowCalc>(lhs, rhs, vars, imports),
+		ExprBody::Multiply { lhs, rhs } => evaluate_binary_structure::<MulCalc>(lhs, rhs, vars, imports),
+		ExprBody::Divide { lhs, rhs } => evaluate_binary_structure::<DivCalc>(lhs, rhs, vars, imports),
+		ExprBody::Remainder { lhs, rhs } => evaluate_binary_structure::<RemCalc>(lhs, rhs, vars, imports),
+		ExprBody::Add { lhs, rhs } => evaluate_binary_structure::<AddCalc>(lhs, rhs, vars, imports),
+		ExprBody::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars, imports),
+		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
+		ExprBody::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
+		ExprBody::Equal { lhs, rhs } => evaluate_binary_structure::<EqCalc>(lhs, rhs, vars, imports),
+		ExprBody::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeCalc>(lhs, rhs, vars, imports),
+		ExprBody::Greater { lhs, rhs } => evaluate_binary_structure::<GtCalc>(lhs, rhs, vars, imports),
+		ExprBody::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeCalc>(lhs, rhs, vars, imports),
+		ExprBody::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars, imports),
+		ExprBody::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars, imports),
 
-		ExprBody::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars),
+		ExprBody::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars, imports),
 
 		ExprBody::Identifier(id) => {
 			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
@@ -50,7 +51,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = vec![];
 			for elem in content {
-				result.push(evaluate(&*elem, vars) ?);
+				result.push(evaluate(&*elem, vars, imports) ?);
 			}
 			Ok(ValueBody::Array(result))
 		},
@@ -58,11 +59,11 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = HashMap::<String, Value>::with_capacity(content.len());
 			for (key, value_expr) in content {
-				result.insert(key.clone(), evaluate(&*value_expr, vars) ?);
+				result.insert(key.clone(), evaluate(&*value_expr, vars, imports) ?);
 			}
 			Ok(ValueBody::Assoc(result))
 		},
-		ExprBody::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars),
+		ExprBody::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars, imports),
 		ExprBody::LambdaFunction { params, body } => {
 			let mut param_values: Vec<Param> = vec![];
 			params.iter().try_for_each(|param| {
@@ -70,7 +71,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 					name: param.name.clone(),
 					default: match &param.default { // param.default.map で書きたいがうまくいかず
 						None => None,
-						Some(default) => Some(evaluate(&*default, vars) ?),
+						Some(default) => Some(evaluate(&*default, vars, imports) ?),
 					},
 				});
 				ModdlResult::Ok(())
@@ -85,7 +86,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 					(ValueBody::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
 			let result = Ok(ValueBody::NodeStructure(NodeStructure::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, &vars)?.as_node_structure()?.0), // TODO loc も引き渡す
+				body: Box::new(evaluate(body, &vars, imports)?.as_node_structure()?.0), // TODO loc も引き渡す
 			}));
 			result
 		},
@@ -95,26 +96,26 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		// Expr::MmlLiteral(String) => {}
 		// Expr::AssocArrayLiteral(AssocArray) => {}
 		ExprBody::FunctionCall { function, args } => {
-			let (function, _) = evaluate(function, vars)?.as_function() ?;
+			let (function, _) = evaluate(function, vars, imports)?.as_function() ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
 			let mut value_args = HashMap::new();
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			for (name, expr) in &resolved_args {
-				value_args.insert(name.clone(), evaluate(expr, vars) ?);
+				value_args.insert(name.clone(), evaluate(expr, vars, imports) ?);
 			}
 
-			function.call(&value_args, &vars, expr.loc.clone()).map(|(v, _)| v)
+			function.call(&value_args, &vars, expr.loc.clone(), imports).map(|(v, _)| v)
 		},
 		ExprBody::PropertyAccess { assoc, name } => {
-			let assoc_val = evaluate(assoc, vars) ?;
+			let assoc_val = evaluate(assoc, vars, imports) ?;
 			let (assoc, _) = assoc_val.as_assoc() ?;
 			let val = assoc.get(name);
 			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
-			let (factory, _) = evaluate(node_def, vars)?.as_node_factory() ?;
+			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_factory() ?;
 
 			let arg_names = factory.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
@@ -122,7 +123,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut value_args = HashMap::new();
 			for (name, expr) in &resolved_args {
-				value_args.insert(name.clone(), evaluate(expr, vars) ?);
+				value_args.insert(name.clone(), evaluate(expr, vars, imports) ?);
 			}
 
 			Ok(ValueBody::NodeStructure(NodeStructure::NodeCreation {
@@ -135,7 +136,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 		ExprBody::MmlLiteral(_) => unimplemented!(),
 
 		ExprBody::Labeled { label, inner } => {
-			let (inner_val, inner_loc) = evaluate(inner, vars) ?;
+			let (inner_val, inner_loc) = evaluate(inner, vars, imports) ?;
 
 			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label, &expr.loc));
 
@@ -176,8 +177,9 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<Value> {
 fn evaluate_unary_structure<C: Calc + 'static>(
 	arg: &Expr,
 	vars: &Rc<RefCell<Scope>>,
+	imports: &mut ImportCache,
 ) -> ModdlResult<ValueBody> {
-	let arg_val = evaluate(arg, vars) ?;
+	let arg_val = evaluate(arg, vars, imports) ?;
 
 	// ラベルのついていない定数はコンパイル時に計算する。
 	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
@@ -196,9 +198,10 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
 	vars: &Rc<RefCell<Scope>>,
+	imports: &mut ImportCache,
 ) -> ModdlResult<ValueBody> {
-	let ref l_val @ (ref l_body, _) = evaluate(lhs, vars) ?;
-	let ref r_val @ (ref r_body, _) = evaluate(rhs, vars) ?;
+	let ref l_val @ (ref l_body, _) = evaluate(lhs, vars, imports) ?;
+	let ref r_val @ (ref r_body, _) = evaluate(rhs, vars, imports) ?;
 
 	// ラベルのついていない定数はコンパイル時に計算する。
 	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
@@ -214,22 +217,22 @@ fn evaluate_binary_structure<C: Calc + 'static>(
 	}))
 }
 
-fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>) -> ModdlResult<ValueBody> {
+fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<ValueBody> {
 	// cond が定数式の場合は短絡評価する。
 	// 式全体が定数式になるかどうかは、評価する方の枝の評価結果が定数式になるかどうかに拠る
-	let ref cond_val @ (ref cond_body, _) = evaluate(cond, vars) ?;
+	let ref cond_val @ (ref cond_body, _) = evaluate(cond, vars, imports) ?;
 	if let Some(cond_bool) = cond_body.as_boolean() {
 		return if cond_bool {
-			evaluate(then, vars).map(|(v, _)| v)
+			evaluate(then, vars, imports).map(|(v, _)| v)
 		} else {
-			evaluate(els, vars).map(|(v, _)| v)
+			evaluate(els, vars, imports).map(|(v, _)| v)
 		};
 	}
 
 	// cond が定数式でない場合は NodeStructure として演奏時に評価する。
 	// then と else も NodeStructure でなければならないので、定数式にはならない
-	let then_val = evaluate(then, vars) ?;
-	let else_val = evaluate(els, vars) ?;
+	let then_val = evaluate(then, vars, imports) ?;
+	let else_val = evaluate(els, vars, imports) ?;
 	let (cond_str, _) = cond_val.as_node_structure() ?;
 	let (then_str, _) = then_val.as_node_structure() ?;
 	let (else_str, _) = else_val.as_node_structure() ?;

@@ -2,11 +2,7 @@ use parser::common::Location;
 
 /// ビルトイン変数を提供する。今後プラグインの読み込みなどをここでやる想定
 use super::{
-	error::*,
-	function::*,
-	io::*,
-	scope::*,
-	value::*,
+	common::read_file, error::*, executor::process_statements, function::*, import_cache::ImportCache, io::*, path::resolve_path, scope::*, value::*
 };
 use crate::{
 	core::{
@@ -93,6 +89,9 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	// feedback
 	add_io!("feedback", FeedbackIo::new());
 
+	// import/export
+	add_function!("import", Import { });
+
 	// for experiments
 	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
 	add_function!("twice", Twice { });
@@ -106,7 +105,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {
 	fn signature(&self) -> FunctionSignature { vec!["waveform".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (wave_val, wave_loc) = args.get(& "waveform".to_string())
 				.ok_or_else(|| error(ErrorType::ArgMissing { name: "waveform".to_string() }, call_loc.clone())) ?;
 		let wave = wave_val.as_waveform_index()
@@ -120,7 +119,7 @@ impl Function for WaveformPlayer {
 pub struct NesFreq { }
 impl Function for NesFreq {
 	fn signature(&self) -> FunctionSignature { vec!["triangle".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let triangle = match args.get(& "triangle".to_string()) {
 			Some(v) => v.as_boolean()?.0,
 			None => false,
@@ -139,7 +138,7 @@ impl Delay {
 }
 impl Function for Delay {
 	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (max_time_val, max_time_loc) = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
 		let max_time = max_time_val.as_float()
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, max_time_loc.clone())) ?;
@@ -156,7 +155,7 @@ macro_rules! unary_math_func {
 		pub struct $name { }
 		impl Function for $name {
 			fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
-			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 				let (arg, arg_loc) = args.get(& "arg".to_string())
 						.ok_or_else(|| error(ErrorType::ArgMissing { name: "arg".to_string() }, call_loc.clone())) ?;
 				if let Some(val) = arg.as_float() {
@@ -190,7 +189,7 @@ unary_math_func!(Tan, TanCalc);
 pub struct At { }
 impl Function for At {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "index".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
 		let (index, _) = get_required_arg(args, "index", &call_loc)?.as_float() ?;
 
@@ -201,7 +200,7 @@ impl Function for At {
 pub struct Map { }
 impl Function for Map {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "mapper".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
 		let (mapper, mapper_loc) = get_required_arg(args, "mapper", &call_loc)?.as_function() ?;
 
@@ -210,7 +209,7 @@ impl Function for Map {
 
 		let mut result = vec![];
 		for elem in source {
-			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, mapper_loc.clone()) ?);
+			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, mapper_loc.clone(), imports) ?);
 		}
 		Ok((ValueBody::Array(result), call_loc))
 	}
@@ -219,7 +218,7 @@ impl Function for Map {
 pub struct Reduce { }
 impl Function for Reduce {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "initial".to_string(), "reducer".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
 
 		let (init, _) = get_required_arg(args, "initial", &call_loc) ?;
@@ -233,7 +232,7 @@ impl Function for Reduce {
 			result = reducer.call(& HashMap::from([
 				(sig[0].clone(), (result, reducer_loc.clone())), // 位置は便宜的なもの
 				(sig[1].clone(), (elem.clone(), elem_loc.clone())),
-			]), vars, reducer_loc.clone())?.0;
+			]), vars, reducer_loc.clone(), imports)?.0;
 		}
 		Ok((result, call_loc))
 	}
@@ -242,10 +241,36 @@ impl Function for Reduce {
 pub struct Then { }
 impl Function for Then {
 	fn signature(&self) -> FunctionSignature { vec!["predecessor".to_string(), "successor".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (predecessor, _) = get_required_arg(args, "predecessor", &call_loc)?.as_io() ?;
 		let (successor, _) = get_required_arg(args, "successor", &call_loc)?.as_function() ?;
 
 		Ok((ValueBody::Io(Rc::new(RefCell::new(ThenIo::new(predecessor.clone(), successor.clone(), vars.clone())))), call_loc))
+	}
+}
+
+pub struct Import { }
+impl Function for Import {
+	fn signature(&self) -> FunctionSignature { vec!["path".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (path, _) = get_required_arg(args, "path", &call_loc)?.as_string() ?;
+
+		// TODO パスをちゃんと解決する必要があるが、今は起点が取れない。Location に含めるのが筋と思われるが
+		let abs_path = path.clone(); //resolve_path(path.as_str(), base_moddl_path)
+		match imports.imports.get(&abs_path) {
+			Some(cached) => Ok(cached.clone()),
+			None => {
+				let moddl = read_file(abs_path.as_str()) ?;
+				// TODO sample_rate を持ってくる
+				let pctx = process_statements(moddl.as_str(), 44100, abs_path.as_str(), imports) ?;
+				match pctx.export {
+					None => Err(error(ErrorType::ExportNotFound, call_loc)),
+					Some(val) => {
+						imports.imports.insert(abs_path, val.clone());
+						Ok(val)
+					}
+				}
+			}
+		}
 	}
 }

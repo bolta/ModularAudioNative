@@ -1,0 +1,19 @@
+@tempo 96
+
+// @let `nesOscs`, import("H:/dev/ModularAudioNative/moddl/nesOscs.moddl")
+// @let `nesPulse`, nesOscs.pulse
+// @let `nesTriangle`, nesOscs.triangle
+
+// こう書いても読み込みは 1 回だけ
+@let `nesPulse`, import("H:/dev/ModularAudioNative/moddl/nesOscs.moddl").pulse
+@let `nesTriangle`, import("H:/dev/ModularAudioNative/moddl/nesOscs.moddl").triangle
+
+@instrument ^ab, nesPulse * adsrEnv
+@instrument ^c, nesTriangle * adsrEnv
+
+ab o5l8v13
+b @d-10
+c o3l8v15
+
+ab r4c<b->e-d-<a-fe>c<gb-a2
+c d-a->d-4<g-b->d-4<cg>c4<f2

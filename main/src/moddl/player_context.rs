@@ -79,6 +79,7 @@ pub struct PlayerContext {
 	pub mute_solo: MuteSolo,
 	pub mute_solo_tracks: HashSet<String>,
 	pub vars: Rc<RefCell<Scope>>,
+	pub export: Option<Value>,
 	pub seq_tags: HashSet<String>,
 	// ソースファイルの先頭でだけオプションを許すためのフラグ
 	pub allows_option_here: bool,
@@ -105,6 +106,7 @@ impl PlayerContext {
 			mute_solo: MuteSolo::Mute,
 			mute_solo_tracks: HashSet::new(),
 			vars,
+			export: None,
 			seq_tags: HashSet::new(),
 			allows_option_here: true,
 			use_default_labels: false,

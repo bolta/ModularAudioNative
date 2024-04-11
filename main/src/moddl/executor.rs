@@ -1,11 +1,9 @@
 use super::{
-	common::{make_seq_tag, read_file}, console::*, error::*, evaluator::*, io::Io, path::*, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
+	common::{make_seq_tag, read_file}, console::*, error::*, evaluator::*, import_cache::ImportCache, io::Io, path::*, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
 };
-use crate::{
-	wave::{
-		wav_reader::*, waveform::Waveform,
-	}
-};
+use crate::wave::{
+		wav_reader::*, waveform::Waveform, waveform_host::WaveformHost,
+	};
 extern crate parser;
 use parser::{
 	common::{Location, Span}, moddl::{ast::*, parser::compilation_unit}
@@ -17,25 +15,26 @@ use std::{
 	rc::Rc,
 };
 
-pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str) -> ModdlResult<PlayerContext> {
-	let mut pctx = PlayerContext::init(moddl_path, sample_rate);
+pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str, imports: &mut ImportCache) -> ModdlResult<PlayerContext/* <'a> */> {
+	// let mut waveforms = WaveformHost::new();
+	let mut pctx = PlayerContext::init(moddl_path, sample_rate/* , import_cache */);
 
 	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new(moddl))
 	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
 
 	for stmt in &statements {
-		process_statement(&stmt, &mut pctx) ?;
+		process_statement(&stmt, &mut pctx, imports) ?;
 	}
 
 	Ok(pctx)
 }
 
-pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> ModdlResult<HashMap<String, Value>> {
+pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
 	let resolved_path = resolve_path(moddl_path, base_moddl_path);
 	// TODO resolved_path が valid unicode でない場合のエラー処理
 	let resolved_path_str = resolved_path.to_str().unwrap();
 	let moddl = read_file(resolved_path_str) ?;
-	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path_str) ?;
+	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path_str, imports) ?;
 
 	// pctx.vars.borrow() が通らない。こう書かないといけない
 	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
@@ -43,25 +42,25 @@ pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32) -> Modd
 	Ok(vars.entries().clone())
 }
 
-fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext) -> ModdlResult<()> {
+fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
 				},
 				"instrument" => {
-					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_node_structure()?.0;
 						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"effect" => {
-					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
-					let source_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
+					let source_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					let source_loc = &args[1].loc;
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
@@ -74,21 +73,21 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc)?.as_node_structure()?.0;
+					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc, imports)?.as_node_structure()?.0;
 					for track in tracks {
 						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
 				}
 				"grooveCycle" => {
-					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0 as i32;
+					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0 as i32;
 				},
 				"groove" => {
-					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
-					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc)?.as_track_set()?.0;
-					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc)?.as_node_structure()?.0;
+					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
+					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_node_structure()?.0;
 					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
 					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
@@ -103,13 +102,13 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"let" => {
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
-					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc) ?;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
+					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
 				"waveform" => {
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
-					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc) ?;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
+					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports) ?;
 					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
 						Ok(read_wav_file(path.as_str(), None, None, None, None)
@@ -122,40 +121,46 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 							ValueType::Assoc,
 						]}, value_loc.clone()))
 					} ?;
-					let index = pctx.waveforms.add(waveform);
+					let index = imports.waveforms.add(waveform);
 					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 				}
 				"ticksPerBar" => {
-					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
 				"mute" => {
-					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 				}
 				"solo" => {
-					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_track_set()?.0;
+					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 				}
 				"import" => {
-					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_string()?.0;
-					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate) ?;
+					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_string()?.0;
+					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate, imports) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;
+				}
+				"export" => {
+					if pctx.export.is_some() {
+						return Err(error(ErrorType::ExportDuplicate, stmt_loc.clone()));
+					}
+					pctx.export = Some(evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?);
 				}
 				"option" => {
 					if ! pctx.allows_option_here {
 						return Err(error(ErrorType::OptionNotAllowedHere, stmt_loc.clone()));
 					}
 
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc)?.as_identifier_literal()?.0;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
 					match name.as_str() {
 						"defaultLabels" => {
 							pctx.use_default_labels = true;
@@ -236,16 +241,16 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 	Ok(Waveform::new_with_details(channels, sample_rate, data, master_freq, start_offset, end_offset, loop_offset))
 }
 
-fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location) -> ModdlResult<Value> {
+fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 	if index < args.len() {
-		let mut value = evaluate(&args[index], vars) ?;
+		let mut value = evaluate(&args[index], vars, imports) ?;
 		// while let (ValueBody::Io(io), loc) = value {
 		// 	value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
 		// }
 		// TODO ↑value が Labeled だったときに失敗する。↓汚いので書き直す
 		while value.as_io().is_ok() {
 			let (io, loc) = value.as_io().unwrap();
-			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
 		}
 
 		Ok(value)

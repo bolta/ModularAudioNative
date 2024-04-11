@@ -67,7 +67,7 @@ pub fn generate_sequences(
 	param_prefix: &str,
 	param_initials: &HashMap<ParamSignature, f32>,
 	param_default_keys: &HashMap<String, String>,
-	evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>,
+	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
 ) -> ModdlResult<HashMap<String, Sequence>> {
 	let mut stack = init_stack(param_initials);
 	let mut var_seq = 0;
@@ -102,7 +102,7 @@ fn generate_sequence(
 	used_skip: &mut bool,
 	param_prefix: &str,
 	param_default_keys: &HashMap<String, String>,
-	evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>,
+	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
 ) -> ModdlResult<()> {
 	let mut seq = vec![];
 	for command in commands {
@@ -409,7 +409,7 @@ impl StackShortcut for Stack {
 	fn macro_names_mut(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
 }
 
-fn evaluate(number_or_expr: &NumberOrExpr, evaluate_expr: &dyn Fn (&str) -> ModdlResult<f32>) -> ModdlResult<f32> {
+fn evaluate(number_or_expr: &NumberOrExpr, evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>) -> ModdlResult<f32> {
 	match number_or_expr {
 		NumberOrExpr::Number(num) => Ok(*num),
 		NumberOrExpr::Expr(expr) => evaluate_expr(expr.as_str()),

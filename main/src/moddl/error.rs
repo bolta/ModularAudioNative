@@ -44,6 +44,8 @@ pub enum ErrorType {
 	GrooveTargetDuplicate { track: String, existing_assign_loc: Location },
 	OptionNotAllowedHere,
 	IndexOutOfBounds,
+	ExportDuplicate,
+	ExportNotFound,
 
 	TickUnderflow { length: Length },
 	// TODO イベントキューあふれとか、演奏時のエラーをラップする
@@ -75,6 +77,8 @@ impl Display for ErrorType {
 			Self::GrooveTargetDuplicate { track, existing_assign_loc }
 					=> write!(f, "Groove controller track for track {} is duplicate: already assigned at {}.", track, existing_assign_loc),
 			Self::OptionNotAllowedHere => write!(f, "Options must be placed at the head of a source file."),
+			Self::ExportDuplicate => write!(f, "Duplicate export found."),
+			Self::ExportNotFound => write!(f, "Export expected but not found."),
 			// Playing,
 			// File(io::Error),
 			// TODO 全種類ちゃんと作る

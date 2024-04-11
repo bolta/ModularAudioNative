@@ -5,6 +5,7 @@ pub mod error;
 pub mod evaluator;
 pub mod executor;
 pub mod function;
+pub mod import_cache;
 pub mod io;
 pub mod lambda_function;
 pub mod path;

@@ -1,0 +1,6 @@
+@let `nesTriangle`, triangleOsc | quantCrush { resolution: 16 }
+
+// @export {
+// 	pulse: nesFreq() | pulseOsc,
+// 	triangle: nesFreq(triangle: true) | nesTriangle,
+// }
