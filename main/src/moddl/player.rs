@@ -1,5 +1,5 @@
 use super::{
-	common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
+	common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, import_cache::ImportCache, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
 };
 use crate::{
 	calc::*,
@@ -30,9 +30,7 @@ use crate::{
 		sequencer::*,
 		tick::*,
 	},
-	vis::{
-		visualizer::*,
-	},
+	vis::visualizer::*, wave::waveform_host::WaveformHost,
 };
 extern crate parser;
 use graphviz_rust::attributes::start;
@@ -60,7 +58,9 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = options.moddl_path.as_str();
 	let moddl = read_file(moddl_path) ?;
 	let sample_rate = 44100; // TODO 値を外から渡せるように
-	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path) ?;
+	let mut waveforms = WaveformHost::new();
+	let mut imports = ImportCache::new(&mut waveforms);
+	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path, &mut imports) ?;
 	
 	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
 	let mut nodes = AllNodes::new(false);
@@ -95,7 +95,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				match spec {
 					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
@@ -103,11 +103,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars) ?)
+								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars)
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -202,7 +202,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	// TODO コマンドオプションで指定されたときだけ出力する
 	// output_structure(&nodes_result, &sends_to_receives);
 
-	let waveforms = Arc::new(pctx.waveforms);
+	let waveforms = Arc::new(waveforms);
 	let joins: Vec<_> = nodes_result.into_iter()
 			.zip(broadcast_pairs.receivers.into_iter())
 			.map(|(mut machine_spec, broadcast_receiver)| {
@@ -254,7 +254,7 @@ const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこか�
 
 // TODO 引数を整理できるか
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
-		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>)
+		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
 		-> ModdlResult<NodeId> {
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -307,7 +307,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		freq: freq_tag.clone(),
 		note: track.to_string(),
 	};
-	let evaluate_expr = |expr_str: &str| {
+	let mut evaluate_expr = |expr_str: &str| {
 		// TODO 位置情報の補正が必要
 		let (_, expr) = expr()(Span::new(expr_str))
 		.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -315,10 +315,10 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 			
 		// }
 		// TODO evaluate_and_perform_arg と共通化
-		let mut value = evaluate(&*expr, vars) ?;
+		let mut value = evaluate(&*expr, vars, imports) ?;
 		while value.as_io().is_ok() {
 			let (io, loc) = value.as_io().unwrap();
-			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
 		}
 
 		let body = value.0;
@@ -332,7 +332,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 		}
 	};
 
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &evaluate_expr) ?;
+	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &mut evaluate_expr) ?;
 	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(NodeBase::new(0), track.to_string(), seqs)));
 
 	let mut output = instrm;

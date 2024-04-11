@@ -1,9 +1,5 @@
 use super::{
-	error::*,
-	evaluator::*,
-	function::*,
-	scope::*,
-	value::*,
+	error::*, evaluator::*, function::*, import_cache::ImportCache, scope::*, value::*
 };
 
 // extern crate parser;
@@ -33,7 +29,7 @@ impl LambdaFunction {
 }
 impl Function for LambdaFunction {
 	fn signature(&self) -> FunctionSignature { self.params.iter().map(|param| param.name.clone()).collect() }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		// 引数のスコープを追加
 		let mut child_vars = Scope::child_of(self.vars.clone());
 		self.params.iter().try_for_each(|param| {
@@ -43,6 +39,6 @@ impl Function for LambdaFunction {
 			ModdlResult::Ok(())
 		}) ?;
 
-		evaluate(&self.body, &mut child_vars)
+		evaluate(&self.body, &mut child_vars, imports)
 	}
 }

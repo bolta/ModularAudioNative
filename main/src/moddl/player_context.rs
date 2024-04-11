@@ -1,5 +1,5 @@
 use super::{
-	builtin::*, console::*, error::*, evaluator::*, executor::process_statements, io::Io, path::*, player_option::*, scope::*, value::*
+	builtin::*, console::*, error::*, evaluator::*, executor::process_statements, import_cache::ImportCache, io::Io, path::*, player_option::*, scope::*, value::*
 };
 use crate::{
 	calc::*,
@@ -76,7 +76,6 @@ pub struct PlayerContext {
 	pub groove_cycle: i32,
 	// トラックごとの MML を蓄積
 	pub mmls: BTreeMap<String, String>,
-	pub waveforms: WaveformHost,
 	pub mute_solo: MuteSolo,
 	pub mute_solo_tracks: HashSet<String>,
 	pub vars: Rc<RefCell<Scope>>,
@@ -103,7 +102,6 @@ impl PlayerContext {
 			grooves: HashMap::new(),
 			groove_cycle: 384,
 			mmls: BTreeMap::new(),
-			waveforms: WaveformHost::new(),
 			mute_solo: MuteSolo::Mute,
 			mute_solo_tracks: HashSet::new(),
 			vars,

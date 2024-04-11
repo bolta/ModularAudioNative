@@ -2,8 +2,8 @@ use crate::{core::{
 	common::*,
 	context::*,
 	machine::*,
-	node::*, node_factory::{NodeFactory, NodeArgSpec, NodeArgs},
-}, moddl::{io::Io, error::ModdlResult, value::{Value, ValueBody}}};
+	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeFactory},
+}, moddl::{error::ModdlResult, import_cache::ImportCache, io::Io, value::{Value, ValueBody}}};
 use node_macro::node_impl;
 use parser::common::Location;
 
@@ -118,7 +118,7 @@ impl FeedbackIo {
 	}
 }
 impl Io for FeedbackIo {
-	fn perform(&mut self, loc: &Location) -> ModdlResult<Value> {
+	fn perform(&mut self, loc: &Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let id = self.id;
 		self.id.0 += 1;
 

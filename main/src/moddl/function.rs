@@ -3,9 +3,7 @@ use parser::common::Location;
 use crate::wave::waveform_host::WaveformIndex;
 
 use super::{
-	error::*,
-	scope::*,
-	value::*,
+	error::*, import_cache::ImportCache, scope::*, value::*
 };
 
 use std::{
@@ -18,7 +16,7 @@ pub type FunctionSignature = Vec<String>;
 
 pub trait Function {
 	fn signature(&self) -> FunctionSignature; // 将来的に型情報も必要になるかもだが、とりあえず名前と数だけ
-	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, loc: Location) -> ModdlResult<Value>;
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value>;
 	// TODO 副作用が必要な場合もあるので引数はもっと増える
 }
 
@@ -35,7 +33,7 @@ pub fn check_arity(sig: &FunctionSignature, expected: usize, loc: &Location) -> 
 pub struct Twice { }
 impl Function for Twice {
 	fn signature(&self) -> FunctionSignature { vec!["arg0".to_string()] } // TODO こういうどうでもいい名前でもつけないとだめか？
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (arg, _) = get_required_arg(args, "arg0", &call_loc)?.as_float() ?;
 		let result = arg * 2f32;
 
