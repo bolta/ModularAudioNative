@@ -164,6 +164,9 @@ pub_parser![inline_space, char, {
 	alt((
 		char(' '),
 		char('\t'),
+		map_res(tag("\\\r\n"), |_| ok('\n')),
+		map_res(tag("\\\r"), |_| ok('\r')),
+		map_res(tag("\\\n"), |_| ok('\n')),
 		range_comment(),
 		line_comment(),
 	))
@@ -173,6 +176,9 @@ pub_parser![space, char, {
 	alt((
 		char(' '),
 		char('\t'),
+		map_res(tag("\\\r\n"), |_| ok('\n')),
+		map_res(tag("\\\r"), |_| ok('\r')),
+		map_res(tag("\\\n"), |_| ok('\n')),
 		char('\r'),
 		char('\n'),
 		range_comment(),
