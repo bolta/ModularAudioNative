@@ -48,22 +48,19 @@ use parser::{
 use std::{
 	borrow::Borrow,
 	cell::RefCell,
-	collections::btree_map::BTreeMap,
-	collections::hash_map::HashMap,
-	collections::hash_set::HashSet,
+	collections::{btree_map::BTreeMap, hash_map::HashMap, hash_set::HashSet},
 	fs::File,
 	io::Read,
-	path::Path,
+	path::{Path, PathBuf},
 	rc::Rc,
 	sync::{
-		Arc,
-		mpsc,
+		mpsc, Arc
 	},
 	thread,
 };
 
 pub struct PlayerContext {
-	pub moddl_path: String,
+	pub moddl_path: PathBuf,
 	pub sample_rate: i32,
 	pub tempo: f32,
 	pub ticks_per_bar: i32,
@@ -87,14 +84,14 @@ pub struct PlayerContext {
 	pub use_default_labels: bool,
 }
 impl PlayerContext {
-	pub fn init(moddl_path: &str, sample_rate: i32) -> Self {
+	pub fn init(moddl_path: &Path, sample_rate: i32) -> Self {
 		// ルートに直に書き込むと import したときにビルトインのエントリが衝突するので、1 階層切っておく
 		// TODO ルートは singleton にできるはず…
 		let root_vars = Scope::root(builtin_vars(sample_rate));
 		let vars = Scope::child_of(root_vars);
 
 		Self {
-			moddl_path: moddl_path.to_string(),
+			moddl_path: moddl_path.to_path_buf(),
 			sample_rate,
 			tempo: 120f32,
 			ticks_per_bar: 384,

@@ -23,9 +23,7 @@ use crate::{
 };
 
 use std::{
-	cell::RefCell,
-	collections::hash_map::HashMap,
-	rc::Rc,
+	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
 pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
@@ -254,15 +252,13 @@ impl Function for Import {
 	fn signature(&self) -> FunctionSignature { vec!["path".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (path, _) = get_required_arg(args, "path", &call_loc)?.as_string() ?;
-
-		// TODO パスをちゃんと解決する必要があるが、今は起点が取れない。Location に含めるのが筋と思われるが
-		let abs_path = path.clone(); //resolve_path(path.as_str(), base_moddl_path)
+		let abs_path = resolve_path(Path::new(&path), call_loc.path.as_path());
 		match imports.imports.get(&abs_path) {
 			Some(cached) => Ok(cached.clone()),
 			None => {
-				let moddl = read_file(abs_path.as_str()) ?;
+				let moddl = read_file(abs_path.as_path()) ?;
 				// TODO sample_rate を持ってくる
-				let pctx = process_statements(moddl.as_str(), 44100, abs_path.as_str(), imports) ?;
+				let pctx = process_statements(moddl.as_str(), 44100, abs_path.as_path(), imports) ?;
 				match pctx.export {
 					None => Err(error(ErrorType::ExportNotFound, call_loc)),
 					Some(val) => {

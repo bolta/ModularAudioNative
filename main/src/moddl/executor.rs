@@ -10,16 +10,13 @@ use parser::{
 };
 
 use std::{
-	cell::RefCell,
-	collections::hash_map::HashMap,
-	rc::Rc,
+	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
-pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str, imports: &mut ImportCache) -> ModdlResult<PlayerContext/* <'a> */> {
-	// let mut waveforms = WaveformHost::new();
+pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
 	let mut pctx = PlayerContext::init(moddl_path, sample_rate/* , import_cache */);
 
-	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new(moddl))
+	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new_extra(moddl, Rc::new(moddl_path.to_path_buf())))
 	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
 
 	for stmt in &statements {
@@ -29,12 +26,11 @@ pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &str, impor
 	Ok(pctx)
 }
 
-pub fn import(moddl_path: &str, base_moddl_path: &str, sample_rate: i32, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
+pub fn import(moddl_path: &Path, base_moddl_path: &Path, sample_rate: i32, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
 	let resolved_path = resolve_path(moddl_path, base_moddl_path);
-	// TODO resolved_path が valid unicode でない場合のエラー処理
-	let resolved_path_str = resolved_path.to_str().unwrap();
-	let moddl = read_file(resolved_path_str) ?;
-	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path_str, imports) ?;
+	let resolved_path = resolved_path.as_path();
+	let moddl = read_file(resolved_path) ?;
+	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path, imports) ?;
 
 	// pctx.vars.borrow() が通らない。こう書かないといけない
 	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
@@ -144,7 +140,8 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				}
 				"import" => {
 					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_string()?.0;
-					let imported_vars = import(&path, pctx.moddl_path.as_str(), pctx.sample_rate, imports) ?;
+					let path = Path::new(&path);
+					let imported_vars = import(&path, pctx.moddl_path.as_path(), pctx.sample_rate, imports) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;

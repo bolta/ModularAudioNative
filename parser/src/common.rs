@@ -1,6 +1,6 @@
 extern crate nom;
 extern crate nom_locate;
-use std::fmt::Display;
+use std::{fmt::Display, path::{Path, PathBuf}, rc::Rc};
 
 //use nom::regexp::str::*;
 use nom::{
@@ -66,7 +66,7 @@ pub fn re_find<'a>(regex: Regex) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, &
 	}
 }
 
-pub type Span<'a> = LocatedSpan<&'a str>;
+pub type Span<'a> = LocatedSpan<&'a str, Rc<PathBuf>>;
 #[derive(Clone, Debug)]
 pub struct Located<T> {
 	pub body: T,
@@ -82,6 +82,7 @@ impl <T> Located<T> {
 /// （取り回しのためソースの寿命に依存しない形で）
 #[derive(Clone, Debug)]
 pub struct Location {
+	pub path: Rc<PathBuf>,
 	/// 行番号（1 始まり）
 	pub line: u32,
 
@@ -91,16 +92,17 @@ pub struct Location {
 	// offset: usize, // 必要なら追加
 }
 impl Location {
-	pub fn of<T>(span: &LocatedSpan<T>) -> Self
+	pub fn of<T>(span: &LocatedSpan<T, Rc<PathBuf>>) -> Self
 	where T: AsBytes {
 		Self {
+			path: span.extra.clone(),
 			line: span.location_line(),
 			column: span.get_utf8_column(),
 		}
 	}
 	/// 位置情報をすぐに引っ張れないところはとりあえずこれにしておく。最終的には廃止するつもり
 	pub fn dummy() -> Self {
-		Self{ line: 0, column: 0 }
+		Self{ path: Rc::new(PathBuf::from("")), line: 0, column: 0 }
 	}
 }
 impl Display for Location {

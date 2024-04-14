@@ -5,8 +5,7 @@ use std::{
 	},
 };
 
-pub fn resolve_path(moddl_path: &str, base_moddl_path: &str) -> PathBuf {
-	let moddl_path = Path::new(moddl_path);
+pub fn resolve_path(moddl_path: &Path, base_moddl_path: &Path) -> PathBuf {
 	if moddl_path.is_absolute() {
 		moddl_path.to_path_buf()
 	} else {

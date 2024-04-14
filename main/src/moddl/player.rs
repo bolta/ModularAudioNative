@@ -39,15 +39,9 @@ use parser::{
 };
 
 use std::{
-	borrow::Borrow,
-	cell::RefCell,
-	collections::hash_map::HashMap,
-	rc::Rc,
-	sync::{
-		Arc,
-		mpsc,
-	},
-	thread,
+	borrow::Borrow, cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc, sync::{
+		mpsc, Arc
+	}, thread
 };
 
 // TODO エラー処理を全体的にちゃんとする
@@ -55,7 +49,7 @@ use std::{
 const TAG_SEQUENCER: &str = "seq";
 
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
-	let moddl_path = options.moddl_path.as_str();
+	let moddl_path = Path::new(&options.moddl_path);
 	let moddl = read_file(moddl_path) ?;
 	let sample_rate = 44100; // TODO 値を外から渡せるように
 	let mut waveforms = WaveformHost::new();
@@ -94,7 +88,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				};
 				match spec {
 					TrackDef::Instrument(structure) => {
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
 								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
@@ -102,11 +96,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
 								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
 								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
@@ -253,10 +247,11 @@ impl Iterator for EventIter {
 const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこから取るようにする
 
 // TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
 		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
 		-> ModdlResult<NodeId> {
-	let (_, ast) = default_mml_parser::compilation_unit()(Span::new(mml))
+	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
+	let (_, ast) = default_mml_parser::compilation_unit()(Span::new_extra(mml, moddl_path_rc.clone()))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
 	let freq_tag = format!("{}_freq", track);
 
@@ -309,7 +304,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	};
 	let mut evaluate_expr = |expr_str: &str| {
 		// TODO 位置情報の補正が必要
-		let (_, expr) = expr()(Span::new(expr_str))
+		let (_, expr) = expr()(Span::new_extra(expr_str, moddl_path_rc.clone()))
 		.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
 		// match evaluate(&*expr)?.0 {
 			
