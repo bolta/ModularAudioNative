@@ -51,6 +51,9 @@ pub enum ErrorType {
 	// TODO イベントキューあふれとか、演奏時のエラーをラップする
 	Playing,
 	File(io::Error),
+
+	/// 普通起こるはずのない（おそらくバグっている）エラー。なるべく panic はせず、こちらを使う
+	UnknownError { message: String },
 }
 impl Display for ErrorType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -81,6 +84,7 @@ impl Display for ErrorType {
 			Self::ExportNotFound => write!(f, "Export expected but not found."),
 			// Playing,
 			// File(io::Error),
+			Self::UnknownError { message } => write!(f, "Unknown error (perhaps due to a bug): {}", message),
 			// TODO 全種類ちゃんと作る
 			_ => write!(f, "{:?}", self),
 		}

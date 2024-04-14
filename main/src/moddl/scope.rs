@@ -31,12 +31,6 @@ impl Scope {
 			parent: Some(parent),
 		}))
 	}
-	// pub fn make_child(&self) -> Rc<Self> {
-	// 	Rc::new(Self {
-	// 		entries: HashMap::new(),
-	// 		parent: Some(Rc::new(self)),
-	// 	})
-	// }
 
 	pub fn lookup(&self, name: &String) -> Option<Value> {
 		match self.entries.get(name) {
@@ -47,6 +41,28 @@ impl Scope {
 					None => None,
 				}
 			}
+		}
+	}
+
+	pub fn parent(&self) -> Option<&Rc<RefCell<Self>>> {
+		match &self.parent {
+			Some(parent) => Some(&parent),
+			None => None,
+		}
+	}
+
+	/// ルートのスコープを Rc で返す
+	/// self 自体がルートである場合は失敗し、None を返す（self から「self を包む Rc」を返せないため）
+	pub fn get_root(&self) -> Option<Rc<RefCell<Self>>> {
+		match &self.parent {
+			Some(parent) => {
+				// parent のさらに親がない → parent がルート
+				match parent.borrow().parent {
+					Some(_) => parent.borrow().get_root(),
+					None => Some(parent.clone()),
+				}
+			}
+			None => None,
 		}
 	}
 

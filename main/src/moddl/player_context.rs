@@ -61,7 +61,6 @@ use std::{
 
 pub struct PlayerContext {
 	pub moddl_path: PathBuf,
-	pub sample_rate: i32,
 	pub tempo: f32,
 	pub ticks_per_bar: i32,
 	// トラックごとの instrument/effect
@@ -84,15 +83,13 @@ pub struct PlayerContext {
 	pub use_default_labels: bool,
 }
 impl PlayerContext {
-	pub fn init(moddl_path: &Path, sample_rate: i32) -> Self {
-		// ルートに直に書き込むと import したときにビルトインのエントリが衝突するので、1 階層切っておく
-		// TODO ルートは singleton にできるはず…
-		let root_vars = Scope::root(builtin_vars(sample_rate));
-		let vars = Scope::child_of(root_vars);
+	pub fn init(moddl_path: &Path, root_scope: Rc<RefCell<Scope>>) -> Self {
+		// ルートに直に書き込むと import したときにビルトインのエントリが衝突するので、1 階層切っておく。
+		// ルートは 1 つのインスタンスを使い回す
+		let vars = Scope::child_of(root_scope);
 
 		Self {
 			moddl_path: moddl_path.to_path_buf(),
-			sample_rate,
 			tempo: 120f32,
 			ticks_per_bar: 384,
 			track_defs: vec![],

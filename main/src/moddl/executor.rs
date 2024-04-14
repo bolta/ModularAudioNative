@@ -13,8 +13,8 @@ use std::{
 	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
-pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
-	let mut pctx = PlayerContext::init(moddl_path, sample_rate/* , import_cache */);
+pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
+	let mut pctx = PlayerContext::init(moddl_path, root_scope);
 
 	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new_extra(moddl, Rc::new(moddl_path.to_path_buf())))
 	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
@@ -26,11 +26,11 @@ pub fn process_statements(moddl: &str, sample_rate: i32, moddl_path: &Path, impo
 	Ok(pctx)
 }
 
-pub fn import(moddl_path: &Path, base_moddl_path: &Path, sample_rate: i32, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
+pub fn import(moddl_path: &Path, base_moddl_path: &Path, root_scope: Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
 	let resolved_path = resolve_path(moddl_path, base_moddl_path);
 	let resolved_path = resolved_path.as_path();
 	let moddl = read_file(resolved_path) ?;
-	let pctx = process_statements(moddl.as_str(), sample_rate, resolved_path, imports) ?;
+	let pctx = process_statements(moddl.as_str(), root_scope, resolved_path, imports) ?;
 
 	// pctx.vars.borrow() が通らない。こう書かないといけない
 	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
@@ -141,7 +141,9 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				"import" => {
 					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_string()?.0;
 					let path = Path::new(&path);
-					let imported_vars = import(&path, pctx.moddl_path.as_path(), pctx.sample_rate, imports) ?;
+					let root_scope = pctx.vars.borrow().get_root()
+							.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, stmt_loc.clone())) ?;
+					let imported_vars = import(&path, pctx.moddl_path.as_path(), root_scope, imports) ?;
 					imported_vars.iter().try_for_each(|(name, value)| {
 						pctx.vars.borrow_mut().set(name, value.clone())
 					}) ?;

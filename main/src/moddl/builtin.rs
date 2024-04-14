@@ -250,15 +250,16 @@ impl Function for Then {
 pub struct Import { }
 impl Function for Import {
 	fn signature(&self) -> FunctionSignature { vec!["path".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (path, _) = get_required_arg(args, "path", &call_loc)?.as_string() ?;
 		let abs_path = resolve_path(Path::new(&path), call_loc.path.as_path());
 		match imports.imports.get(&abs_path) {
 			Some(cached) => Ok(cached.clone()),
 			None => {
 				let moddl = read_file(abs_path.as_path()) ?;
-				// TODO sample_rate を持ってくる
-				let pctx = process_statements(moddl.as_str(), 44100, abs_path.as_path(), imports) ?;
+				let root_scope = vars.borrow().get_root()
+						.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, call_loc.clone())) ?;
+				let pctx = process_statements(moddl.as_str(), root_scope, abs_path.as_path(), imports) ?;
 				match pctx.export {
 					None => Err(error(ErrorType::ExportNotFound, call_loc)),
 					Some(val) => {

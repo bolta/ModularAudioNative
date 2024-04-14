@@ -1,5 +1,5 @@
 use super::{
-	common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, import_cache::ImportCache, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
+	builtin::builtin_vars, common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, import_cache::ImportCache, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
 };
 use crate::{
 	calc::*,
@@ -52,9 +52,10 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = Path::new(&options.moddl_path);
 	let moddl = read_file(moddl_path) ?;
 	let sample_rate = 44100; // TODO 値を外から渡せるように
+	let root_vars = Scope::root(builtin_vars(sample_rate));
 	let mut waveforms = WaveformHost::new();
 	let mut imports = ImportCache::new(&mut waveforms);
-	let mut pctx = process_statements(moddl.as_str(), sample_rate, moddl_path, &mut imports) ?;
+	let mut pctx = process_statements(moddl.as_str(), root_vars, moddl_path, &mut imports) ?;
 	
 	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
 	let mut nodes = AllNodes::new(false);
