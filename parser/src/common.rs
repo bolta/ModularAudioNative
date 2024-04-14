@@ -107,7 +107,7 @@ impl Location {
 }
 impl Display for Location {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "line {}, column {}", self.line, self.column)
+		write!(f, "{}, line {}, column {}", self.path.to_str().unwrap_or("(not available)"), self.line, self.column)
 	}
 }
 
