@@ -40,8 +40,8 @@ struct ValueIndex(pub usize);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct OutputIndex(pub usize);
 
-static mut EXECUTE_COUNT: i32 = 0;
-static mut UPDATE_COUNT: i32 = 0;
+// static mut EXECUTE_COUNT: i32 = 0;
+// static mut UPDATE_COUNT: i32 = 0;
 
 pub struct MachineSpec {
 	pub name: String,
@@ -231,10 +231,10 @@ impl Machine {
 
 		let end = std::time::Instant::now();
 		println!("{:?}", end.duration_since(start));
-		unsafe {
-			println!("execute: {}", EXECUTE_COUNT);
-			println!("update: {}", UPDATE_COUNT);
-		}
+		// unsafe {
+		// 	println!("execute: {}", EXECUTE_COUNT);
+		// 	println!("update: {}", UPDATE_COUNT);
+		// }
 	}
 
 	fn compile(&self, nodes: &NodeHost, upstreams: &Vec<Vec<ChanneledNodeIndex>>,
@@ -336,7 +336,7 @@ impl Machine {
 					None => &mut values[0 .. 0], // 出力なし
 				};
 				node.execute(&inputs, output_slice, context, env);
-				unsafe { EXECUTE_COUNT += 1; }
+				// unsafe { EXECUTE_COUNT += 1; }
 			}
 			&Instruction::Copy { to, from } => {
 				let from_val = values[from.0][0];
@@ -351,7 +351,7 @@ impl Machine {
 // // println!("{:?}: executing Update", node_idx);
 					
 				nodes[*node_idx].update(&inputs, context, env);
-				unsafe { UPDATE_COUNT += 1; }
+				// unsafe { UPDATE_COUNT += 1; }
 			}
 		}
 	}
