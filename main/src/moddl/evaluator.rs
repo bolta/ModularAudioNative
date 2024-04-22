@@ -195,7 +195,12 @@ fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -
 		}
 	};
 
-	let recurse = |strukt| filter_labels(strukt, loc, filter);
+	transform_labels(strukt, loc, &transform_label)
+}
+
+fn transform_labels<F>(strukt: &NodeStructure, loc: &Location, transform_label: &F) -> ModdlResult<NodeStructure>
+where F: Fn (&Option<QualifiedLabel>) -> Option<QualifiedLabel> {
+	let recurse = |strukt| transform_labels(strukt, loc, transform_label);
 
 	match strukt {
 		NodeStructure::Calc { node_factory, args } => Ok(NodeStructure::Calc {
@@ -220,7 +225,6 @@ fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -
 		}),
 		NodeStructure::NodeCreation { factory, args, label } => Ok(NodeStructure::NodeCreation {
 			factory: factory.clone(),
-			// args: args.clone(), // TODO この中に ValueBody::NodeFactory が含まれる場合、返還が必要か？
 			args: args.keys().map(|arg_name| {
 				let (value, value_loc) = &args[arg_name];
 				let new_value = match value {
@@ -238,9 +242,6 @@ fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -
 		NodeStructure::Placeholder { .. } => Ok(strukt.clone()),
 	}
 }
-
-// fn transform_labels(strukt: &NodeStructure, loc: &Location, transform: fn (&nodeStructure) -> ) -> ModdlResult<NodeStructure> {
-
 
 #[derive(Debug)]
 enum ListType { Allow, Deny }
