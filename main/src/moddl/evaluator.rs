@@ -178,6 +178,12 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			let filter = build_label_filter(filter, &struct_loc) ?;
 			Ok(ValueBody::NodeStructure(filter_labels(&struct_val, &struct_loc, &filter) ?))
 		},
+		ExprBody::LabelPrefix { strukt, prefix } => {
+			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
+			// TODO struct_val が LabelGuard だったら除去する
+
+			Ok(ValueBody::NodeStructure(add_prefix_to_labels(&struct_val, &struct_loc, prefix.0.as_str()) ?))
+		},
 	} ?;
 	Ok((body, expr.loc.clone()))
 }
@@ -193,6 +199,15 @@ fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -
 				if filter.list.contains(label) == expected_contains { Some(label.clone()) } else { None }
 			}
 		}
+	};
+
+	transform_labels(strukt, loc, &transform_label)
+}
+
+fn add_prefix_to_labels(strukt: &NodeStructure, loc: &Location, prefix: &str) -> ModdlResult<NodeStructure> {
+	let transform_label = |label: &Option<QualifiedLabel>| match label {
+		None => None,
+		Some(label) => { Some(QualifiedLabel(format!("{}.{}", prefix, label.0))) },
 	};
 
 	transform_labels(strukt, loc, &transform_label)

@@ -409,6 +409,7 @@ parser![postfix_expr, Box<Expr>, {
 					}, loc),
 					Postfix::PropertyAccess { name } => Expr::new(ExprBody::PropertyAccess { assoc: result, name }, loc),
 					Postfix::LabelFilter(specs) => Expr::new(ExprBody::LabelFilter { strukt: result, filter: specs }, loc),
+					Postfix::LabelPrefix(prefix) => Expr::new(ExprBody::LabelPrefix { strukt: result, prefix }, loc),
 				})
 			}
 
@@ -423,10 +424,18 @@ enum Postfix {
 	MethodCall { name: String, args: Args },
 	PropertyAccess { name: String },
 	LabelFilter(Vec<LabelFilterSpec>),
+	LabelPrefix(QualifiedLabel),
 }
 
 parser![postfix, Postfix, {
 	alt((
+		map_res(
+			preceded(
+				ss!(tag("@@")),
+				qualified_label(),
+			),
+			|prefix| ok(Postfix::LabelPrefix(prefix)),
+		),
 		map_res(
 			preceded(
 				ss!(char('@')),

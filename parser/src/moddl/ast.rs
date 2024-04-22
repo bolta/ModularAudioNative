@@ -81,4 +81,5 @@ pub enum ExprBody {
 
 	Labeled { label: QualifiedLabel, inner: Box<Expr> },
 	LabelFilter { strukt: Box<Expr>, filter: Vec<LabelFilterSpec> },
+	LabelPrefix { strukt: Box<Expr>, prefix: QualifiedLabel },
 }
