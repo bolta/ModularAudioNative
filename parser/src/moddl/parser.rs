@@ -514,7 +514,7 @@ parser![label_filter_spec, LabelFilterSpec, {
 
 parser![qualified_label, QualifiedLabel, {
 	map_res(
-		separated_list0(ss!(char('.')), ss!(identifier())),
+		separated_list0(char('.'), identifier()),
 		|labels| ok({
 			let mut result = String::new();
 			labels.iter().enumerate().for_each(|(i, label)| {
