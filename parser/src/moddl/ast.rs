@@ -30,6 +30,18 @@ pub struct FunctionParam {
 	pub default: Option<Box<Expr>>,
 }
 
+/// foo.bar.baz みたいな . でつながった識別子
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct QualifiedLabel(pub String);
+
+#[derive(Clone, Debug)]
+pub enum LabelFilterSpec {
+	AllowAll,
+	Allow(QualifiedLabel),
+	Deny(QualifiedLabel),
+	Rename(QualifiedLabel, QualifiedLabel),
+}
+
 pub type Expr = Located<ExprBody>;
 
 #[derive(Clone, Debug)]
@@ -67,5 +79,6 @@ pub enum ExprBody {
 	AssocLiteral(Assoc),
 	MmlLiteral(String),
 
-	Labeled { label: String, inner: Box<Expr> },
+	Labeled { label: QualifiedLabel, inner: Box<Expr> },
+	LabelFilter { strukt: Box<Expr>, filter: Vec<LabelFilterSpec> },
 }

@@ -308,10 +308,16 @@ fn qualified_param_name(prefix: &str, name: &str) -> String {
 
 fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_default_keys: &HashMap<String, String>, param_prefix: &str, name: &str, key: &Option<String>, value: f32) {
 	let param_name = qualified_param_name(param_prefix, name);
-	// TODO ちゃんとエラー処理
-	let key = key.as_ref().unwrap_or_else(|| param_default_keys.get(&param_name).unwrap());
-	seq.push(Instruction::Value { tag: param_name.clone(), key: key.clone(), value });
-	stack.params_mut().insert((param_name, key.clone()), value);
+	let key = key.as_ref().or_else(|| param_default_keys.get(&param_name));
+	match key {
+		Some(key) => {
+			seq.push(Instruction::Value { tag: param_name.clone(), key: key.clone(), value });
+			stack.params_mut().insert((param_name, key.clone()), value);
+		},
+		None => {
+			warn(format!("default key for param {} not found (maybe due to wrong param name)", param_name));
+		},
+	}
 }
 
 fn calc_ticks_from_length(length_spec: &Length, ticks_per_bar: i32, default: i32) -> ModdlResult<i32> {

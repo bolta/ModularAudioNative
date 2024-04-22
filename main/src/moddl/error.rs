@@ -46,6 +46,7 @@ pub enum ErrorType {
 	IndexOutOfBounds,
 	ExportDuplicate,
 	ExportNotFound,
+	LabelFilterInconsistent,
 
 	TickUnderflow { length: Length },
 	// TODO イベントキューあふれとか、演奏時のエラーをラップする

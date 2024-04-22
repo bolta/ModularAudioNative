@@ -35,7 +35,7 @@ use crate::{
 extern crate parser;
 use graphviz_rust::attributes::start;
 use parser::{
-	common::{Location, Span}, mml::default_mml_parser, moddl::parser::expr
+	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
 };
 
 use std::{
@@ -362,7 +362,7 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 				}
 				if let (Some(label), Some(default_key)) = (label, factory.default_prop_key()) {
 					// TODO ラベル名をトラック名で修飾する処理は共通化する
-					result.insert(format!("{}.{}", track, label), default_key.clone());
+					result.insert(format!("{}.{}", track, label.0), default_key.clone());
 				}
 				// 互換性対応：全て Var と見なす
 				if use_default_labels {
@@ -391,7 +391,7 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 				if let Some(label) = label {
 					// TODO ラベル名をトラック名で修飾する処理は共通化する
 					// TODO VarFactory から取った方が統一感ある
-					result.insert(format!("{}.{}", track, label), VAR_DEFAULT_KEY.to_string());
+					result.insert(format!("{}.{}", track, label.0), VAR_DEFAULT_KEY.to_string());
 				}
 			},
 			NodeStructure::Placeholder { .. } => { },
@@ -408,7 +408,7 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
 fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<String>, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
+	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<QualifiedLabel>, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
@@ -444,7 +444,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				};
 				// ラベルが明示されていればそちらを使う
 				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
-						.or_else(|| if use_default_labels { Some(name.clone()) } else { None })/* .unwrap_or(name.clone()) */;
+						.or_else(|| if use_default_labels { Some(QualifiedLabel(name.clone())) } else { None })/* .unwrap_or(name.clone()) */;
 				let arg_node = recurse!(&strukt, input, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
@@ -517,7 +517,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 
 				let local_tag = label.as_ref().or(default_tag.as_ref());
 				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
+				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
 				if let Some(tag) = &full_tag {
 					for (key, value) in factory.initial_values() {
 						inits.insert((tag.clone(), key), value);
@@ -531,7 +531,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				let node = Box::new(Var::new(NodeBase::new(0), *value));
 				let local_tag = label.as_ref().or(default_tag.as_ref());
 				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.clone()));
+				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
 					Some(tag) => {

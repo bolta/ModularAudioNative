@@ -1,4 +1,5 @@
 use parser::common::Location;
+use parser::moddl::ast::QualifiedLabel;
 
 use super::error::{ModdlResult, error, ErrorType};
 use super::io::Io;
@@ -54,16 +55,17 @@ pub enum NodeStructure {
 	NodeCreation {
 		factory: Rc<dyn NodeFactory>,
 		args: HashMap<String, Value>,
-		label: Option<String>,
+		label: Option<QualifiedLabel>,
 	},
 	Constant {
 		value: f32,
-		label: Option<String>,
+		label: Option<QualifiedLabel>,
 	},
 	Placeholder { name: String },
+	// LabelGuard,
 }
 impl NodeStructure {
-	pub fn label(&self) -> Option<String> {
+	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
 			NodeStructure::NodeCreation { label, .. } | NodeStructure::Constant { label, .. } => label.clone(),
 			_ => None,
@@ -221,7 +223,7 @@ impl ValueBody {
 		}
 	}
 
-	pub fn label(&self) -> Option<String> {
+	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
 			Self::NodeStructure(strukt) => strukt.label(),
 			_ => None,

@@ -11,7 +11,7 @@ use crate::{
 
 use std::{
 	cell::RefCell,
-	collections::hash_map::HashMap,
+	collections::{hash_map::HashMap, HashSet},
 	rc::Rc,
 };
 
@@ -138,7 +138,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::Labeled { label, inner } => {
 			let (inner_val, inner_loc) = evaluate(inner, vars, imports) ?;
 
-			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label, &expr.loc));
+			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr.loc));
 
 			// ラベルをつけれる対象は、数値定数、引数なしの NodeFactory、引数ありの NodeFactory（NodeCreation）の 3 つ。
 			// 上記の値にラベルをつけると、結果は必ず NodeStructure になる。
@@ -169,10 +169,187 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			};
 
 			Ok(new_val)
-		}
+		},
+
+		ExprBody::LabelFilter { strukt, filter } => {
+			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
+			// TODO struct_val が LabelGuard だったら除去する
+
+			let filter = build_label_filter(filter, &struct_loc) ?;
+			Ok(ValueBody::NodeStructure(filter_labels(&struct_val, &struct_loc, &filter) ?))
+		},
 	} ?;
 	Ok((body, expr.loc.clone()))
 }
+
+fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -> ModdlResult<NodeStructure> {
+	let transform_label = |label: &Option<QualifiedLabel>| match label {
+		None => None,
+		Some(label) => {
+			if let Some(new_label) = filter.renames.get(label) {
+				Some(new_label.clone())
+			} else {
+				let expected_contains = matches!(filter.list_type, ListType::Allow);
+				if filter.list.contains(label) == expected_contains { Some(label.clone()) } else { None }
+			}
+		}
+	};
+
+	let recurse = |strukt| filter_labels(strukt, loc, filter);
+
+	match strukt {
+		NodeStructure::Calc { node_factory, args } => Ok(NodeStructure::Calc {
+			node_factory: node_factory.clone(),
+			args: {
+				let results: ModdlResult<Vec<_>> = args.iter().map(|arg| recurse(arg)).collect();
+				results?.into_iter().map(Box::new).collect()
+			},
+		}),
+		NodeStructure::Connect(lhs, rhs) => Ok(NodeStructure::Connect(
+			Box::new(recurse(lhs) ?),
+			Box::new(recurse(rhs) ?),
+		)),
+		NodeStructure::Condition { cond, then, els } => Ok(NodeStructure::Condition {
+			cond: Box::new(recurse(cond) ?),
+			then: Box::new(recurse(then) ?),
+			els: Box::new(recurse(els) ?),
+		}),
+		NodeStructure::Lambda { input_param, body } => Ok(NodeStructure::Lambda {
+			input_param: input_param.clone(),
+			body: Box::new(recurse(body) ?),
+		}),
+		NodeStructure::NodeCreation { factory, args, label } => Ok(NodeStructure::NodeCreation {
+			factory: factory.clone(),
+			// args: args.clone(), // TODO この中に ValueBody::NodeFactory が含まれる場合、返還が必要か？
+			args: args.keys().map(|arg_name| {
+				let (value, value_loc) = &args[arg_name];
+				let new_value = match value {
+					ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(recurse(strukt) ?),
+					_ => value.clone(),
+				};
+				Ok((arg_name.clone(), (new_value, value_loc.clone())))
+			}).collect::<ModdlResult<HashMap<String, Value>>>() ?,
+			label: transform_label(label),
+		}),
+		NodeStructure::Constant { value, label } => Ok(NodeStructure::Constant {
+			value: *value,
+			label: transform_label(label),
+		}),
+		NodeStructure::Placeholder { .. } => Ok(strukt.clone()),
+	}
+}
+
+// fn transform_labels(strukt: &NodeStructure, loc: &Location, transform: fn (&nodeStructure) -> ) -> ModdlResult<NodeStructure> {
+
+
+#[derive(Debug)]
+enum ListType { Allow, Deny }
+#[derive(Debug)]
+struct LabelFilter {
+	list_type: ListType,
+	list: HashSet<QualifiedLabel>,
+	renames: HashMap<QualifiedLabel, QualifiedLabel>,
+}
+fn build_label_filter(specs: &Vec<LabelFilterSpec>, loc: &Location) -> ModdlResult<LabelFilter> {
+	validate_label_filter_specs(specs, loc) ?;
+
+	let list_type = if specs.iter().any(|spec| matches!(spec, LabelFilterSpec::Allow(_)))
+			|| specs.iter().all(|spec| matches!(spec, LabelFilterSpec::Rename(..))) {
+		ListType::Allow
+	} else {
+		ListType::Deny
+	};
+
+	let list = match list_type {
+		ListType::Allow => {
+			specs.iter().filter_map(|spec| match spec {
+				LabelFilterSpec::Allow(label) => Some(label.clone()),
+				LabelFilterSpec::Rename(label, _) => Some(label.clone()),
+				_ => None,
+			}).collect()
+		},
+		ListType::Deny => {
+			specs.iter().filter_map(|spec| match spec {
+				LabelFilterSpec::Deny(label) => Some(label.clone()),
+				_ => None,
+			}).collect()
+		},
+	};
+	let renames = specs.iter().filter_map(|spec| match spec {
+		LabelFilterSpec::Rename(before, after) => Some((before.clone(), after.clone())),
+		_ => None,
+	}).collect();
+
+	Ok(LabelFilter {
+		list_type,
+		list,
+		renames,
+	})
+}
+
+fn validate_label_filter_specs(specs: &Vec<LabelFilterSpec>, loc: &Location) -> ModdlResult<()> {
+	let make_error = || Err(error(ErrorType::LabelFilterInconsistent, loc.clone()));
+
+	/// これらのモードのうち、どれかに該当すれば OK（判定において Rename は関係ないので無視する）
+	enum Mode {
+		/// ワイルドカード 1 つしかない
+		AllowAll,
+		/// 1 つ以上の許可しかない
+		Allow,
+		/// 1 つ以上の拒否しかない
+		Deny,
+	}
+	let mut mode = None;
+	let mut rename_exists = false;
+	for spec in specs {
+		match spec {
+			LabelFilterSpec::AllowAll => {
+				match mode {
+					None => { mode = Some(Mode::AllowAll); },
+					Some(_) => make_error() ?,
+				}
+			},
+			LabelFilterSpec::Allow(_) => {
+				match mode {
+					None => { mode = Some(Mode::Allow); },
+					Some(Mode::Allow) => (),
+					Some(_) => make_error() ?,
+				}
+			}
+			LabelFilterSpec::Deny(_) => {
+				match mode {
+					None => { mode = Some(Mode::Deny); },
+					Some(Mode::Deny) => (),
+					Some(_) => make_error() ?,
+				}
+			}
+			LabelFilterSpec::Rename(..) => {
+				rename_exists = true;
+			}
+		}
+	}
+	if mode.is_none() && ! rename_exists { make_error() ?; }
+
+	// ラベルがかぶってたらエラーにする
+	let mut uniq = HashSet::<QualifiedLabel>::new();
+	let mut check_uniqueness = |label| if uniq.contains(label) {
+		make_error()
+	} else {
+		uniq.insert(label.clone());
+		Ok(())
+	};
+	for spec in specs {
+		match spec {
+			LabelFilterSpec::Allow(label)
+			| LabelFilterSpec::Deny(label)
+			| LabelFilterSpec::Rename(label, _) => check_uniqueness(label) ?,
+			_ => { },
+		}
+	}
+
+	Ok(())
+}
+
 
 fn evaluate_unary_structure<C: Calc + 'static>(
 	arg: &Expr,

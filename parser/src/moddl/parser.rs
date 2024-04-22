@@ -408,6 +408,7 @@ parser![postfix_expr, Box<Expr>, {
 						},
 					}, loc),
 					Postfix::PropertyAccess { name } => Expr::new(ExprBody::PropertyAccess { assoc: result, name }, loc),
+					Postfix::LabelFilter(specs) => Expr::new(ExprBody::LabelFilter { strukt: result, filter: specs }, loc),
 				})
 			}
 
@@ -417,10 +418,11 @@ parser![postfix_expr, Box<Expr>, {
 }];
 
 enum Postfix {
-	Label(String),
+	Label(QualifiedLabel),
 	FunctionCall(Args),
 	MethodCall { name: String, args: Args },
 	PropertyAccess { name: String },
+	LabelFilter(Vec<LabelFilterSpec>),
 }
 
 parser![postfix, Postfix, {
@@ -428,9 +430,9 @@ parser![postfix, Postfix, {
 		map_res(
 			preceded(
 				ss!(char('@')),
-				si!(identifier()),
+				si!(qualified_label()),
 			),
-			|label| ok(Postfix::Label(label.to_string())),
+			|label| ok(Postfix::Label(label)),
 		),
 		map_res(
 			delimited(
@@ -466,7 +468,62 @@ parser![postfix, Postfix, {
 			),
 			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
 		),
+		map_res(
+			delimited(
+				ss!(tag("#(")),
+				terminated(
+					separated_list0(ss!(char(',')), ss!(label_filter_spec())),
+					opt(ss!(char(','))),
+				),
+				si!(char(')')),
+			),
+			|specs| ok(Postfix::LabelFilter(specs)),
+		),
 	))
+}];
+
+parser![label_filter_spec, LabelFilterSpec, {
+	alt((
+		map_res(
+			char('*'),
+			|_| ok(LabelFilterSpec::AllowAll),
+		),
+		map_res(
+			tuple((
+				ss!(qualified_label()),
+				preceded(
+					ss!(tag("->")),
+					qualified_label(),
+				),
+			)),
+			|(before, after)| ok(LabelFilterSpec::Rename(before, after)),
+		),
+		map_res(
+			qualified_label(),
+			|label| ok(LabelFilterSpec::Allow(label)),
+		),
+		map_res(
+			preceded(
+				ss!(char('!')),
+				qualified_label(),
+			),
+			|label| ok(LabelFilterSpec::Deny(label)),
+		),
+	))
+}];
+
+parser![qualified_label, QualifiedLabel, {
+	map_res(
+		separated_list0(ss!(char('.')), ss!(identifier())),
+		|labels| ok({
+			let mut result = String::new();
+			labels.iter().enumerate().for_each(|(i, label)| {
+				if i > 0 { result.push('.'); }
+				result.push_str(label);
+			});
+			QualifiedLabel(result)
+		})
+	)
 }];
 
 macro_rules! binary_expr {
