@@ -430,7 +430,7 @@ parser![postfix, Postfix, {
 		map_res(
 			preceded(
 				ss!(char('@')),
-				si!(qualified_label()),
+				qualified_label(),
 			),
 			|label| ok(Postfix::Label(label)),
 		),
@@ -438,7 +438,7 @@ parser![postfix, Postfix, {
 			delimited(
 				ss!(char('(')),
 				ss!(args()),
-				si!(char(')')),
+				char(')'),
 			),
 			|args| ok(Postfix::FunctionCall(args)),
 		),
@@ -451,7 +451,7 @@ parser![postfix, Postfix, {
 						delimited(
 							ss!(char('(')),
 							ss!(args()),
-							si!(char(')')),
+							char(')'),
 						),
 					),
 				)),
@@ -464,7 +464,7 @@ parser![postfix, Postfix, {
 		map_res(
 			preceded(
 				ss!(char('.')),
-				si!(identifier()),
+				identifier(),
 			),
 			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
 		),
@@ -475,7 +475,7 @@ parser![postfix, Postfix, {
 					separated_list0(ss!(char(',')), ss!(label_filter_spec())),
 					opt(ss!(char(','))),
 				),
-				si!(char(')')),
+				char(')'),
 			),
 			|specs| ok(Postfix::LabelFilter(specs)),
 		),
