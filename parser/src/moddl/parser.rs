@@ -499,15 +499,15 @@ parser![label_filter_spec, LabelFilterSpec, {
 			|(before, after)| ok(LabelFilterSpec::Rename(before, after)),
 		),
 		map_res(
-			qualified_label(),
-			|label| ok(LabelFilterSpec::Allow(label)),
-		),
-		map_res(
 			preceded(
 				ss!(char('!')),
 				qualified_label(),
 			),
 			|label| ok(LabelFilterSpec::Deny(label)),
+		),
+		map_res(
+			qualified_label(),
+			|label| ok(LabelFilterSpec::Allow(label)),
 		),
 	))
 }];
