@@ -28,28 +28,41 @@ impl <'a> ImportCache<'a> {
 				let pctx = process_statements(moddl.as_str(), root_scope, abs_path.as_path(), self) ?;
 				match pctx.export {
 					None => Err(error(ErrorType::ExportNotFound, loc.clone())),
-					Some((val, loc)) => {
+					Some(value) => {
 						// TODO @import 文ではキャッシュが効いてないっぽい…共通化する
-	
-						let new_val = match val {
-							ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(
-								match strukt {
-									NodeStructure::LabelGuard(_) => {
-										strukt.clone()
-									},
-									_ => {
-										NodeStructure::LabelGuard(Box::new(strukt.clone()))
-									},
-								}
-							),
-							_ => val.clone(),
-						};
-						let result = (new_val, loc);
+						let result = guard_labels(value);
 						self.imports.insert(abs_path, result.clone());
+
 						Ok(result)
 					}
 				}
 			}
 		}
 	}
+}
+
+fn guard_labels((val, loc): Value) -> Value {
+	let new_val = match val {
+		ValueBody::NodeStructure(strukt) => {
+			ValueBody::NodeStructure(
+				match strukt {
+					NodeStructure::LabelGuard(_) => {
+						strukt.clone()
+					},
+					_ => {
+						NodeStructure::LabelGuard(Box::new(strukt.clone()))
+					},
+				}
+			)
+		},
+		ValueBody::Array(contents) => {
+			ValueBody::Array(contents.into_iter().map(guard_labels).collect())
+		},
+		ValueBody::Assoc(contents) => {
+			ValueBody::Assoc(contents.into_iter().map(|(key, value)| (key, guard_labels(value))).collect())
+		}
+		_ => val.clone(),
+	};
+
+	(new_val, loc)
 }
