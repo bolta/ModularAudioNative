@@ -8,7 +8,7 @@ use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor:
 
 pub struct ImportCache<'a> {
 	// TODO String じゃなくて Path とか他の型になるのかも？
-	pub imports: HashMap<PathBuf, Value>,
+	imports: HashMap<PathBuf, Value>,
 	pub waveforms: &'a mut WaveformHost,
 }
 impl <'a> ImportCache<'a> {
