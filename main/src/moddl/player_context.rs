@@ -1,5 +1,5 @@
 use super::{
-	builtin::*, console::*, error::*, evaluator::*, executor::process_statements, import_cache::ImportCache, io::Io, path::*, player_option::*, scope::*, value::*
+	builtin::*, console::*, error::*, evaluator::*, executor::process_statements, import::ImportCache, io::Io, path::*, player_option::*, scope::*, value::*
 };
 use crate::{
 	calc::*,

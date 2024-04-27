@@ -2,7 +2,7 @@ use parser::common::Location;
 
 /// ビルトイン変数を提供する。今後プラグインの読み込みなどをここでやる想定
 use super::{
-	common::read_file, error::*, executor::process_statements, function::*, import_cache::ImportCache, io::*, path::resolve_path, scope::*, value::*
+	error::*, function::*, import::ImportCache, io::*, scope::*, value::*
 };
 use crate::{
 	core::{
@@ -252,39 +252,11 @@ impl Function for Import {
 	fn signature(&self) -> FunctionSignature { vec!["path".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (path, _) = get_required_arg(args, "path", &call_loc)?.as_string() ?;
-		let abs_path = resolve_path(Path::new(&path), call_loc.path.as_path());
-		match imports.imports.get(&abs_path) {
-			Some(cached) => Ok(cached.clone()),
-			None => {
-				let moddl = read_file(abs_path.as_path()) ?;
-				let root_scope = vars.borrow().get_root()
-						.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, call_loc.clone())) ?;
-				let pctx = process_statements(moddl.as_str(), root_scope, abs_path.as_path(), imports) ?;
-				match pctx.export {
-					None => Err(error(ErrorType::ExportNotFound, call_loc)),
-					Some((val, loc)) => {
-						// TODO @import 文ではキャッシュが効いてないっぽい…共通化する
 
-						let new_val = match val {
-							ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(
-								match strukt {
-									NodeStructure::LabelGuard(_) => {
-										strukt.clone()
-									},
-									_ => {
-										NodeStructure::LabelGuard(Box::new(strukt.clone()))
-									},
-								}
-							),
-							_ => val.clone(),
-						};
-						let result = (new_val, loc);
-						imports.imports.insert(abs_path, result.clone());
-						Ok(result)
-					}
-				}
-			}
-		}
+		let root_scope = vars.borrow().get_root()
+				.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, call_loc.clone())) ?;
+
+		imports.import(Path::new(&path), call_loc.path.as_path(), root_scope, &call_loc)
 	}
 }
 

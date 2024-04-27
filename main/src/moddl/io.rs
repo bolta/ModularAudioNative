@@ -5,7 +5,7 @@ use rand::rngs::StdRng;
 use rand::prelude::*;
 
 use super::{
-	error::ModdlResult, function::{check_arity, Function}, import_cache::ImportCache, scope::Scope, value::*
+	error::ModdlResult, function::{check_arity, Function}, import::ImportCache, scope::Scope, value::*
 };
 
 pub trait Io {

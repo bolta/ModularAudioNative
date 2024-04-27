@@ -1,5 +1,5 @@
 use super::{
-	console::warn, error::*, import_cache::ImportCache, lambda_function::*, scope::*, value::*
+	console::warn, error::*, import::ImportCache, lambda_function::*, scope::*, value::*
 };
 
 extern crate parser;

@@ -3,7 +3,7 @@ use parser::common::Location;
 use crate::wave::waveform_host::WaveformIndex;
 
 use super::{
-	error::*, import_cache::ImportCache, scope::*, value::*
+	error::*, import::ImportCache, scope::*, value::*
 };
 
 use std::{

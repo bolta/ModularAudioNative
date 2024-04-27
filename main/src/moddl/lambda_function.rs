@@ -1,5 +1,5 @@
 use super::{
-	error::*, evaluator::*, function::*, import_cache::ImportCache, scope::*, value::*
+	error::*, evaluator::*, function::*, import::ImportCache, scope::*, value::*
 };
 
 // extern crate parser;
