@@ -26,18 +26,6 @@ pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_pat
 	Ok(pctx)
 }
 
-pub fn import(moddl_path: &Path, base_moddl_path: &Path, root_scope: Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
-	let resolved_path = resolve_path(moddl_path, base_moddl_path);
-	let resolved_path = resolved_path.as_path();
-	let moddl = read_file(resolved_path) ?;
-	let pctx = process_statements(moddl.as_str(), root_scope, resolved_path, imports) ?;
-
-	// pctx.vars.borrow() が通らない。こう書かないといけない
-	// https://github.com/rust-lang/rust/issues/41906#issuecomment-301279688
-	let vars = RefCell::<Scope>::borrow(&*pctx.vars);
-	Ok(vars.entries().clone())
-}
-
 fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match stmt {
 		Statement::Directive { name, args } => {
@@ -143,10 +131,14 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					let path = Path::new(&path);
 					let root_scope = pctx.vars.borrow().get_root()
 							.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, stmt_loc.clone())) ?;
-					let imported_vars = import(&path, pctx.moddl_path.as_path(), root_scope, imports) ?;
-					imported_vars.iter().try_for_each(|(name, value)| {
-						pctx.vars.borrow_mut().set(name, value.clone())
-					}) ?;
+					let (imported, _) = imports.import(path, stmt_loc.path.as_path(), root_scope, stmt_loc) ?;
+					if let ValueBody::Assoc(imported_vars) = imported {
+						imported_vars.into_iter().try_for_each(|(name, value)| {
+							pctx.vars.borrow_mut().set(&name, value.clone())
+						}) ?;
+					} else {
+						Err(error(ErrorType::TypeMismatch { expected: ValueType::Assoc }, stmt_loc.clone())) ?;
+					}
 				}
 				"export" => {
 					if pctx.export.is_some() {
