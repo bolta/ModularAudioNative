@@ -7,7 +7,6 @@ use crate::wave::waveform_host::WaveformHost;
 use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor::process_statements, path::resolve_path, scope::Scope, value::{NodeStructure, Value, ValueBody}};
 
 pub struct ImportCache<'a> {
-	// TODO String じゃなくて Path とか他の型になるのかも？
 	imports: HashMap<PathBuf, Value>,
 	pub waveforms: &'a mut WaveformHost,
 }
@@ -29,7 +28,6 @@ impl <'a> ImportCache<'a> {
 				match pctx.export {
 					None => Err(error(ErrorType::ExportNotFound, loc.clone())),
 					Some(value) => {
-						// TODO @import 文ではキャッシュが効いてないっぽい…共通化する
 						let result = guard_labels(value);
 						self.imports.insert(abs_path, result.clone());
 
