@@ -1,5 +1,5 @@
 [package]
-name = "modular_audio"
+name = "moddl"
 version = "0.1.0"
 authors = ["bolta <freshness.and.speed.2007@gmail.com>"]
 edition = "2018"
