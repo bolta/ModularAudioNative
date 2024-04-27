@@ -395,6 +395,8 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 				}
 			},
 			NodeStructure::Placeholder { .. } => { },
+			// この中のラベルは使わないので収集しない
+			NodeStructure::LabelGuard(_) => { },
 
 		}
 	}
@@ -407,13 +409,35 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 
 pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
-fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, freq: NodeId, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
-	fn visit_struct(track: &str, strukt: &NodeStructure, nodes: &mut AllNodes, submachine_idx: MachineIndex, input: NodeId, default_tag: Option<QualifiedLabel>, placeholders: &mut PlaceholderStack, label_defaults: &HashMap<String, String>, use_default_labels: bool, inits: &mut HashMap<ParamSignature, f32>) -> ModdlResult<NodeId> {
+fn build_instrument(
+	track: &str,
+	instrm_def: &NodeStructure,
+	nodes: &mut AllNodes,
+	submachine_idx: MachineIndex,
+	freq: NodeId,
+	placeholders: &mut PlaceholderStack,
+	label_defaults: &HashMap<String, String>,
+	use_default_labels: bool,
+	inits: &mut HashMap<ParamSignature, f32>,
+) -> ModdlResult<NodeId> {
+	fn visit_struct(
+		track: &str,
+		strukt: &NodeStructure,
+		nodes: &mut AllNodes,
+		submachine_idx: MachineIndex,
+		input: NodeId,
+		default_tag: Option<QualifiedLabel>,
+		placeholders: &mut PlaceholderStack,
+		label_defaults: &HashMap<String, String>,
+		use_default_labels: bool,
+		inits: &mut HashMap<ParamSignature, f32>,
+		inside_label_guard: bool,
+	) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits) };
-			($strukt: expr, $input: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -445,7 +469,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// ラベルが明示されていればそちらを使う
 				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
 						.or_else(|| if use_default_labels { Some(QualifiedLabel(name.clone())) } else { None })/* .unwrap_or(name.clone()) */;
-				let arg_node = recurse!(&strukt, input, arg_name) ?;
+				let arg_node = recurse!(&strukt, input, inside_label_guard, arg_name) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
 					// モノラルであるべき node_arg にステレオが与えられた場合、
@@ -465,7 +489,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// TODO Result が絡んでるときも map できれいに書きたい
 				let mut arg_nodes = vec![];
 				for arg in args {
-					arg_nodes.push(recurse!(arg, input) ?);
+					arg_nodes.push(recurse!(arg, input, inside_label_guard) ?);
 				}
 
 				create_calc_node(Some(track), nodes, submachine_idx, arg_nodes, node_factory.borrow())
@@ -473,16 +497,16 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 
 			NodeStructure::Connect(lhs, rhs) => {
 				// TODO mono/stereo 変換
-				let l_node = recurse!(lhs, input) ?;
-				recurse!(rhs, l_node)
+				let l_node = recurse!(lhs, input, inside_label_guard) ?;
+				recurse!(rhs, l_node, inside_label_guard)
 			},
 
 			NodeStructure::Condition { cond, then, els } => {
-				let cond_result = recurse!(cond, input) ?;
+				let cond_result = recurse!(cond, input, inside_label_guard) ?;
 				let cond_result = ensure_on_machine(nodes, cond_result, submachine_idx);
-				let then_result = recurse!(then, input) ?;
+				let then_result = recurse!(then, input, inside_label_guard) ?;
 				let then_result = ensure_on_machine(nodes, then_result, submachine_idx);
-				let else_result = recurse!(els, input) ?;
+				let else_result = recurse!(els, input, inside_label_guard) ?;
 				let else_result = ensure_on_machine(nodes, else_result, submachine_idx);
 				// let max_delay = * vec![cond_result_on_machine.1, then_result_on_machine.1, else_result_on_machine.1].iter().max().unwrap();
 				let max_delay = cond_result.1.max(then_result.1).max(else_result.1);
@@ -500,7 +524,7 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				placeholders.push_clone();
 				placeholders.top_mut().insert(input_param.clone(), input);
 
-				let result = recurse!(body, input);
+				let result = recurse!(body, input, inside_label_guard);
 
 				placeholders.pop();
 
@@ -515,7 +539,11 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 			NodeStructure::NodeCreation { factory, args, label } => {
 				let (node_args, delay) = make_node_args(args, factory) ?;
 
-				let local_tag = label.as_ref().or(default_tag.as_ref());
+				let local_tag = if inside_label_guard {
+					None
+				} else {
+					label.as_ref().or(default_tag.as_ref())
+				};
 				// TODO 共通化
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
 				if let Some(tag) = &full_tag {
@@ -529,7 +557,11 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 			// TODO Constant は、NodeCreation で VarFactory を使ったのと同じにできるはず。共通化する
 			NodeStructure::Constant { value, label } => {
 				let node = Box::new(Var::new(NodeBase::new(0), *value));
-				let local_tag = label.as_ref().or(default_tag.as_ref());
+				let local_tag = if inside_label_guard {
+					None
+				} else {
+					label.as_ref().or(default_tag.as_ref())
+				};
 				// TODO 共通化
 				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
@@ -548,10 +580,13 @@ fn build_instrument(track: &str, instrm_def: &NodeStructure, nodes: &mut AllNode
 				// 名前に対応する placeholder は必ずある
 				Ok(placeholders.top()[name])
 			},
+			NodeStructure::LabelGuard(inner) => {
+				recurse!(inner, input, true)
+			}
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits, false)
 }
 
 // fn create_node_by_factory(factory: &Rc<dyn NodeFactory>, args: &HashMap<String, Value>) {

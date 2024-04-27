@@ -173,19 +173,25 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 
 		ExprBody::LabelFilter { strukt, filter } => {
 			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
-			// TODO struct_val が LabelGuard だったら除去する
-
 			let filter = build_label_filter(filter, &struct_loc) ?;
-			Ok(ValueBody::NodeStructure(filter_labels(&struct_val, &struct_loc, &filter) ?))
+
+			Ok(ValueBody::NodeStructure(filter_labels(unguard_labels(&struct_val), &struct_loc, &filter) ?))
 		},
 		ExprBody::LabelPrefix { strukt, prefix } => {
 			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
-			// TODO struct_val が LabelGuard だったら除去する
 
-			Ok(ValueBody::NodeStructure(add_prefix_to_labels(&struct_val, &struct_loc, prefix.0.as_str()) ?))
+			Ok(ValueBody::NodeStructure(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))
 		},
 	} ?;
 	Ok((body, expr.loc.clone()))
+}
+
+fn unguard_labels(strukt: &NodeStructure) -> &NodeStructure {
+	// LabelGuard だったら開封する
+	match strukt {
+		NodeStructure::LabelGuard(inner) => inner,
+		_ => strukt,
+	}
 }
 
 fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -> ModdlResult<NodeStructure> {
@@ -254,7 +260,9 @@ where F: Fn (&Option<QualifiedLabel>) -> Option<QualifiedLabel> {
 			value: *value,
 			label: transform_label(label),
 		}),
-		NodeStructure::Placeholder { .. } => Ok(strukt.clone()),
+		NodeStructure::Placeholder { .. }
+		| NodeStructure::LabelGuard(..) // この中のラベルは無視するため、何もしない
+		=> Ok(strukt.clone()),
 	}
 }
 

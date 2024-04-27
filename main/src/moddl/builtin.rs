@@ -262,12 +262,37 @@ impl Function for Import {
 				let pctx = process_statements(moddl.as_str(), root_scope, abs_path.as_path(), imports) ?;
 				match pctx.export {
 					None => Err(error(ErrorType::ExportNotFound, call_loc)),
-					Some(val) => {
-						imports.imports.insert(abs_path, val.clone());
-						Ok(val)
+					Some((val, loc)) => {
+						// TODO @import 文ではキャッシュが効いてないっぽい…共通化する
+
+						let new_val = match val {
+							ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(
+								match strukt {
+									NodeStructure::LabelGuard(_) => {
+										strukt.clone()
+									},
+									_ => {
+										NodeStructure::LabelGuard(Box::new(strukt.clone()))
+									},
+								}
+							),
+							_ => val.clone(),
+						};
+						let result = (new_val, loc);
+						imports.imports.insert(abs_path, result.clone());
+						Ok(result)
 					}
 				}
 			}
 		}
 	}
 }
+
+// pub struct MapLabels { }
+// impl Function for MapLabels {
+// 	fn signature(&self) -> FunctionSignature { vec!["struct".to_string(), "mapper".to_string()] }
+// 	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		
+// 	}
+// }
+

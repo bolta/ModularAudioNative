@@ -62,7 +62,7 @@ pub enum NodeStructure {
 		label: Option<QualifiedLabel>,
 	},
 	Placeholder { name: String },
-	// LabelGuard,
+	LabelGuard(Box<NodeStructure>),
 }
 impl NodeStructure {
 	pub fn label(&self) -> Option<QualifiedLabel> {
