@@ -152,17 +152,17 @@ impl Context {
 			}
 			Instruction::Call { seq_name } => {
 				self.stack.push_clone();
-				let mut new_top = self.stack.top_mut();
+				let new_top = self.stack.top_mut();
 				new_top.seq_idx = SequenceName(seq_name.clone());
 				new_top.instrc_idx = -1; // この後インクリメントされるので 1 引いておく
 			}
 			Instruction::JumpAbs { seq_name, pos } => {
-				let mut top = self.stack.top_mut();
+				let top = self.stack.top_mut();
 				if let Some(seq_name) = seq_name { top.seq_idx = SequenceName(seq_name.clone()); }
 				top.instrc_idx = pos.0 as i32 - 1; // この後インクリメントされるので 1 引いておく
 			}
 			Instruction::JumpRel { offset } => {
-				let mut top = self.stack.top_mut();
+				let top = self.stack.top_mut();
 				top.instrc_idx = top.instrc_idx + offset - 1; // この後インクリメントされるので 1 引いておく
 			}
 			Instruction::If0 { var, then } => {
