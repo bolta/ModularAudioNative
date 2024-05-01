@@ -150,11 +150,12 @@ impl Context {
 			Instruction::DeleteVar { name } => {
 				self.stack.top_mut().vars.remove(name);
 			}
-			Instruction::Call { seq_name } => {
+			Instruction::Call { seq_name, modify_current } => {
 				self.stack.push_clone();
 				let new_top = self.stack.top_mut();
 				new_top.seq_idx = SequenceName(seq_name.clone());
 				new_top.instrc_idx = -1; // この後インクリメントされるので 1 引いておく
+				
 			}
 			Instruction::JumpAbs { seq_name, pos } => {
 				let top = self.stack.top_mut();

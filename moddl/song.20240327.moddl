@@ -1,0 +1,36 @@
+@tempo 112
+// @solo ^a
+
+
+
+// @let `arpeggio`, pulseOsc { 0.35 } | lpf { 4000 + 4000 * expEnv { 0.25 } ^ 0.5, 2 } * expEnv { 0.25 } ^ 2
+@let `unstablePan`, (pos, rate, depth) => pan { pos + uniformNoise | sampleCrush { rate } * depth }
+
+@instrument ^ab, nesFreq() | pulseOsc * adsrEnv { 0.125 }
+//@instrument ^c, nesFreq(true) | triangleOsc * adsrEnv
+
+
+ab o5l4v12
+b @d-15 r64
+
+ab g2.f ^fga- b-2e-2^2.r
+ab e-1^d-e-a- g-2d-2^2.r
+ab c+1^f+g+a
+
+//c o3l16v15
+//c d-fa->c<fa->cd-<a->cfa-cfa->c d-c<a-f>c<a-fd-a-fd-cfd-c<a-
+//c fga->c<a->ce-fce-ga-e-ga->c
+
+@instrument ^defg, sawOsc | lpf { 1000 + expEnv { 1/20 }, 2 } * adsrEnv
+@instrument ^h, triangleOsc | =x=> (x * 100 * expEnv { 1/100 } ^ 0.5) | limit { -1, 1 } * expEnv { 1/10 } ^ 0.5
+def o4l1v10
+h o2l8v15
+
+d a-^ a-^ b- b  b- b- a ^
+e f ^ g ^ g- f  g- g  f+^
+f c ^ e-^ e- e- f  d- c+^
+h [2 [2 d-.d-.:d-]>d-] [2 [2 f.f.:f]>f] 
+h <[2 b.b.:b]>b [2d-.d-.:d-]>d-<< [2 g-.g-.:g-]>g-< [2 e-.e-.:e-]>e-<
+h [2[2 d.d.:d]>d<]
+
+//@solo ^hab

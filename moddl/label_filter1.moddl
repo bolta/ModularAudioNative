@@ -1,0 +1,21 @@
+@let `envLabeled`, adsrEnv { attack: 0@a, decay: 0@d, sustain: 1@s, release: 0@r }
+
+@let `f`, (x) => (y) => x + y
+@let `sum`, f(3)(5)@a
+
+@instrument ^a, sawOsc * envLabeled#(!r, s->sus)@@e
+
+
+//@instrument ^a, sawOsc * envLabeled#(a, d, r, s->sus)
+//@instrument ^a, sawOsc * envLabeled#(*)
+//@instrument ^a, sawOsc * envLabeled#(*, s->sus)
+//@instrument ^a, sawOsc * envLabeled#()
+
+a o4l8v15
+a cdefg
+a ye.d,0.25 ye.sus,0
+a cdefg
+
+// TODO Forecast のデューティ比が変わらなくなってる…なぜだ
+// 単なる pulseOsc だったのを pulseOsc { duty: 0.5@duty } にすると効くようになる。
+// 何らかの理由で useDefaultLabel が効かなくなってるっぽい

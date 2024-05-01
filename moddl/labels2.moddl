@@ -1,0 +1,18 @@
+@tempo 120
+
+// s は普通のサステインレベルとは逆に、0 に近い方が減衰しない
+// release の値は定数畳み込みでただの 0 になるため、ラベルをつけることができる
+// vol は接続パラメータとは関係ないが、ラベルを明示することで操作できる
+@instrument ^a, nesFreq() | pulseOsc { duty: 0.125 } * adsrEnv { attack: 0@a, decay: 0.75@decay, sustain: 1 - 1@s, release: (0 * 42)@r } * 1@vol
+
+a r4
+
+a o4l4v15
+a cde
+
+// attack は a という名前で参照される
+a ya,0.1 cde
+
+a ya,0 cde
+
+a ydecay,0.1 cde

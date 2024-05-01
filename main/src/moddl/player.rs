@@ -745,6 +745,7 @@ impl AllNodes {
 	}
 	pub fn add_node_with_tags(&mut self, machine: MachineIndex, tags: Vec<String>, node: Box<dyn Node>) -> NodeId {
 		let delay = node.delay_samples();
+dbg!(&tags);
 		let node_idx = self.machines[machine.0].nodes.add_with_tags(tags, node);
 		let result = NodeId::new(machine, node_idx);
 		self.delays.insert(result, delay);
@@ -753,6 +754,7 @@ impl AllNodes {
 	}
 	pub fn add_node_with_tag(&mut self, machine: MachineIndex, tag: String, node: Box<dyn Node>) -> NodeId {
 		let delay = node.delay_samples();
+dbg!(&tag);
 		let node_idx = self.machines[machine.0].nodes.add_with_tag(tag, node);
 		let result = NodeId::new(machine, node_idx);
 		self.delays.insert(result, delay);

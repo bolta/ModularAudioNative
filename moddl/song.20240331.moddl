@@ -1,0 +1,18 @@
+@tempo 127
+// @solo ^a
+
+
+
+@instrument ^ab, nesFreq() | pulseOsc * adsrEnv { 0.5 }
+@instrument ^c, nesFreq(true) | triangleOsc * adsrEnv
+
+
+ab o6l4v15
+b @d-15 r64
+
+ab g2.f ^fga- b-2e-2^2.r
+ab e-1^d-e-a- g-2d-2^2.r
+ab c+1^f+g+a
+
+c o3l8v15
+c {d-a->d-e-fa->d-f} {<b->fb->cd-fb->d-} {f>cfga->cfga-gfcfc<a-f}

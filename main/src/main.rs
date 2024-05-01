@@ -22,16 +22,13 @@ use crate::moddl::{
 };
 
 use std::{
-	env,
-	process::{
-		exit,
-	},
+	env, process::exit, thread
 };
 
 // パーザを切り出したがエラーを参照するため必要
 extern crate nom;
 
-fn main() {
+fn main_() {
 	match env::args().nth(1) {
 		None => {
 			eprintln!("Please specify a moddl file path.");
@@ -48,4 +45,17 @@ fn main() {
 			}
 		}
 	}
+}
+
+const STACK_SIZE: usize = 40 * 1024 * 1024;
+
+fn main() {
+    // Spawn thread with explicit stack size
+    let child = thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(main_)
+        .unwrap();
+
+    // Wait for thread to join
+    child.join().unwrap();
 }

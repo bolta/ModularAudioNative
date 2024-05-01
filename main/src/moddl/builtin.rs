@@ -44,6 +44,11 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 			result.insert($name.to_string(), (ValueBody::Io(Rc::new(RefCell::new($io))), Location::dummy()));
 		}
 	}
+	macro_rules! add_constant {
+		($name: expr, $val: expr) => {
+			result.insert($name.to_string(), (ValueBody::Float($val), Location::dummy()));
+		}
+	}
 
 	result.insert("false".to_string(), false_value());
 	result.insert("true".to_string(), true_value());
@@ -74,7 +79,10 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("sin", Sin { });
 	add_function!("cos", Cos { });
 	add_function!("tan", Tan { });
+	add_constant!("pi", 4f32 * 1f32.atan());
+	add_constant!("tau", 8f32 * 1f32.atan());
 
+	// arrays
 	add_function!("at", At { });
 
 	// functional

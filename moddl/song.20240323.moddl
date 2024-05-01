@@ -1,0 +1,53 @@
+@title "Blue Sunday"
+
+@tempo 96
+//@solo ^c
+
+@let `trans`, -700
+
+@let `transpose`, cent => =f=> f * 2 ^ (cent / 1200)
+
+@let `arpeggio`, pulseOsc { 0.35 } | lpf { 4000 + 4000 * expEnv { 0.25 } ^ 0.5, 2 } * expEnv { 0.25 } ^ 2
+@let `unstablePan`, (pos, rate, depth) => pan { pos + uniformNoise | sampleCrush { rate } * depth }
+
+@instrument ^a, transpose(trans) | arpeggio // | unstablePan(-0.2, 4, 0.2)
+@instrument ^b, transpose(trans) | arpeggio // | unstablePan( 0.2, 4, 0.2)
+@instrument ^c, transpose(trans) | =f=> (f | pulseOsc { 0.5 } * 0.7 + (f * 1.006 + 0.003 * 1 | sineOsc) | pulseOsc { 0.45 } * 0.3) * expEnv { 0.25 } ^ 0.5 /* adsrEnv { initial: 0.5, attack: 0.5, decay: 0.5, sustain: 0.7, release: 0.2 }*/
+
+ab o4l8v9
+
+a @$theme [ re^ e^ e^ e^ d^ d^ d^ d^ c^ c^ c^ c^ <b^ b^ b^ b ]
+b @$theme [ <a^ >a^ >c^ <b^ <g^ >g^ b-^ a^ <f^ >f^ a-^ g^ <e^ >e^ f^ g^ ]
+
+//ab $theme
+
+ab [0
+	ab {
+		a [2 $theme ]
+		b [2 $theme ]
+	ab }
+
+	ab {
+		a rc+^c+^c+^c+ ^e^e^e^e ^g^g^g^g ^b-^b-^b-^b- 
+		b <f+^>f+^g+^a^ <a^>a^b^>c^ <c^>c^d^e-^ <e-^>e-^f^g-^
+	ab }
+
+	ab {
+		a re-^ a-^ <a-^ b^> c+^g+^g+^c+^ f+^>c+^c+^<f+ ^32<b16>g1^-16.^2.
+		b <a-^ >b^ <d-^>e-^ <f+^>f+^a^f+^ <b^>b^>d^<b^ <e16>e1^-16^2<e4
+	ab }
+ab ]
+
+//a [0 <a^ >a^ >c^ <b-^ <g^ >g^ b-^ a-^ <f^ >f^ a^ g^ <e^ >e^ g^ f^ ]
+//b [0 re^ e^ e^ e^ d^ d^ d^ d^ c^ c^ c^ c^ <b^ b^ b^ b ]
+
+c o6l8v15
+//c [4 r1]
+c [0
+	//c [/*cd*/ e4.ge4dc d1 c4.e-c4<b-ab2.>cd]
+//	c [2 r4e4d4g4e4.d16c16d4e4:c2. fgd1]g4.f16e-16f4g4e2.fg
+	c [2 r4e4d4g4e4.d16c16d4e4:c2. <a-b-g1]g4.f16e-16f4g4e2.fg
+	c a2>e4d4c2<b>c<bag2e-fe-df2e-4d4 c+4d+4c+2f+4g+f+e4c+4 c+4<bab4>c+4d+2e2^4.r4.
+c ]
+//c r4e4d4g4e4dcd4e4c2. //fga-gfed2
+//@solo ^ab

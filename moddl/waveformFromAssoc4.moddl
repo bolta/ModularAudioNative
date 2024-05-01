@@ -1,0 +1,17 @@
+// 参考 https://www.youtube.com/watch?v=ly3SrRrzGFk
+
+@tempo 150
+
+// 入力に依らず固定ピッチで再生（値は何でもよい）
+@let `masterFreq`, 1
+
+@waveform `duty`, {
+	data: x[[248]],
+	sampleRate: 60,
+	masterFreq: masterFreq,
+}
+
+@instrument ^a, pulseOsc { duty: masterFreq | waveformPlayer(duty) / 16 } * adsrEnv
+
+a o5l16v15
+a cd+c+edff+

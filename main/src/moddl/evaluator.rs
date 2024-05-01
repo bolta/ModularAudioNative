@@ -178,6 +178,8 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			Ok(ValueBody::NodeStructure(filter_labels(unguard_labels(&struct_val), &struct_loc, &filter) ?))
 		},
 		ExprBody::LabelPrefix { strukt, prefix } => {
+			// TODO コレクションの場合も許してやっていいのでは？
+			// （配下で LabelPrefix がついたものを全て処理する。配下がコレクションであれば再帰する）
 			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
 
 			Ok(ValueBody::NodeStructure(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))

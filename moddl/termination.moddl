@@ -1,0 +1,10 @@
+@tempo 120*1
+
+@instrument ^abcd, pulseOsc { duty: 3/10 } * expEnv { 1/16 }
+
+abcd o4l8v15
+
+a  bbbbbbbb
+b  dddddddddddd
+c <gggggggggggggggg
+

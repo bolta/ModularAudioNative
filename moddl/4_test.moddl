@@ -1,0 +1,6 @@
+//@solo ^c
+@tempo 120
+
+@instrument ^a, sineOsc // * adsrEnv
+
+a o4l8v15 c1

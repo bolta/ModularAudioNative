@@ -2,9 +2,9 @@
 // デフォルトの分解能（384 tpB）では 5 連符（40 分音符）は使えない。この行を外すとエラーになる
 @ticksPerBar 240
 
-@instrument ^ab, pulseOsc { } * env1
+@instrument ^ab, pulseOsc { } * expEnv { 1 / 16 }
 
-a	o4l40q6
+a	o4l40q7
 b	o2l8q8
 
 // 原曲は 4 連符だけど

@@ -1,0 +1,10 @@
+//@solo ^c
+@tempo 112
+@ticksPerBar 112
+
+@instrument ^a, nesFreq() | pulseOsc { duty: 0.5 } * adsrEnv { initialLevel: 0.25, attack: 0.1, decay: 0, sustain: 1, release: 0 }
+@instrument ^b, (node (f) f - 4) | nesFreq() | pulseOsc { duty: 0.5 } * adsrEnv { initialLevel: 0.25, attack: 0.1, decay: 0, sustain: 1, release: 0 }
+
+ab o4l8v12
+
+ab	{l28 b>c+d+ef+ga}> b1 ^2agf+b e1 ^2f+gf+d< b2>b4a4 >d2<b4a4 b1^1

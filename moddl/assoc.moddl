@@ -1,0 +1,37 @@
+@tempo 120
+
+@let `fm`, params => node (f) (f + params.modDepth * (f * params.modRatio) | sineOsc * adsrEnv {
+	// 記法に改善の余地あり
+	attack:  params.modEnv.attack,
+	decay:   params.modEnv.decay,
+	sustain: params.modEnv.sustain,
+	release: params.modEnv.release,
+}) | sineOsc * adsrEnv {
+	// 記法に改善の余地あり
+	attack:  params.carEnv.attack,
+	decay:   params.carEnv.decay,
+	sustain: params.carEnv.sustain,
+	release: params.carEnv.release,
+}
+
+@let `fmParams`, {
+	modRatio: 3,
+	modDepth: 1500,
+	modEnv: {
+		attack: 0.1,
+		decay: 1,
+		sustain: 0.2,
+		release: 0,
+	},
+	carEnv: {
+		attack: 0,
+		decay: 3,
+		sustain: 0,
+		release: 0,
+	},
+}
+
+@instrument ^a, fm(fmParams) * adsrEnv
+
+a o4l8v15
+a cdefg1^1^1

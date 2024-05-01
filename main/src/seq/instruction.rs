@@ -17,7 +17,7 @@ pub enum Instruction {
 	NewVar { name: String, value: i32 }, // TODO 型をつける
 	DecrVar { name: String },
 	DeleteVar { name: String },
-	Call { seq_name: String },
+	Call { seq_name: String, modify_current: bool },
 	JumpAbs { seq_name: Option<String>, pos: InstructionIndex },
 	JumpRel { offset: i32 },
 	If0 { var: String, then: Box<Instruction> }, // いずれもっと汎用的な instrc で置換できるかもしれない

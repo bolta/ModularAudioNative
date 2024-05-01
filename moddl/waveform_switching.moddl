@@ -1,0 +1,15 @@
+@tempo 120
+
+@waveform `piano`, "D:/Dropbox/sounds/roland/C3ACGPNO.WAV"
+@waveform `halo`, "D:/Dropbox/sounds/roland/C3HALO.WAV"
+
+@instrument ^a, waveformPlayer(piano)@w * adsrEnv { release: 0@r }
+//@instrument ^b, waveformPlayer(halo)@w * adsrEnv
+
+a r4
+//a cdefg yw:waveform,=halo; cdefg yw,=piano; cdefg { yw,=halo; gab>cd } cdefg
+a cd { yw,=halo; efg } cde
+
+
+// b o3
+// b c1

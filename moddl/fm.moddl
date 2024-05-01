@@ -1,0 +1,73 @@
+@let `phase`, (sawOsc + 1) * pi
+//@let `saw`, phase => phase / pi - 1
+
+@let `env`, adsrEnv {
+	attack: 0@attack,
+	decay: 0@decay,
+	sustain: 1@sustain,
+	release: 0@release,
+}
+
+@let `operator`,
+	phaseAdd =>
+	(level, freqMul, attack, decay, sustain, release) =>
+	=freq=> sin((freqMul * freq) | phase + phaseAdd) * level * adsrEnv {
+		// TODO キーと同名の変数の省略記法がほしい
+		attack: attack,
+		decay: decay,
+		sustain: sustain,
+		release: release,
+	}
+
+@let `fm`, params =>
+	do fb <- feedback;
+	let fbIn = fb->at(0);
+	let fbOut = fb->at(1);
+	let mod = operator(fbOut * params.mod.fbLevel)(
+		// TODO 連想を関数の引数や他の連想の中に展開する記法がほしい
+		level: params.mod.level,
+		freqMul: params.mod.freqMul,
+		attack: params.mod.attack,
+		decay: params.mod.decay,
+		sustain: params.mod.sustain,
+		release: params.mod.release,
+	) | fbIn;
+
+	let car = operator(mod)(
+		// TODO 同上
+		level: params.car.level,
+		freqMul: params.car.freqMul,
+		attack: params.car.attack,
+		decay: params.car.decay,
+		sustain: params.car.sustain,
+		release: params.car.release,
+	);
+
+	car
+
+@instrument ^a, fm({
+	mod: {
+		fbLevel: 2@mod.fbLevel,
+		level: 1@mod.level,
+		freqMul: 3@mod.freqMul,
+		attack: 0@mod.attack,
+		decay: 0.8@mod.decay,
+		sustain: 0.1@mod.sustain,
+		release: 0@mod.release,
+	}/* @@mod */, // TODO ここに LabelPrefix をつけたい
+	car: {
+		level: 1@level,
+		freqMul: 1@car.freqMul,
+		attack: 0@car.attack,
+		decay: 0@car.decay,
+		sustain: 1@car.sustain,
+		release: 0@car.release,
+	}/* @@car */, // TODO ここに LabelPrefix をつけたい
+})
+
+@tempo 120/4
+
+a o4l8v15
+//a cdefg4>cdefg4
+a cdefg4 ymod.decay,0.2 ymod.attack,0.2 ycar.freqMul,2 cdefg4
+

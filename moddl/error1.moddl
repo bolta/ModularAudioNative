@@ -1,0 +1,11 @@
+@let `foo`, [2,4,6]->reduce(1, func (x) x * 3)
+@tempo 120 + bar
+@waveform `foo`, 24
+@let `foo`
+@instrument ^a, sineOsc
+//@instrument ^ab, pulseOsc
+
+
+//a cde
+
+b cde

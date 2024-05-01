@@ -1,0 +1,8 @@
+@tempo 120
+
+@let `a`, (((((((1)+1)+1)+1)+1)+1)+1)+1
+
+@instrument ^a, a * 0 + sineOsc
+
+a cdefg
+
