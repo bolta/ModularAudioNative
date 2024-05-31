@@ -47,7 +47,7 @@ parser![track_set_literal, Box<Expr>, {
 			|(tracks, loc)| { ok(Box::new(Expr::new(ExprBody::TrackSetLiteral(tracks), loc))) })
 }];
 parser![identifier_literal, Box<Expr>, {
-	map_res(si!(delimited(char('`'), loc(identifier()), char('`'))),
+	map_res(si!(preceded(char(':'), loc(identifier()))),
 			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::IdentifierLiteral(id.to_string()), loc))) })
 }];
 parser![string_literal, Box<Expr>, {
@@ -453,7 +453,7 @@ parser![postfix, Postfix, {
 		),
 		map_res(
 			preceded(
-				ss!(tag("->")),
+				ss!(char('~')),
 				tuple((
 					si!(identifier()),
 					opt(
