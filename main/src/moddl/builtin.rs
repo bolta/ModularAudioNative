@@ -29,6 +29,11 @@ use std::{
 pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	let mut result = HashMap::<String, Value>::new();
 	// ビルトインは位置を持たない（dummy）
+	macro_rules! add_number {
+		($name: expr, $value: expr) => {
+			result.insert($name.to_string(), (ValueBody::Float($value), Location::dummy()));
+		}
+	}
 	macro_rules! add_node_factory {
 		($name: expr, $fact: expr) => {
 			result.insert($name.to_string(), (ValueBody::NodeFactory(Rc::new($fact)), Location::dummy()));
@@ -69,11 +74,20 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("delay", Delay::new(sample_rate));
 
 	// numerical
+	add_number!("pi", std::f32::consts::PI);
+	add_number!("tau", std::f32::consts::TAU);
+	add_number!("e", std::f32::consts::E);
 	add_function!("log", Log { });
 	add_function!("log10", Log10 { });
 	add_function!("sin", Sin { });
 	add_function!("cos", Cos { });
 	add_function!("tan", Tan { });
+	add_function!("abs", Abs { });
+	add_function!("signum", Signum { });
+	add_function!("floor", Floor { });
+	add_function!("ceil", Ceil { });
+	add_function!("round", Round { });
+	add_function!("trunc", Trunc { });
 
 	add_function!("at", At { });
 
@@ -180,6 +194,12 @@ unary_math_func!(Log10, Log10Calc);
 unary_math_func!(Sin, SinCalc);
 unary_math_func!(Cos, CosCalc);
 unary_math_func!(Tan, TanCalc);
+unary_math_func!(Abs, AbsCalc);
+unary_math_func!(Signum, SignumCalc);
+unary_math_func!(Floor, FloorCalc);
+unary_math_func!(Ceil, CeilCalc);
+unary_math_func!(Round, RoundCalc);
+unary_math_func!(Trunc, TruncCalc);
 
 // 最低限の配列操作のため、とりあえず map と reduce を作っておく
 
