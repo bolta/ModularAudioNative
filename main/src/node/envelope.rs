@@ -128,7 +128,9 @@ impl Node for AdsrEnv {
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
 		let to_rate_per_sample = |sec| { if sec <= 0f32 { 1f32 } else { 1f32 / context.sample_rate_f32() / sec } };
 		let attack = |this: &mut Self| {
-			let attack_rate_per_sample = to_rate_per_sample(inputs[0]);
+			// initial_level の値に依らず attack_time でちょうど 1 に達するよう initial_level を考慮する
+			let initial_level = inputs[4];
+			let attack_rate_per_sample = to_rate_per_sample(inputs[0]) * (1f32 - initial_level);
 			this.amplitude += attack_rate_per_sample;
 			if this.amplitude >= 1f32 {
 				this.amplitude = 1f32;
