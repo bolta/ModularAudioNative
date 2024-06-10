@@ -95,7 +95,8 @@ impl Node for WaveformPlayer {
 					// TODO WaveformHost の範囲チェック、どこに入れるか
 					self.offset = env.waveforms()[self.index].start_offset();
 				} else {
-					self.state = WaveformPlayerState::Idle;
+					// リリースを発音する場合があるのでノートオフは無視する
+					// self.state = WaveformPlayerState::Idle;
 				}
 			},
 
