@@ -18,7 +18,7 @@ use crate::{
 		noise::*,
 		osc::*,
 		transit::*,
-		wave::*, feedback::FeedbackIo,
+		wave::*, prev::PrevIo,
 	},
 };
 
@@ -98,8 +98,8 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	// io
 	add_function!("then", Then { });
 
-	// feedback
-	add_io!("feedback", FeedbackIo::new());
+	// prev
+	add_io!("prev", PrevIo::new());
 
 	// import/export
 	add_function!("import", Import { });

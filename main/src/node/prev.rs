@@ -11,16 +11,16 @@ use std::{sync::mpsc, rc::Rc};
 
 // TODO ステレオ対応
 
-pub struct FeedbackIn {
+pub struct PrevIn {
 	base_: NodeBase,
 	signal: ChanneledNodeIndex,
-	id: FeedbackId,
+	id: PrevId,
 }
-impl FeedbackIn {
+impl PrevIn {
 	pub fn new(
 		base: NodeBase, 
 		signal: ChanneledNodeIndex,
-		id: FeedbackId,
+		id: PrevId,
 	) -> Self {
 		Self {
 			base_: base, 
@@ -30,13 +30,13 @@ impl FeedbackIn {
 	}
 }
 #[node_impl]
-impl Node for FeedbackIn {
+impl Node for PrevIn {
 	fn channels(&self) -> i32 { self.signal.channels() }
 	fn upstreams(&self) -> Upstreams { vec![
 		self.signal,
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいか？
-	fn features(&self) -> Vec<Feature> { vec![Feature::FeedbackIn { id: self.id }] }
+	fn features(&self) -> Vec<Feature> { vec![Feature::PrevIn { id: self.id }] }
 	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
 		match self.signal {
 			ChanneledNodeIndex::NoOutput(_) => { },
@@ -50,31 +50,31 @@ impl Node for FeedbackIn {
 	}
 }
 
-pub struct FeedbackInFactory {
-	id: FeedbackId,
+pub struct PrevInFactory {
+	id: PrevId,
 }
-impl FeedbackInFactory {
-	pub fn new(id: FeedbackId) -> Self{
+impl PrevInFactory {
+	pub fn new(id: PrevId) -> Self{
 		Self { id }
 	}
 }
-impl NodeFactory for FeedbackInFactory {
+impl NodeFactory for PrevInFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
-		Box::new(FeedbackIn::new(base, signal.channeled(), self.id))
+		Box::new(PrevIn::new(base, signal.channeled(), self.id))
 	}
 
 }
 
-pub struct FeedbackOut {
+pub struct PrevOut {
 	base_: NodeBase,
 	channels: i32,
-	id: FeedbackId,
+	id: PrevId,
 }
-impl FeedbackOut {
-	pub fn new(base: NodeBase, channels: i32, id: FeedbackId) -> Self {
+impl PrevOut {
+	pub fn new(base: NodeBase, channels: i32, id: PrevId) -> Self {
 		Self {
 			base_: base, 
 			channels,
@@ -83,48 +83,48 @@ impl FeedbackOut {
 	}
 }
 #[node_impl]
-impl Node for FeedbackOut {
+impl Node for PrevOut {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいか？
-	fn features(&self) -> Vec<Feature> { vec![Feature::FeedbackOut { id: self.id }] }
+	fn features(&self) -> Vec<Feature> { vec![Feature::PrevOut { id: self.id }] }
 	// 単なるプレースホルダなので、することはない
 //	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) { }
 }
 
-pub struct FeedbackOutFactory {
-	id: FeedbackId,
+pub struct PrevOutFactory {
+	id: PrevId,
 }
-impl FeedbackOutFactory {
-	pub fn new(id: FeedbackId) -> Self{
+impl PrevOutFactory {
+	pub fn new(id: PrevId) -> Self{
 		Self { id }
 	}
 }
-impl NodeFactory for FeedbackOutFactory {
+impl NodeFactory for PrevOutFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(FeedbackOut::new(base, 1 /* 仮 */, self.id))
+		Box::new(PrevOut::new(base, 1 /* 仮 */, self.id))
 	}
 
 }
 
-pub struct FeedbackIo {
-	id: FeedbackId,
+pub struct PrevIo {
+	id: PrevId,
 }
-impl FeedbackIo {
+impl PrevIo {
 	pub fn new() -> Self {
-		Self { id: FeedbackId(0usize) }
+		Self { id: PrevId(0usize) }
 	}
 }
-impl Io for FeedbackIo {
+impl Io for PrevIo {
 	fn perform(&mut self, loc: &Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let id = self.id;
 		self.id.0 += 1;
 
 		Ok((ValueBody::Array(vec![
-			(ValueBody::NodeFactory(Rc::new(FeedbackInFactory::new(id))), loc.clone()),
-			(ValueBody::NodeFactory(Rc::new(FeedbackOutFactory::new(id))), loc.clone()),
+			(ValueBody::NodeFactory(Rc::new(PrevInFactory::new(id))), loc.clone()),
+			(ValueBody::NodeFactory(Rc::new(PrevOutFactory::new(id))), loc.clone()),
 		]), loc.clone()))
 	}
 }

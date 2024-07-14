@@ -74,10 +74,10 @@ pub enum Activeness {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct FeedbackId(pub usize);
+pub struct PrevId(pub usize);
 
 /// 利用者側で特別扱いが必要な Node の場合に設定する
 pub enum Feature {
-	FeedbackIn { id: FeedbackId },
-	FeedbackOut { id: FeedbackId },
+	PrevIn { id: PrevId },
+	PrevOut { id: PrevId },
 }
