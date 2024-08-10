@@ -47,6 +47,7 @@ pub enum ErrorType {
 	ExportDuplicate,
 	ExportNotFound,
 	LabelFilterInconsistent,
+	BadWaveform, // こういうの一つ一つ専用エラーにするのってどうなんだろう…
 
 	TickUnderflow { length: Length },
 	// TODO イベントキューあふれとか、演奏時のエラーをラップする
@@ -72,7 +73,7 @@ impl Display for ErrorType {
 			Self::TypeMismatchAny { expected }=> write!(f, "Type mismatch: expected one of: {}", expected.iter().join(", ")),
 			Self::ArgMissing { name } => write!(f, "Function argument `{}` missing.", name),
 			Self::ArityMismatch { expected, actual }
-					=> write!(f, "Arity mismatch: Given function is expected to take {} argument{}, but actually takes {}.",
+					=> write!(f, "Arity mismatch: given function is expected to take {} argument{}, but actually takes {}.",
 							expected, if *expected == 1 { "" } else { "s" }, actual),
 			// EntryDuplicate { name: String },
 			// EntryNotFound { name: String },
@@ -83,6 +84,7 @@ impl Display for ErrorType {
 			Self::OptionNotAllowedHere => write!(f, "Options must be placed at the head of a source file."),
 			Self::ExportDuplicate => write!(f, "Duplicate export found."),
 			Self::ExportNotFound => write!(f, "Export expected but not found."),
+			Self::BadWaveform => write!(f, "Bad waveform specification: either \"data\" or \"path\" (not both) is required, and \"data\" requires \"sampleRate\"."),
 			// Playing,
 			// File(io::Error),
 			Self::UnknownError { message } => write!(f, "Unknown error (perhaps due to a bug): {}", message),

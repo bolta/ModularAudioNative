@@ -95,7 +95,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports) ?;
 					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
-						Ok(read_wav_file(path.as_str(), None, None, None, None)
+						Ok(read_wav_file(path.as_str(), None, None, None, None, None)
 						.map_err(|e| error(e.into(), value_loc.clone())) ?)
 					} else if let Some(spec) = value.as_assoc() {
 						Ok(parse_waveform_spec(spec, &value_loc) ?)
@@ -193,43 +193,57 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 // 仕様は #16 を参照のこと
 fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlResult<Waveform> {
 	let get_optional_value = |name: &str| spec.get(& name.to_string());
-	let get_required_value = |name: &str| get_optional_value(name).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.to_string() }, loc.clone()));
 
-	let data_values = get_required_value("data")?.as_array()?.0;
-	let sample_rate = get_required_value("sampleRate")?.as_float()?.0 as i32;
+	let data_values = get_optional_value("data").map(|value| value.as_array()).transpose()?.map(|v| v.0);
+	let path = get_optional_value("path").map(|value| value.as_string()).transpose()?.map(|v| v.0);
+	let sample_rate = get_optional_value("sampleRate").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+
 	let master_freq = get_optional_value("masterFreq").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let start_offset = get_optional_value("startOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 
-	// TODO ステレオ対応
-	let channels = 1;
-	let mut data = vec![];
-	for v in data_values {
-		if let Ok((f, _)) = v.as_float() {
-			data.push(f);
-		} else if let Ok((looop, _)) = v.as_array() {
-			match loop_offset {
-				Some(_) => { warn("duplicate loop offset"); }, // assoc に明記されていればそちらが優先
-				None => { loop_offset = Some(data.len() as f32); },
+	match (data_values, path, sample_rate) {
+		(Some(data_values), None, Some(sample_rate)) => {
+			// TODO ステレオ対応
+			let channels = 1;
+			let mut data = vec![];
+			for v in data_values {
+				if let Ok((f, _)) = v.as_float() {
+					data.push(f);
+				} else if let Ok((looop, _)) = v.as_array() {
+					match loop_offset {
+						Some(_) => { warn("duplicate loop offset"); }, // assoc に明記されていればそちらが優先
+						None => { loop_offset = Some(data.len() as f32); },
+					}
+					for v in looop {
+						let (f, _) = v.as_float() ?;
+						data.push(f);
+					}
+					match end_offset {
+						Some(_) => { warn("duplicate end offset"); }, // assoc に明記されていればそちらが優先
+						None => { end_offset = Some(data.len() as f32); },
+					}
+				} else {
+					return Err(error(ErrorType::TypeMismatchAny { expected: vec![
+						ValueType::Number,
+						ValueType::Array,
+					]}, v.1.clone()));
+				}
 			}
-			for v in looop {
-				let (f, _) = v.as_float() ?;
-				data.push(f);
-			}
-			match end_offset {
-				Some(_) => { warn("duplicate end offset"); }, // assoc に明記されていればそちらが優先
-				None => { end_offset = Some(data.len() as f32); },
-			}
-		} else {
-			return Err(error(ErrorType::TypeMismatchAny { expected: vec![
-				ValueType::Number,
-				ValueType::Array,
-			]}, v.1.clone()));
-		}
+			Ok(Waveform::new_with_details(channels, sample_rate as i32, data, master_freq, start_offset, end_offset, loop_offset))
+		},
+
+		(None, Some(path), sample_rate) => {
+			let sample_rate = sample_rate.map(|s| s as i32);
+			
+			Ok(read_wav_file(path.as_str(), sample_rate, master_freq, start_offset, end_offset, loop_offset)
+			.map_err(|e| error(e.into(), loc.clone())) ?)
+		},
+
+		_ => Err(error(ErrorType::BadWaveform, loc.clone())),
 	}
 
-	Ok(Waveform::new_with_details(channels, sample_rate, data, master_freq, start_offset, end_offset, loop_offset))
 }
 
 fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache) -> ModdlResult<Value> {
