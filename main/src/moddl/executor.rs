@@ -198,7 +198,7 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 	let path = get_optional_value("path").map(|value| value.as_string()).transpose()?.map(|v| v.0);
 	let sample_rate = get_optional_value("sampleRate").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 
-	let master_freq = get_optional_value("masterFreq").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let original_freq = get_optional_value("originalFreq").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let start_offset = get_optional_value("startOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
 	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
@@ -231,13 +231,13 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 					]}, v.1.clone()));
 				}
 			}
-			Ok(Waveform::new_with_details(channels, sample_rate as i32, data, master_freq, start_offset, end_offset, loop_offset))
+			Ok(Waveform::new_with_details(channels, sample_rate as i32, data, original_freq, start_offset, end_offset, loop_offset))
 		},
 
 		(None, Some(path), sample_rate) => {
 			let sample_rate = sample_rate.map(|s| s as i32);
 			
-			Ok(read_wav_file(path.as_str(), sample_rate, master_freq, start_offset, end_offset, loop_offset)
+			Ok(read_wav_file(path.as_str(), sample_rate, original_freq, start_offset, end_offset, loop_offset)
 			.map_err(|e| error(e.into(), loc.clone())) ?)
 		},
 

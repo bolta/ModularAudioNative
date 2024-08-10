@@ -16,7 +16,7 @@ use std::{
 pub fn read_wav_file(
 	wav_path: &str,
 	sample_rate: Option<i32>,
-	master_freq: Option<f32>,
+	original_freq: Option<f32>,
 	start_offset: Option<f32>,
 	end_offset: Option<f32>,
 	loop_offset: Option<f32>,
@@ -30,7 +30,7 @@ pub fn read_wav_file(
 		header.channel_count as i32,
 		sample_rate.unwrap_or_else(|| header.sampling_rate as i32),
 		data,
-		master_freq,
+		original_freq,
 		start_offset,
 		end_offset,
 		loop_offset,
