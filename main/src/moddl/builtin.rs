@@ -93,6 +93,7 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 
 	// functional
 	add_function!("map", Map { });
+	add_function!("filter", Filter { });
 	add_function!("reduce", Reduce { });
 
 	// io
@@ -228,6 +229,25 @@ impl Function for Map {
 		let mut result = vec![];
 		for elem in source {
 			result.push(mapper.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, mapper_loc.clone(), imports) ?);
+		}
+		Ok((ValueBody::Array(result), call_loc))
+	}
+}
+
+pub struct Filter { }
+impl Function for Filter {
+	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "predicate".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
+		let (predicate, predicate_loc) = get_required_arg(args, "predicate", &call_loc)?.as_function() ?;
+
+		let sig = predicate.signature();
+		check_arity(&sig, 1, &predicate_loc) ?;
+
+		let mut result = vec![];
+		for elem in source {
+			let satisfied = predicate.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, predicate_loc.clone(), imports)?.as_boolean()?.0;
+			if satisfied { result.push(elem.clone()); }
 		}
 		Ok((ValueBody::Array(result), call_loc))
 	}

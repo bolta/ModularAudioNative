@@ -1,0 +1,11 @@
+@tempo 120
+
+@instrument ^a,
+		let oscs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] \
+				~filter(i => i % 2 == 1) \
+				~map(i => =f=> (i * f) | sineOsc / i);
+		let sumOscs = oscs~reduce(0, (acc, osc) => acc + osc);
+		sumOscs * adsrEnv
+
+a o4l8v15
+a cdefg1
