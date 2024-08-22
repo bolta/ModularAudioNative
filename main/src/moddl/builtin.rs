@@ -89,7 +89,11 @@ pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("round", Round { });
 	add_function!("trunc", Trunc { });
 
+	// array
 	add_function!("at", At { });
+	// concat は flat を使って ModDL で実装する
+	// add_function!("concat", Concat { });
+	add_function!("flat", Flat { });
 
 	// functional
 	add_function!("map", Map { });
@@ -213,6 +217,24 @@ impl Function for At {
 		let (index, _) = get_required_arg(args, "index", &call_loc)?.as_float() ?;
 
 		source.get(index as usize).map(|elem| elem.clone()).ok_or_else(|| error(ErrorType::IndexOutOfBounds, call_loc.clone()))
+	}
+}
+
+pub struct Flat { }
+impl Function for Flat {
+	fn signature(&self) -> FunctionSignature { vec!["arrays".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (arrays, _) = get_required_arg(args, "arrays", &call_loc)?.as_array() ?;
+
+		let mut result = vec![];
+		for array in arrays {
+			let (array, _) = array.as_array() ?;
+			for elem in array {
+				result.push(elem.clone());
+			}
+		}
+
+		Ok((ValueBody::Array(result), call_loc))
 	}
 }
 
