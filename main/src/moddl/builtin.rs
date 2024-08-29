@@ -26,7 +26,35 @@ use std::{
 	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
-pub fn builtin_vars(sample_rate: i32) -> HashMap<String, Value> {
+pub fn builtin_vars(sample_rate: i32, imports: &mut ImportCache) -> ModdlResult<HashMap<String, Value>> {
+	// 組み込み ModDL に失敗することはないはずなので、Location は全て dummy とする
+
+	let builtin_vars = {
+		let native_builtins = native_builtins(sample_rate);
+		vec![("__Native".to_string(), (ValueBody::Assoc(native_builtins), Location::dummy()))]
+				.into_iter().collect()
+	};
+
+	let root_moddl = {
+		// TODO ちゃんとエラーチェック（失敗の可能性は低そうだが）
+		let mut path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+		 path.push("builtins");
+		 path.push("root.moddl");
+		 path
+	};
+
+	let path = root_moddl.as_path();
+	let root_scope = Scope::root(builtin_vars);
+	let (imported, _) = imports.import(path, &root_moddl, root_scope, & Location::dummy()) ?;
+	if let ValueBody::Assoc(builtin_vars) = imported {
+		Ok(builtin_vars)
+	} else {
+		// ファイルは必ず存在するので（セットアップ失敗や IO エラーを除き）失敗しないはず
+		Err(error(ErrorType::TypeMismatch { expected: ValueType::Assoc }, Location::dummy()))
+	}
+}
+
+fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	let mut result = HashMap::<String, Value>::new();
 	// ビルトインは位置を持たない（dummy）
 	macro_rules! add_number {
