@@ -387,7 +387,7 @@ impl Function for Type {
 pub struct Print { }
 impl Function for Print {
 	fn signature(&self) -> FunctionSignature { vec!["value".to_string(), "text".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (value, _) = get_required_arg(args, "value", &call_loc)?;
 		let text = get_optional_arg(args, "text").map(|v| &v.0);
 		
@@ -408,7 +408,7 @@ impl Function for Print {
 pub struct ToString { }
 impl Function for ToString {
 	fn signature(&self) -> FunctionSignature { vec!["value".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (value, _) = get_required_arg(args, "value", &call_loc)?;
 
 		let result = match value.to_string() {
