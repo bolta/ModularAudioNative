@@ -123,6 +123,9 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	// add_function!("concat", Concat { });
 	add_function!("flat", Flat { });
 
+	// type
+	add_function!("type", Type { });
+
 	// functional
 	add_function!("map", Map { });
 	add_function!("filter", Filter { });
@@ -347,6 +350,30 @@ impl Function for Import {
 				.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, call_loc.clone())) ?;
 
 		imports.import(Path::new(&path), call_loc.path.as_path(), root_scope, &call_loc)
+	}
+}
+
+pub struct Type { }
+impl Function for Type {
+	fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (arg, _) = get_required_arg(args, "arg", &call_loc)?;
+
+		let type_id = match arg {
+			ValueBody::Float(_) => "Number",
+			ValueBody::WaveformIndex(_) => "Waveform",
+			ValueBody::TrackSet(_) => "TrackSet",
+			ValueBody::IdentifierLiteral(_) => "QuotedIdentifier",
+			ValueBody::String(_) => "String",
+			ValueBody::Array(_) => "Array",
+			ValueBody::Assoc(_) => "Assoc",
+			ValueBody::NodeStructure(_) => "NodeStructure",
+			ValueBody::NodeFactory(_) => "NodeFactory",
+			ValueBody::Function(_) => "Function",
+			ValueBody::Io(_) => "Io",
+		};
+
+		Ok((ValueBody::String(type_id.to_string()), call_loc))
 	}
 }
 

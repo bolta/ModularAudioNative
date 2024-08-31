@@ -16,4 +16,21 @@
 
 	flatMap: (source, mapper) => source~map(mapper)~flat(),
 	sum: source => source~reduce(0, (acc, elem) => acc + elem),
+
+	type: __Native.type,
+	// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
+	Type: {
+		// 型名は PascalCase なので、キーもそのまま PascalCase にしたが、こういうイレギュラーなのもよくないだろうか
+		number: "Number",
+		waveform: "Waveform",
+		trackSet: "TrackSet",
+		quotedIdentifier: "QuotedIdentifier",
+		string: "String",
+		array: "Array",
+		assoc: "Assoc",
+		nodeStructure: "NodeStructure",
+		nodeFactory: "NodeFactory",
+		function: "Function",
+		io: "Io",
+ 	},
 }
