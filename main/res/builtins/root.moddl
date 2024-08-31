@@ -1,23 +1,18 @@
-//@export __Native
-
 // TODO 無駄な記述が多いのでなんとかしたい
 // __Native から一部または全部をローカル変数にできればいいのだが
 @let :map, __Native.map
 @let :flat, __Native.flat
 @let :reduce, __Native.reduce
 
-@export {
+// ひとまずネイティブ実装の値は全てグローバルに置く
+@export __Native + {
 	map: map,
 	flat: flat,
 	reduce: reduce,
-	filter: __Native.filter,
-	sineOsc: __Native.sineOsc,
-	adsrEnv: __Native.adsrEnv,
 
 	flatMap: (source, mapper) => source~map(mapper)~flat(),
 	sum: source => source~reduce(0, (acc, elem) => acc + elem),
 
-	type: __Native.type,
 	// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
 	Type: {
 		// 型名は PascalCase なので、キーもそのまま PascalCase にしたが、こういうイレギュラーなのもよくないだろうか
@@ -33,7 +28,4 @@
 		function: "Function",
 		io: "Io",
  	},
-
-	print: __Native.print,
-	toString: __Native.toString,
 }

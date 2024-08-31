@@ -28,7 +28,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::Multiply { lhs, rhs } => evaluate_binary_structure::<MulCalc>(lhs, rhs, vars, imports),
 		ExprBody::Divide { lhs, rhs } => evaluate_binary_structure::<DivCalc>(lhs, rhs, vars, imports),
 		ExprBody::Remainder { lhs, rhs } => evaluate_binary_structure::<RemCalc>(lhs, rhs, vars, imports),
-		ExprBody::Add { lhs, rhs } => evaluate_binary_structure::<AddCalc>(lhs, rhs, vars, imports),
+		ExprBody::Add { lhs, rhs } => evaluate_binary_structure_overloaded::<AddCalc>(lhs, rhs, vars, imports, overload_add),
 		ExprBody::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars, imports),
 		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
 		ExprBody::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
@@ -395,14 +395,56 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 	}))
 }
 
+fn overload_add(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
+	match (lhs, rhs) {
+		(ValueBody::String(lhs), rhs) => {
+			let result = rhs.to_str(|rhs| lhs.clone() + rhs);
+			Some(Ok(ValueBody::String(result)))
+		},
+		(lhs, ValueBody::String(rhs)) => {
+			let result = lhs.to_str(|lhs| lhs.to_string() + rhs);
+			Some(Ok(ValueBody::String(result)))
+		},
+		(ValueBody::Array(lhs), ValueBody::Array(rhs)) => {
+			let mut result = lhs.clone();
+			for elem in rhs {
+				result.push(elem.clone());
+			}
+			Some(Ok(ValueBody::Array(result)))
+		},
+		(ValueBody::Assoc(lhs), ValueBody::Assoc(rhs)) => {
+			let mut result = lhs.clone();
+			for (k, v) in rhs {
+				result.insert(k.clone(), v.clone());
+			}
+			Some(Ok(ValueBody::Assoc(result)))
+		},
+		_ => None,
+	}
+}
+
 fn evaluate_binary_structure<C: Calc + 'static>(
 	lhs: &Expr,
 	rhs: &Expr,
 	vars: &Rc<RefCell<Scope>>,
 	imports: &mut ImportCache,
 ) -> ModdlResult<ValueBody> {
+	evaluate_binary_structure_overloaded::<C>(lhs, rhs, vars, imports, |_, _| None)
+}
+
+fn evaluate_binary_structure_overloaded<C: Calc + 'static>(
+	lhs: &Expr,
+	rhs: &Expr,
+	vars: &Rc<RefCell<Scope>>,
+	imports: &mut ImportCache,
+	overload: fn (&ValueBody, &ValueBody) -> Option<ModdlResult<ValueBody>>,
+) -> ModdlResult<ValueBody> {
 	let ref l_val @ (ref l_body, _) = evaluate(lhs, vars, imports) ?;
 	let ref r_val @ (ref r_body, _) = evaluate(rhs, vars, imports) ?;
+
+	if let Some(result) = overload(l_body, r_body) {
+		return Ok(result ?);
+	}
 
 	// ラベルのついていない定数はコンパイル時に計算する。
 	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外

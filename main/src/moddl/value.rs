@@ -275,11 +275,11 @@ impl ValueBody {
 		}
 	}
 
-	/// 値が文字列の場合、無駄なコピーを発生させないよう何も返さない。呼び出し側で元の値を使ってもらう
-	pub fn to_string(&self) -> Option<String> {
+	/// 値が文字列の場合に無駄なコピーを発生させないよう、参照をコールバック内で使ってもらう
+	pub fn to_str<T>(&self, use_str: impl Fn (&str) -> T) -> T {
 		match self {
-			Self::String(_) => None,
-			_ => Some(self.force_to_string()),
+			Self::String(s) => use_str(s),
+			_ => use_str(& self.force_to_string()),
 		}
 	}
 

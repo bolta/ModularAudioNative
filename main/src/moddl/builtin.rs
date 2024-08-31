@@ -391,10 +391,7 @@ impl Function for Print {
 		let (value, _) = get_required_arg(args, "value", &call_loc)?;
 		let text = get_optional_arg(args, "text").map(|v| &v.0);
 		
-		let print_value = |v: &ValueBody| match v.to_string() {
-			Some(text) => println!("{}", text),
-			None => println!("{}", v.as_string().unwrap()),
-		};
+		let print_value = |v: &ValueBody| v.to_str(|s| println!("{}", s));
 
 		match text {
 			Some(text) => print_value(text),
@@ -411,11 +408,7 @@ impl Function for ToString {
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (value, _) = get_required_arg(args, "value", &call_loc)?;
 
-		let result = match value.to_string() {
-			// TODO 現状結局値の複製は必要なので場合分けの意現状味がない…
-			Some(string) => ValueBody::String(string),
-			None => value.clone() ,
-		};
+		let result = ValueBody::String(value.to_str(|s| s.to_string()));
 		Ok((result, call_loc.clone()))
 	}
 }
