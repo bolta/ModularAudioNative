@@ -136,6 +136,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	// util
 	add_function!("print", Print { });
+	add_function!("toString", ToString { });
 
 	// prev
 	add_io!("prev", PrevIo::new());
@@ -401,6 +402,21 @@ impl Function for Print {
 		}
 
 		Ok((value.clone(), call_loc))
+	}
+}
+
+pub struct ToString { }
+impl Function for ToString {
+	fn signature(&self) -> FunctionSignature { vec!["value".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (value, _) = get_required_arg(args, "value", &call_loc)?;
+
+		let result = match value.to_string() {
+			// TODO 現状結局値の複製は必要なので場合分けの意現状味がない…
+			Some(string) => ValueBody::String(string),
+			None => value.clone() ,
+		};
+		Ok((result, call_loc.clone()))
 	}
 }
 

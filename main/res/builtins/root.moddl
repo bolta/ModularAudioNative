@@ -33,4 +33,7 @@
 		function: "Function",
 		io: "Io",
  	},
+
+	print: __Native.print,
+	toString: __Native.toString,
 }
