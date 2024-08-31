@@ -670,6 +670,8 @@ parser![node_with_args_expr, Box<Expr>, {
 	)
 }];
 
+// 演算子の文字列は calc.rs にもあるので、両者を一致させること
+
 binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| ExprBody::Connect { lhs, rhs }];
 // TODO ↓これだと左結合になってしまう
 binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| ExprBody::Power { lhs, rhs }];

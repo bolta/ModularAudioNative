@@ -105,17 +105,17 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_number!("pi", std::f32::consts::PI);
 	add_number!("tau", std::f32::consts::TAU);
 	add_number!("e", std::f32::consts::E);
-	add_function!("log", Log { });
-	add_function!("log10", Log10 { });
-	add_function!("sin", Sin { });
-	add_function!("cos", Cos { });
-	add_function!("tan", Tan { });
-	add_function!("abs", Abs { });
-	add_function!("signum", Signum { });
-	add_function!("floor", Floor { });
-	add_function!("ceil", Ceil { });
-	add_function!("round", Round { });
-	add_function!("trunc", Trunc { });
+	add_function!(Log::name(), Log { });
+	add_function!(Log10::name(), Log10 { });
+	add_function!(Sin::name(), Sin { });
+	add_function!(Cos::name(), Cos { });
+	add_function!(Tan::name(), Tan { });
+	add_function!(Abs::name(), Abs { });
+	add_function!(Signum::name(), Signum { });
+	add_function!(Floor::name(), Floor { });
+	add_function!(Ceil::name(), Ceil { });
+	add_function!(Round::name(), Round { });
+	add_function!(Trunc::name(), Trunc { });
 
 	// array
 	add_function!("at", At { });
@@ -133,6 +133,9 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	// io
 	add_function!("then", Then { });
+
+	// util
+	add_function!("print", Print { });
 
 	// prev
 	add_io!("prev", PrevIo::new());
@@ -221,6 +224,9 @@ macro_rules! unary_math_func {
 					}, arg_loc.clone()))
 				}
 			}
+		}
+		impl $name {
+			fn name() -> &'static str { <$calc_type>::operator() }
 		}
 	}
 }
@@ -374,6 +380,27 @@ impl Function for Type {
 		};
 
 		Ok((ValueBody::String(type_id.to_string()), call_loc))
+	}
+}
+
+pub struct Print { }
+impl Function for Print {
+	fn signature(&self) -> FunctionSignature { vec!["value".to_string(), "text".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (value, _) = get_required_arg(args, "value", &call_loc)?;
+		let text = get_optional_arg(args, "text").map(|v| &v.0);
+		
+		let print_value = |v: &ValueBody| match v.to_string() {
+			Some(text) => println!("{}", text),
+			None => println!("{}", v.as_string().unwrap()),
+		};
+
+		match text {
+			Some(text) => print_value(text),
+			None => print_value(value),
+		}
+
+		Ok((value.clone(), call_loc))
 	}
 }
 

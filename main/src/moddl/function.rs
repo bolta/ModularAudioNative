@@ -42,6 +42,9 @@ impl Function for Twice {
 }
 
 pub fn get_required_arg<'a>(args: &'a HashMap<String, Value>, name: &str, call_loc: &Location) -> ModdlResult<&'a Value> {
-	args.get(& name.to_string())
+	get_optional_arg(args, name)
 			.ok_or_else(|| error(ErrorType::ArgMissing { name: name.to_string() }, call_loc.clone()))
+}
+pub fn get_optional_arg<'a>(args: &'a HashMap<String, Value>, name: &str) -> Option<&'a Value> {
+	args.get(& name.to_string())
 }

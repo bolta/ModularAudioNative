@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use parser::common::Location;
 use parser::moddl::ast::QualifiedLabel;
 
@@ -20,11 +21,12 @@ use std::{
 
 // TODO 仮置き
 use crate::calc::*;
-use crate::core::common::*;
+use crate::core::{common::*, node};
 use crate::core::node::Node;
 use crate::node::arith::*;
 use std::marker::PhantomData;
 pub trait CalcNodeFactoryTrait {
+	fn operator(&self) -> &str;
 	fn create_mono(&self, base: NodeBase, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
 	fn create_stereo(&self, base: NodeBase, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
 }
@@ -36,6 +38,7 @@ impl <C: 'static + Calc> CalcNodeFactory<C> {
 	pub fn new() -> Self { Self { _c: PhantomData } }
 }
 impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
+	fn operator(&self) -> &str { C::operator() }
 	fn create_mono(&self, base: NodeBase, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
 		Box::new(MonoCalc::<C>::new(base, args))
 	}
@@ -69,6 +72,48 @@ impl NodeStructure {
 		match self {
 			NodeStructure::NodeCreation { label, .. } | NodeStructure::Constant { label, .. } => label.clone(),
 			_ => None,
+		}
+	}
+
+	pub fn to_string(&self) -> String {
+		match self {
+			NodeStructure::Calc{ node_factory, args } => {
+				match args.len() {
+					2 => format!("({} {} {})", args[0].to_string(), node_factory.operator(), args[1].to_string()),
+					_ => {
+						// Calc に 3 項以上のものはないので、ここで処理するのは単項演算だけのはずだが、
+						// もし 3 項以上あった場合は全ての引数を列挙する
+						let content = args.iter().map(|a| a.to_string()).join(", ");
+						format!("{}({})", node_factory.operator(), content)
+					},
+				}
+			},
+			Self::Connect(lhs, rhs) => format!("({} | {})", lhs.to_string(), rhs.to_string()),
+			Self::Condition { cond, then, els } => format!("(if {} then {} else {})", cond.to_string(), then.to_string(), els.to_string()),
+			Self::Lambda { input_param, body } => format!("(={}=> {})", input_param, body.to_string()),
+			Self::NodeCreation { factory, args, label } => {
+				// TODO NodeFactory には名前をつけたい
+				// TODO その他の情報もなるべく出したい
+				let factory_str = "(NodeFactory)";
+				let args_str = match args.len() {
+					0 => "".to_string(),
+					_ => {
+						let content = args.iter().map(|(k, (v, _))| format!("{}: {}", k, v.force_to_string())).join(", ");
+						format!("{{ {} }}", content)
+					},
+				};
+				let label_str = match label {
+					None => "".to_string(),
+					Some(label) => format!("@{}", label.0),
+				};
+				format!("{}{}{}", factory_str, args_str, label_str)
+			},
+			Self::Constant { value, label } => match label {
+				None => value.to_string(),
+				Some(label) => format!("{}@{}", value, label.0),
+			},
+			Self::Placeholder { name } => format!("Placeholder({})", name),
+			Self::LabelGuard(content) => format!("LabelGuard({})", content.to_string()),
 		}
 	}
 }
@@ -229,6 +274,46 @@ impl ValueBody {
 			_ => None,
 		}
 	}
+
+	/// 値が文字列の場合、無駄なコピーを発生させないよう何も返さない。呼び出し側で元の値を使ってもらう
+	pub fn to_string(&self) -> Option<String> {
+		match self {
+			Self::String(_) => None,
+			_ => Some(self.force_to_string()),
+		}
+	}
+
+	// 文字列の場合も含めて必ず値を返す版
+	fn force_to_string(&self) -> String {
+		match self {
+			Self::Float(value) => value.to_string(),
+			Self::WaveformIndex(index) => format!("Waveform({})", index.0),
+			Self::TrackSet(tracks) => if tracks.iter().all(|t| t.len() == 1) {
+				format!("^{}", tracks.join(""))
+			} else {
+				// 複数文字のトラック名は現状ないが、仮の記法で出力しておく
+				format!("^({})", tracks.join(", "))
+			},
+			Self::IdentifierLiteral(id) => format!(":{}", id),
+			// 文字列だけは「式っぽい」整形を受けず中身そのままなので、少し毛色が違う
+			Self::String(value) => value.clone(),
+			Self::Array(elems) => {
+				let content = elems.iter().map(|(e, _)| e.force_to_string()).join(", ");
+				format!("[{}]", content)
+			},
+			Self::Assoc(entries) => {
+				let content = entries.iter().map(|(k, (v, _))| format!("{}: {}", k, v.force_to_string())).join(", ");
+				format!("{{ {} }}", content)
+			},
+			Self::NodeStructure(strukt) => format!("NodeStructure({})", strukt.to_string()),
+
+			// TODO 以下、もうちょっと何か出せるか？
+			Self::NodeFactory(_fact) => "(NodeFactory)".to_string(),
+			Self::Function(_func) => "(Function)".to_string(),
+			Self::Io(_io) => "(Io)".to_string(),
+		}
+	}
+
 }
 
 #[derive(Copy, Clone, Debug, EnumDisplay)]
