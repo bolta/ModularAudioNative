@@ -277,7 +277,7 @@ impl Machine {
 		}
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, _update_flags: &UpdateFlags) {
 		match instrc {
 			Instruction::Load { to, from } => {
 				inputs[to.0] = values[from.0];

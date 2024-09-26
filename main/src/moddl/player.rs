@@ -173,16 +173,16 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	let seq_tags = pctx.seq_tags.clone(); // TODO 本来 clone 不要のはず
 	// skip 時にメインループの代わりに tick を提供する関数
-	let skip_mode_events: Box<dyn Fn () -> Vec<Box<dyn Event>>> = Box::new(move || {
-		// 型がうまく合わないのでやむを得ずループで書く
-		//  seq_tags.iter().map(|tag| Box::<dyn Event>::new(TickEvent::new(EventTarget::Tag(tag.clone())))).collect::<Vec<Box<dyn Event>>>()
-		let mut events: Vec<Box<dyn Event>> = vec![];
-		for tag in &seq_tags {
-			let target = EventTarget::Tag(tag.clone());
-			events.push(Box::new(TickEvent::new(target)));
-		}
-		events
-	});
+	// let skip_mode_events: Box<dyn Fn () -> Vec<Box<dyn Event>>> = Box::new(move || {
+	// 	// 型がうまく合わないのでやむを得ずループで書く
+	// 	//  seq_tags.iter().map(|tag| Box::<dyn Event>::new(TickEvent::new(EventTarget::Tag(tag.clone())))).collect::<Vec<Box<dyn Event>>>()
+	// 	let mut events: Vec<Box<dyn Event>> = vec![];
+	// 	for tag in &seq_tags {
+	// 		let target = EventTarget::Tag(tag.clone());
+	// 		events.push(Box::new(TickEvent::new(target)));
+	// 	}
+	// 	events
+	// });
 
 	let nodes_result = nodes.result();
 
