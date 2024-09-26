@@ -90,6 +90,13 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
+				"letAll" => {
+					let vars = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?;
+					let vars = vars.as_assoc()?.0;
+					for (name, value) in vars {
+						pctx.vars.borrow_mut().set(&name, value.clone()) ?;
+					}
+				}
 				"waveform" => {
 					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
 					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports) ?;
@@ -125,20 +132,6 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				"solo" => {
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					set_mute_solo(MuteSolo::Solo, &tracks, pctx);
-				}
-				"import" => {
-					let path = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_string()?.0;
-					let path = Path::new(&path);
-					let root_scope = pctx.vars.borrow().get_root()
-							.ok_or_else(|| error(ErrorType::UnknownError { message: "cannot get root scope".to_string() }, stmt_loc.clone())) ?;
-					let (imported, _) = imports.import(path, stmt_loc.path.as_path(), root_scope, stmt_loc) ?;
-					if let ValueBody::Assoc(imported_vars) = imported {
-						imported_vars.into_iter().try_for_each(|(name, value)| {
-							pctx.vars.borrow_mut().set(&name, value.clone())
-						}) ?;
-					} else {
-						Err(error(ErrorType::TypeMismatch { expected: ValueType::Assoc }, stmt_loc.clone())) ?;
-					}
 				}
 				"export" => {
 					if pctx.export.is_some() {

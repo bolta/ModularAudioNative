@@ -1,0 +1,5 @@
+@export {
+	osc: pulseOsc { 0.25@duty },
+	filt: lpf { 1000@cutoff, 10@q },
+	env: expEnv { 0.125 },
+}

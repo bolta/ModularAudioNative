@@ -1,0 +1,8 @@
+@tempo 120
+
+@letAll import("./letAll_lib.moddl")
+
+@instrument ^a, osc@@o | filt@@f * env
+
+a o5l2v15
+a c {yf.cutoff,5000 de {yo.duty,0.06125 f}} g^
