@@ -144,9 +144,6 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	// import/export
 	add_function!("import", Import { });
 
-	// for experiments
-	add_node_factory!("stereoTestOsc", StereoTestOscFactory { });
-	add_function!("twice", Twice { });
 	add_io!("rand", Rand::new());
 
 	result

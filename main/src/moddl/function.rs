@@ -27,18 +27,6 @@ pub fn check_arity(sig: &FunctionSignature, expected: usize, loc: &Location) -> 
 	}
 }
 
-// for experiments
-pub struct Twice { }
-impl Function for Twice {
-	fn signature(&self) -> FunctionSignature { vec!["arg0".to_string()] } // TODO こういうどうでもいい名前でもつけないとだめか？
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
-		let (arg, _) = get_required_arg(args, "arg0", &call_loc)?.as_float() ?;
-		let result = arg * 2f32;
-
-		Ok((ValueBody::Float(result), call_loc))
-	}
-}
-
 pub fn get_required_arg<'a>(args: &'a HashMap<String, Value>, name: &str, call_loc: &Location) -> ModdlResult<&'a Value> {
 	get_optional_arg(args, name)
 			.ok_or_else(|| error(ErrorType::ArgMissing { name: name.to_string() }, call_loc.clone()))
