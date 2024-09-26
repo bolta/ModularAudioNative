@@ -171,7 +171,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	// sched.add_event(60 * 44100, Box::new(TerminateEvent { }));
 	// nodes.add(Box::new(sched));
 
-	let seq_tags = pctx.seq_tags.clone(); // TODO 本来 clone 不要のはず
+	// let seq_tags = pctx.seq_tags.clone(); // TODO 本来 clone 不要のはず
 	// skip 時にメインループの代わりに tick を提供する関数
 	// let skip_mode_events: Box<dyn Fn () -> Vec<Box<dyn Event>>> = Box::new(move || {
 	// 	// 型がうまく合わないのでやむを得ずループで書く
