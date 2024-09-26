@@ -363,7 +363,7 @@ impl Function for Import {
 pub struct Type { }
 impl Function for Type {
 	fn signature(&self) -> FunctionSignature { vec!["arg".to_string()] }
-	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (arg, _) = get_required_arg(args, "arg", &call_loc)?;
 
 		let type_id = match arg {

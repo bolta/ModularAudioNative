@@ -55,7 +55,8 @@ impl Node for Sender {
 		// let signal = inputs[0];
 		// self.buffer.push(signal);
 		if self.buffer.len() >= self.buffer_size {
-			self.sender.send(self.buffer.clone());
+			// TODO エラー処理
+			let _ = self.sender.send(self.buffer.clone());
 			self.buffer.clear();
 		}
 	}
@@ -86,13 +87,13 @@ impl Node for Receiver {
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
 	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
-		let value = match &mut self.buffer {
+		match &mut self.buffer {
 			Some((buffer, index)) => {
 				if *index >= buffer.len() {
 					// TODO ちゃんとエラー処理
 					let new_buffer = self.receiver.recv().unwrap();
 					let mut new_index = 0usize;
-					let value = output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
+					output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
 					self.buffer = Some((new_buffer, new_index));
 					// value
 
@@ -110,7 +111,7 @@ impl Node for Receiver {
 					Ok(new_buffer) => {
 						println!("error_count: {}", self.error_count);
 						let mut new_index = 0usize;
-						let value = output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
+						output_buffer_values(output, self.channels, &new_buffer, &mut new_index);
 						self.buffer = Some((new_buffer, new_index));
 					}
 				}

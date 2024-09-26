@@ -22,23 +22,6 @@ use nom_locate::{
 };
 use regex::Regex;
 
-// trait ResultMap {
-// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R>;
-// }
-// impl <'a> ResultMap for IResult<Span<'a>, &'a str> {
-// 	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R> {
-// 		self.map(|(rest, matched)| (rest, f(matched)))
-// 	}
-// }
-trait ResultMap<'a> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R, VerboseError<&'a str>>;
-}
-impl <'a> ResultMap<'a> for IResult<Span<'a>, &'a str, VerboseError<&'a str>> {
-	fn rmap<R>(self, f: fn (&'a str) -> R) -> IResult<Span<'a>, R, VerboseError<&'a str>> {
-		self.map(|(rest, matched)| (rest, f(matched)))
-	}
-}
-
 pub fn ok<T>(value: T) -> Result<T, ()> { Ok::<_, ()>(value) }
 
 pub fn re(pattern: &str) -> Regex {

@@ -36,7 +36,8 @@ pub fn output_graph(graph: Graph) {
     ).unwrap();
 	// print!("{}", graph_out);
 
-	std::fs::write("out.svg", &graph_out);
+	// TODO エラー処理
+	let _ = std::fs::write("out.svg", &graph_out);
 }
 
 pub fn make_graph(all: &Vec<MachineSpec>, sends_to_receives: &HashMap<NodeId, NodeId>) -> Graph {

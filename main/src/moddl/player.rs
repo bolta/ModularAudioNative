@@ -74,7 +74,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
 	// for (track, mml) in &pctx.mmls {
-	for (track, spec, def_loc) in &pctx.track_defs {
+	for (track, spec, _) in &pctx.track_defs {
 		let submachine_idx = nodes.add_submachine(track.clone());
 		let mml = &pctx.mmls.get(track).map(|mml| mml.as_str()).unwrap_or("");
 		let output_node = {
@@ -89,7 +89,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				match spec {
 					TrackDef::Instrument(structure) => {
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
@@ -97,11 +97,11 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
 						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+								&mut placeholders, None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
 					}
 					TrackDef::Groove(structure) => {
 						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, timer, pctx.groove_cycle, pctx.use_default_labels, &pctx.vars, &mut imports)
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(NodeBase::new(0), groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -211,7 +211,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 		})
 	}).collect();
 	for j in joins {
-		j.join();
+		// TODO エラー処理
+		let _ = j.join();
 	}
 
 	Ok(())
@@ -248,7 +249,7 @@ const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこか�
 
 // TODO 引数を整理できるか
 fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
-		tempo: f32, timer: NodeId, groove_cycle: i32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
+		tempo: f32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
 		-> ModdlResult<NodeId> {
 	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new_extra(mml, moddl_path_rc.clone()))

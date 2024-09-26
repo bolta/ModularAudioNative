@@ -199,7 +199,6 @@ fn generate_sequence(
 
 				if let Some(content2) = content2 {
 					if let Some(var_name) = &var_name {
-						let cur_idx = seq.len();
 						seq.push(Instruction::If0 {
 							var: var_name.clone(),
 							then: Box::new(Instruction::JumpRel { offset: 5 }),
@@ -214,7 +213,6 @@ fn generate_sequence(
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
-					let cur_idx = seq.len();
 					seq.push(Instruction::If0 {
 						var: var_name.clone(),
 						then: Box::new(Instruction::JumpRel { offset: 3 }),

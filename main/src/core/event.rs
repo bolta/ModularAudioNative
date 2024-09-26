@@ -65,7 +65,7 @@ impl Broadcaster {
 	pub fn broadcast(&self, event: GlobalEvent) {
 		for sender in &self.senders {
 			// TODO エラー処理必要？
-			sender.send(event.clone());
+			let _ = sender.send(event.clone());
 		}
 	}
 }

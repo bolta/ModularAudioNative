@@ -89,7 +89,7 @@ impl NodeStructure {
 			Self::Connect(lhs, rhs) => format!("({} | {})", lhs.to_string(), rhs.to_string()),
 			Self::Condition { cond, then, els } => format!("(if {} then {} else {})", cond.to_string(), then.to_string(), els.to_string()),
 			Self::Lambda { input_param, body } => format!("(={}=> {})", input_param, body.to_string()),
-			Self::NodeCreation { factory, args, label } => {
+			Self::NodeCreation { factory: _, args, label } => {
 				// TODO NodeFactory には名前をつけたい
 				// TODO その他の情報もなるべく出したい
 				let factory_str = "(NodeFactory)";

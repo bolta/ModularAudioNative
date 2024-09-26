@@ -101,7 +101,7 @@ impl Machine {
 		let mut update_flags = make_update_flags(&activenesses);
 // dbg!(&update_flags);
 		// let mut values = vec_with_length(value_count.0);
-		let prev_routes = make_prev_routes(nodes, self.name.as_str());
+		let prev_routes = make_prev_routes(nodes);
 
 		// NodeIndex -> Delay
 		// 各ノードが最大何サンプル遅れて参照されるか
@@ -545,7 +545,7 @@ fn make_update_flags(activenesses: &Vec<ComputedActiveness>) -> UpdateFlags {
 struct PrevInIndex(NodeIndex);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PrevOutIndex(NodeIndex);
-fn make_prev_routes(nodes: &NodeHost, machine_name: &str) -> HashMap<PrevInIndex, PrevOutIndex> {
+fn make_prev_routes(nodes: &NodeHost) -> HashMap<PrevInIndex, PrevOutIndex> {
 	// TODO 全体的に書き方がださいので改善する
 	let ins = {
 		let mut ins = HashMap::new();

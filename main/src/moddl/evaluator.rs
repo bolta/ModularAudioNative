@@ -136,7 +136,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::MmlLiteral(_) => unimplemented!(),
 
 		ExprBody::Labeled { label, inner } => {
-			let (inner_val, inner_loc) = evaluate(inner, vars, imports) ?;
+			let (inner_val, _) = evaluate(inner, vars, imports) ?;
 
 			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr.loc));
 
