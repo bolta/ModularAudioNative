@@ -1,6 +1,6 @@
 extern crate nom;
 extern crate nom_locate;
-use std::{fmt::Display, path::{Path, PathBuf}, rc::Rc};
+use std::{fmt::Display, path::PathBuf, rc::Rc};
 
 //use nom::regexp::str::*;
 use nom::{
