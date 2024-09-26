@@ -18,9 +18,7 @@ use super::{
 };
 use node_macro::node_impl;
 
-use std::{
-	collections::hash_map::HashMap,
-};
+use std::collections::hash_map::HashMap;
 
 pub struct Sequencer {
 	base_: NodeBase,
