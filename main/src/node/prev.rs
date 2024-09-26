@@ -7,7 +7,7 @@ use crate::{core::{
 use node_macro::node_impl;
 use parser::common::Location;
 
-use std::{sync::mpsc, rc::Rc};
+use std::rc::Rc;
 
 // TODO ステレオ対応
 

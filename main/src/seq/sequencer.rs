@@ -1,5 +1,4 @@
 use crate::common;
-use crate::core::common::{Sample, OutputBuffer};
 use crate::core::{
 	event::*,
 	machine::*,

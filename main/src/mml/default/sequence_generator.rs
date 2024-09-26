@@ -1,6 +1,5 @@
 use crate::{
 	common::stack, mml::default::feature::*, moddl::{console::warn, error::{error, ErrorType, ModdlResult}}, seq::{
-		common::*,
 		instruction::*,
 		sequence::*,
 	}
@@ -8,11 +7,9 @@ use crate::{
 extern crate parser;
 use parser::{common::Location, mml::ast::*};
 
-use std::{
-	collections::{
-		hash_map::HashMap,
-		hash_set::HashSet,
-	},
+use std::collections::{
+	hash_map::HashMap,
+	hash_set::HashSet,
 };
 
 /// (qname, key)

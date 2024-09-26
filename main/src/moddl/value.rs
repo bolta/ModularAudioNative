@@ -4,9 +4,7 @@ use parser::moddl::ast::QualifiedLabel;
 
 use super::error::{ModdlResult, error, ErrorType};
 use super::io::Io;
-use super::{
-	function::*,
-};
+use super::function::*;
 use crate::{
 	core::node::*,
 	core::node_factory::*,
@@ -21,7 +19,7 @@ use std::{
 
 // TODO 仮置き
 use crate::calc::*;
-use crate::core::{common::*, node};
+use crate::core::common::*;
 use crate::core::node::Node;
 use crate::node::arith::*;
 use std::marker::PhantomData;

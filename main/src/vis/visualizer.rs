@@ -1,9 +1,7 @@
-use crate::{
-	core::{
-		common::*,
-		machine::*,
-		node::*,
-	},
+use crate::core::{
+	common::*,
+	machine::*,
+	node::*,
 };
 
 use graphviz_rust::{
@@ -21,19 +19,13 @@ use graphviz_rust::{
 	},
 };
 
-use std::{
-	collections::hash_map::HashMap,
-};
+use std::collections::hash_map::HashMap;
 
 use graphviz_rust::{
-    attributes::*,
-    cmd::{CommandArg, Format},
-    exec, parse,
-    printer::{DotPrinter, PrinterContext},
+    cmd::Format,
+    exec,
+    printer::PrinterContext,
 };
-
-// use std::fs::File;
-use std::io::prelude::*;
 
 pub fn output_graph(graph: Graph) {
     let graph_out = exec(

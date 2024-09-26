@@ -1,10 +1,6 @@
-use parser::common::Location;
-
-use crate::{
-	moddl::{
-		error::*,
-		value::*,
-	},
+use crate::moddl::{
+	error::*,
+	value::*,
 };
 
 use std::{

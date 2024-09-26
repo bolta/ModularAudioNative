@@ -22,10 +22,7 @@ use crate::moddl::{
 };
 
 use std::{
-	env,
-	process::{
-		exit,
-	},
+	env, process::exit, thread,
 };
 
 // パーザを切り出したがエラーを参照するため必要

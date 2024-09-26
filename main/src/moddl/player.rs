@@ -33,7 +33,6 @@ use crate::{
 	vis::visualizer::*, wave::waveform_host::WaveformHost,
 };
 extern crate parser;
-use graphviz_rust::attributes::start;
 use parser::{
 	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
 };

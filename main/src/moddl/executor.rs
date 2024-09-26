@@ -1,9 +1,9 @@
 use super::{
-	common::{make_seq_tag, read_file}, console::*, error::*, evaluator::*, import::ImportCache, io::Io, path::*, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
+	common::make_seq_tag, console::*, error::*, evaluator::*, import::ImportCache, io::Io, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
 };
 use crate::wave::{
-		wav_reader::*, waveform::Waveform, waveform_host::WaveformHost,
-	};
+	wav_reader::*, waveform::Waveform,
+};
 extern crate parser;
 use parser::{
 	common::{Location, Span}, moddl::{ast::*, parser::compilation_unit}

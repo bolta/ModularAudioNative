@@ -29,7 +29,7 @@ where E: Event + Clone {
 }
 
 use super::common::SampleCount;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::Sender;
 
 /// イベントをマシンを越えてやりとりする際のラッパー。
 /// 正しいタイミングで処理できるよう、発生したタイミングの情報を持つ
