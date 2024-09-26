@@ -117,9 +117,9 @@ impl Io for PrevIo {
 		let id = self.id;
 		self.id.0 += 1;
 
-		Ok((ValueBody::Array(vec![
-			(ValueBody::NodeFactory(Rc::new(PrevInFactory::new(id))), loc.clone()),
-			(ValueBody::NodeFactory(Rc::new(PrevOutFactory::new(id))), loc.clone()),
-		]), loc.clone()))
+		Ok((ValueBody::Assoc(vec![
+			("in".to_string(), (ValueBody::NodeFactory(Rc::new(PrevInFactory::new(id))), loc.clone())),
+			("out".to_string(), (ValueBody::NodeFactory(Rc::new(PrevOutFactory::new(id))), loc.clone())),
+		].into_iter().collect()), loc.clone()))
 	}
 }
