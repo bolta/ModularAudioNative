@@ -14,7 +14,6 @@ use node_macro::node_impl;
 //// Glide
 
 pub struct Glide {
-	base_: NodeBase,
 	signal: MonoNodeIndex,
 	/**
 	 * 半減期：目標値が与えられ続けたとき、現在値と目標値の中間まで達するのにかかる時間（秒）
@@ -23,8 +22,8 @@ pub struct Glide {
 	actual: Option<f32>,
 }
 impl Glide {
-	pub fn new(base: NodeBase, signal: MonoNodeIndex, halflife: MonoNodeIndex) -> Self {
-		Self { base_: base, signal, halflife, actual: None }
+	pub fn new(signal: MonoNodeIndex, halflife: MonoNodeIndex) -> Self {
+		Self { signal, halflife, actual: None }
 	}
 }
 #[node_impl]
@@ -35,7 +34,7 @@ impl Node for Glide {
 		self.halflife.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let halflife = inputs[1];
 		// 			var ratioPerSample = halflife_sec.AsFloat().Select(h => (float) (1 - Math.Pow(2, -1 / (ModuleSpace.SampleRate * h))));
@@ -58,9 +57,9 @@ impl NodeFactory for GlideFactory {
 		spec("halflife", 1),
 	] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
 		let halflife = node_args.get("halflife").unwrap().as_mono(); 
-		Box::new(Glide::new(base, signal, halflife))
+		Box::new(Glide::new(signal, halflife))
 	}
 }

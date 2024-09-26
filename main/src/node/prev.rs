@@ -12,18 +12,15 @@ use std::rc::Rc;
 // TODO ステレオ対応
 
 pub struct PrevIn {
-	base_: NodeBase,
 	signal: ChanneledNodeIndex,
 	id: PrevId,
 }
 impl PrevIn {
 	pub fn new(
-		base: NodeBase, 
 		signal: ChanneledNodeIndex,
 		id: PrevId,
 	) -> Self {
 		Self {
-			base_: base, 
 			signal,
 			id,
 		}
@@ -37,7 +34,7 @@ impl Node for PrevIn {
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいか？
 	fn features(&self) -> Vec<Feature> { vec![Feature::PrevIn { id: self.id }] }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		match self.signal {
 			ChanneledNodeIndex::NoOutput(_) => { },
 			ChanneledNodeIndex::Mono(_) => {
@@ -61,22 +58,20 @@ impl PrevInFactory {
 impl NodeFactory for PrevInFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
-		Box::new(PrevIn::new(base, signal.channeled(), self.id))
+		Box::new(PrevIn::new(signal.channeled(), self.id))
 	}
 
 }
 
 pub struct PrevOut {
-	base_: NodeBase,
 	channels: i32,
 	id: PrevId,
 }
 impl PrevOut {
-	pub fn new(base: NodeBase, channels: i32, id: PrevId) -> Self {
+	pub fn new(channels: i32, id: PrevId) -> Self {
 		Self {
-			base_: base, 
 			channels,
 			id,
 		}
@@ -89,7 +84,7 @@ impl Node for PrevOut {
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO でいいか？
 	fn features(&self) -> Vec<Feature> { vec![Feature::PrevOut { id: self.id }] }
 	// 単なるプレースホルダなので、することはない
-//	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) { }
+//	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) { }
 }
 
 pub struct PrevOutFactory {
@@ -103,8 +98,8 @@ impl PrevOutFactory {
 impl NodeFactory for PrevOutFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(PrevOut::new(base, 1 /* 仮 */, self.id))
+	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(PrevOut::new(1 /* 仮 */, self.id))
 	}
 
 }

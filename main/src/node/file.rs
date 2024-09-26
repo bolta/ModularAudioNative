@@ -20,7 +20,6 @@ use wav::{
 };
 
 pub struct WavFileOut {
-	base_: NodeBase,
 	input: ChanneledNodeIndex,
 	path: String,
 
@@ -33,9 +32,8 @@ pub struct WavFileOut {
 	max_at_sample: i32,
 }
 impl WavFileOut {
-	pub fn new(base: NodeBase, input: ChanneledNodeIndex, path: String) -> Self {
+	pub fn new(input: ChanneledNodeIndex, path: String) -> Self {
 		Self {
-			base_: base,
 			input,
 			path,
 			buffer: vec![],
@@ -99,7 +97,7 @@ impl WavFileOutFactory {
 impl NodeFactory for WavFileOutFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { self.channels }
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(WavFileOut::new(base, piped_upstream, self.path.clone()))
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(WavFileOut::new(piped_upstream, self.path.clone()))
 	}
 }

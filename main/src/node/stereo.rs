@@ -7,30 +7,28 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct MonoToStereo {
-	base_: NodeBase,
 	input: MonoNodeIndex,
 }
 impl MonoToStereo {
-	pub fn new(base: NodeBase, input: MonoNodeIndex) -> Self { Self { base_: base,  input } }
+	pub fn new(input: MonoNodeIndex) -> Self { Self {  input } }
 }
 #[node_impl]
 impl Node for MonoToStereo {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_stereo(output, inputs[0], inputs[0]);
 	}
 }
 
 pub struct Split {
-	base_: NodeBase,
 	input: StereoNodeIndex, 
 	channel: usize,
 }
 impl Split {
-	pub fn new(base: NodeBase, input: StereoNodeIndex, channel: i32) -> Self {
-		Self { base_: base, input, channel: channel as usize }
+	pub fn new(input: StereoNodeIndex, channel: i32) -> Self {
+		Self { input, channel: channel as usize }
 	}
 }
 #[node_impl]
@@ -38,44 +36,42 @@ impl Node for Split {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, inputs[self.channel]);
 	}
 }
 
 pub struct Join {
-	base_: NodeBase,
 	inputs: Vec<MonoNodeIndex>,
 }
 impl Join {
-	pub fn new(base: NodeBase, inputs: Vec<MonoNodeIndex>) -> Self { Self { base_: base,  inputs } }
+	pub fn new(inputs: Vec<MonoNodeIndex>) -> Self { Self {  inputs } }
 }
 #[node_impl]
 impl Node for Join {
 	fn channels(&self) -> i32 { self.inputs.len() as i32 }
 	fn upstreams(&self) -> Upstreams { self.inputs.iter().map(|i| i.channeled()).collect() }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		for i in 0 .. self.inputs.len() {
-			output[i].push(inputs[i]);
+			output[i] = inputs[i];
 		}
 	}
 }
 
 pub struct Pan {
-	base_: NodeBase,
 	input: MonoNodeIndex,
 	pos: MonoNodeIndex,
 }
 impl Pan {
-	pub fn new(base: NodeBase, input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self { base_: base,  input, pos } }
+	pub fn new(input: MonoNodeIndex, pos: MonoNodeIndex) -> Self { Self {  input, pos } }
 }
 #[node_impl]
 impl Node for Pan {
 	fn channels(&self) -> i32 { 2 }
 	fn upstreams(&self) -> Upstreams { vec![self.input.channeled(), self.pos.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let input = inputs[0];
 		let pos = inputs[1].max(-1f32).min(1f32); // 外すとどうなる？
 

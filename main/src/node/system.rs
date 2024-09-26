@@ -12,14 +12,12 @@ use node_macro::node_impl;
 /// ジョブとして何かを稼働させたいときは、稼働開始時に JobStarting、終了時に JobEnded を投げることで、
 /// 稼働終了を待って演奏が終了するようになる（他から演奏が終了されない限り）。
 pub struct Terminator {
-	base_: NodeBase,
 	input: ChanneledNodeIndex,
 	thread_count: i32,
 }
 impl Terminator {
-	pub fn new(base: NodeBase, input: ChanneledNodeIndex) -> Self {
+	pub fn new(input: ChanneledNodeIndex) -> Self {
 		Self {
-			base_: base, 
 			input,
 			thread_count: 0,
 		}
@@ -30,7 +28,7 @@ impl Node for Terminator {
 	fn channels(&self) -> i32 { 0 }
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 	fn activeness(&self) -> Activeness { Activeness::Active } // TODO どうなんだろう？　保留
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		// TODO 無音検知
 	}
 	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {

@@ -11,15 +11,14 @@ use node_macro::node_impl;
 //// Quant Rate Crusher
 
 pub struct QuantCrush {
-	base_: NodeBase,
 	signal: MonoNodeIndex,
 	resolution: MonoNodeIndex,
 	min: MonoNodeIndex,
 	max: MonoNodeIndex,
 }
 impl QuantCrush {
-	pub fn new(base: NodeBase, signal: MonoNodeIndex, resolution: MonoNodeIndex, min: MonoNodeIndex, max: MonoNodeIndex) -> Self {
-		Self { base_: base, signal, resolution, min, max }
+	pub fn new(signal: MonoNodeIndex, resolution: MonoNodeIndex, min: MonoNodeIndex, max: MonoNodeIndex) -> Self {
+		Self { signal, resolution, min, max }
 	}
 }
 #[node_impl]
@@ -32,7 +31,7 @@ impl Node for QuantCrush {
 		self.max.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let resolution = inputs[1];
 		let min = inputs[2];
@@ -59,12 +58,12 @@ impl NodeFactory for QuantCrushFactory {
 		spec_with_default("max", 1, 1f32),
 	] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
 		let resolution = node_args.get("resolution").unwrap().as_mono(); 
 		let min = node_args.get("min").unwrap().as_mono(); 
 		let max = node_args.get("max").unwrap().as_mono(); 
-		Box::new(QuantCrush::new(base, signal, resolution, min, max))
+		Box::new(QuantCrush::new(signal, resolution, min, max))
 	}
 }
 
@@ -72,15 +71,14 @@ impl NodeFactory for QuantCrushFactory {
 //// Sample Rate Crusher
 
 pub struct SampleCrush {
-	base_: NodeBase,
 	signal: MonoNodeIndex,
 	sample_rate: MonoNodeIndex,
 	accum: f32,
 	out_value: f32,
 }
 impl SampleCrush {
-	pub fn new(base: NodeBase, signal: MonoNodeIndex, sample_rate: MonoNodeIndex) -> Self {
-		Self { base_: base, signal, sample_rate, accum: 0f32, out_value: 0f32 }
+	pub fn new(signal: MonoNodeIndex, sample_rate: MonoNodeIndex) -> Self {
+		Self { signal, sample_rate, accum: 0f32, out_value: 0f32 }
 	}
 }
 #[node_impl]
@@ -91,7 +89,7 @@ impl Node for SampleCrush {
 		self.sample_rate.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 		let signal = inputs[0];
 		let sample_rate = inputs[1];
 
@@ -117,9 +115,9 @@ impl NodeFactory for SampleCrushFactory {
 		spec_with_default("sampleRate", 1, self.default_sample_rate as f32),
 	] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let signal = piped_upstream.as_mono();
 		let sample_rate = node_args.get("sampleRate").unwrap().as_mono(); 
-		Box::new(SampleCrush::new(base, signal, sample_rate))
+		Box::new(SampleCrush::new(signal, sample_rate))
 	}
 }

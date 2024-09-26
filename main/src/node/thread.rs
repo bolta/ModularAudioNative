@@ -9,7 +9,6 @@ use node_macro::node_impl;
 use std::sync::mpsc;
 
 pub struct Sender {
-	base_: NodeBase,
 	signal: ChanneledNodeIndex,
 	sender: mpsc::SyncSender<Vec<Sample>>,
 	buffer: Vec<Sample>,
@@ -18,14 +17,12 @@ pub struct Sender {
 }
 impl Sender {
 	pub fn new(
-		base: NodeBase, 
 		signal: ChanneledNodeIndex,
 		sender: mpsc::SyncSender<Vec<Sample>>,
 		buffer_size: usize,
 	) -> Self {
 		let channels = signal.channels();
 		Self {
-			base_: base, 
 			signal,
 			sender,
 			buffer: Vec::with_capacity(buffer_size * (channels as usize)),
@@ -41,7 +38,7 @@ impl Node for Sender {
 		self.signal,
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		match self.signal {
 			ChanneledNodeIndex::NoOutput(_) => { },
 			ChanneledNodeIndex::Mono(_) => {
@@ -63,16 +60,14 @@ impl Node for Sender {
 }
 
 pub struct Receiver {
-	base_: NodeBase,
 	channels: i32,
 	receiver: mpsc::Receiver<Vec<Sample>>,
 	buffer: Option<(Vec<Sample>, usize)>,
 	error_count: i32,
 }
 impl Receiver {
-	pub fn new(base: NodeBase, channels: i32, receiver: mpsc::Receiver<Vec<Sample>>) -> Self {
+	pub fn new(channels: i32, receiver: mpsc::Receiver<Vec<Sample>>) -> Self {
 		Self {
-			base_: base, 
 			channels,
 			receiver,
 			buffer: None,
@@ -86,7 +81,7 @@ impl Node for Receiver {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		match &mut self.buffer {
 			Some((buffer, index)) => {
 				if *index >= buffer.len() {
@@ -119,14 +114,14 @@ impl Node for Receiver {
 		};
 	}
 }
-fn output_buffer_values(output: &mut [OutputBuffer], channels: i32, buffer: &Vec<Sample>, index: &mut usize) /* -> Sample */ {
+fn output_buffer_values(output: &mut [Sample], channels: i32, buffer: &Vec<Sample>, index: &mut usize) /* -> Sample */ {
 	for c in 0 .. channels as usize {
-		output[c].push(buffer[*index]);
+		output[c] = buffer[*index];
 		*index += 1;
 	}
 }
-fn output_zeros(output: &mut [OutputBuffer], channels: i32) {
+fn output_zeros(output: &mut [Sample], channels: i32) {
 	for c in 0 .. channels as usize {
-		output[c].push(0f32);
+		output[c] = 0f32;
 	}
 }

@@ -69,17 +69,16 @@ impl Machine {
 	) {
 		// ここで追加したノードは Graphviz では出力されない（Graphviz 出力の方が先だから）
 		// TODO Player 側で追加した方がいいかも
-		let scheduler_idx = nodes.add(Box::new(EventScheduler::new(NodeBase::new(0)))).unchanneled();
+		let scheduler_idx = nodes.add(Box::new(EventScheduler::new())).unchanneled();
 
 		let upstreams: Vec<Vec<ChanneledNodeIndex>> = nodes.nodes().iter()
 				.map(|node| node.upstreams())
 				.collect();
 		//  println!("{}: {:?}: {} nodes ({:?})", self.name, std::thread::current().id(), nodes.count(), &upstreams);
 		// TODO max_channels 不要？
-		let (value_offsets, value_offsets_reversed, value_count, _max_channels) = {
+		let (value_offsets, value_count, _max_channels) = {
 			let mut value_offsets = HashMap::<NodeIndex, ValueIndex>::new();
 			// TODO もうちょっときれいにいけないか
-			let mut value_offsets_reversed = HashMap::<ValueIndex, NodeIndex>::new();
 			let mut next_val = ValueIndex(0_usize);
 			let mut max_channels = 0_usize;
 			for (i, node) in nodes.nodes().iter().enumerate() {
@@ -87,10 +86,9 @@ impl Machine {
 				max_channels = max_channels.max(chs as usize);
 				if chs <= 0 { continue; }
 				value_offsets.insert(NodeIndex(i), next_val);
-				value_offsets_reversed.insert(next_val, NodeIndex(i));
 				next_val.0 += chs as usize;
 			}
-			(value_offsets, value_offsets_reversed, next_val, max_channels)
+			(value_offsets, next_val, max_channels)
 		};
 		// for i in 0usize .. nodes.count() {
 		// 	println!("{}[{}]: delay = {}", &self.name, i, nodes[NodeIndex(i)].delay_samples());
@@ -100,36 +98,9 @@ impl Machine {
 // dbg!(&activenesses);
 		let mut update_flags = make_update_flags(&activenesses);
 // dbg!(&update_flags);
-		// let mut values = vec_with_length(value_count.0);
 		let prev_routes = make_prev_routes(nodes);
 
-		// NodeIndex -> Delay
-		// 各ノードが最大何サンプル遅れて参照されるか
-		let max_downstream_delays = {
-			let mut result = vec_with_length_and_init_value(nodes.count(), |_| 0u32);
-			for (d, us) in upstreams.iter().enumerate() {
-				let delay_down = nodes[NodeIndex(d)].delay_samples();
-				for u in us {
-					let up_idx = u.unchanneled();
-					let delay_up = nodes[u.unchanneled()].delay_samples();
-					result[up_idx.0] = result[up_idx.0].max(delay_down - delay_up);
-				}
-			}
-			result
-		};
-
-		// ValueIndex -> OutputBuffer
-		// 各ノードの出力値。複数個所から参照される可能性がある。また遅れて参照される可能性がある
-		let mut values = {
-			let mut values = Vec::with_capacity(value_count.0);
-			for value_idx in 0 .. value_count.0 {
-				// 添字？エラーが出るが、遅延管理は廃止の方向なので常に 1 でよい
-				// let buffer_size = max_downstream_delays[value_offsets_reversed[& ValueIndex(value_idx)].0] as usize + 1;
-				let buffer_size = 1usize;
-				values.push(OutputBuffer::new(buffer_size));
-			}
-			values
-		};
+		let mut values = vec![0f32; value_count.0];
 		// 各ノードの入力値
 		let mut inputs =  sample_vec_with_length(upstreams.iter().map(|us| {
 			us.iter().map(|u| u.channels()).sum::<i32>()
@@ -249,16 +220,9 @@ impl Machine {
 				let from = * value_offsets.get(& upstream_idx.unchanneled()).unwrap();
 				let count = nodes[upstream_idx.unchanneled()].channels() as usize;
 
-				// let to_0 = input_idx;
-				let delay_down = nodes[NodeIndex(i)].delay_samples();
-				let delay_up = nodes[upstream_idx.unchanneled()].delay_samples();
-				let delay_idx = delay_up as i32 - delay_down as i32;
-				if delay_idx > 0 { panic!("delay_idx must be non-positive") };
-
 				let instrcs = (0 .. count).map(move |j| Instruction::Load {
 					to: InputIndex(input_idx.0 + j),
 					from: ValueIndex(from.0 + j),
-					delay_idx,
 				});
 				input_idx.0 += count;
 				instrcs
@@ -313,13 +277,10 @@ impl Machine {
 		}
 	}
 
-	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<OutputBuffer>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
+	fn do_instruction(&mut self, nodes: &mut NodeHost, instrc: &Instruction, values: &mut Vec<Sample>, inputs: &mut Vec<Sample>, context: &Context, env: &mut Environment, update_flags: &UpdateFlags) {
 		match instrc {
-			Instruction::Load { to, from, delay_idx } => {
-				// XXX 遅延数の差を補償しないといけないはずだが、補償するとかえってずれてしまい、
-				// しない方がむしろ正しくなる。原因不明
-				// inputs[to.0] = values[from.0][*delay_idx];
-				inputs[to.0] = values[from.0][0];
+			Instruction::Load { to, from } => {
+				inputs[to.0] = values[from.0];
 			}
 			Instruction::Execute{ node_idx, output } => {
 				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく
@@ -339,8 +300,7 @@ impl Machine {
 				// unsafe { EXECUTE_COUNT += 1; }
 			}
 			&Instruction::Copy { to, from } => {
-				let from_val = values[from.0][0];
-				values[to.0].push(from_val);
+				values[to.0] = values[from.0];
 			}
 			Instruction::Update(node_idx) => {
 				// TODO #4 対応で UpdateFlags が正しく動作しなくなった。とりあえず無効にしておく
@@ -433,8 +393,7 @@ struct InputIndex(pub usize);
 #[derive(Debug)]
 enum Instruction {
 	/// 計算済みの値を次の計算のための入力値にコピーする
-	/// delay_idx は DelayBuffer にアクセスする際の添字（常に非正）
-	Load { to: InputIndex, from: ValueIndex, delay_idx: i32 },
+	Load { to: InputIndex, from: ValueIndex },
 	Execute { node_idx: NodeIndex, output: Option<ValueIndex> },
 	Copy { to: ValueIndex, from: ValueIndex },
 	Update(NodeIndex),

@@ -6,7 +6,6 @@ use super::error::{ModdlResult, error, ErrorType};
 use super::io::Io;
 use super::function::*;
 use crate::{
-	core::node::*,
 	core::node_factory::*,
 	wave::waveform_host::WaveformIndex,
 };
@@ -25,8 +24,8 @@ use crate::node::arith::*;
 use std::marker::PhantomData;
 pub trait CalcNodeFactoryTrait {
 	fn operator(&self) -> &str;
-	fn create_mono(&self, base: NodeBase, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
-	fn create_stereo(&self, base: NodeBase, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
+	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
+	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
 }
 // #[derive(Clone)]
 pub struct CalcNodeFactory<C: 'static + Calc> {
@@ -37,11 +36,11 @@ impl <C: 'static + Calc> CalcNodeFactory<C> {
 }
 impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 	fn operator(&self) -> &str { C::operator() }
-	fn create_mono(&self, base: NodeBase, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
-		Box::new(MonoCalc::<C>::new(base, args))
+	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
+		Box::new(MonoCalc::<C>::new(args))
 	}
-	fn create_stereo(&self, base: NodeBase, args: Vec<StereoNodeIndex>) -> Box<dyn Node> {
-		Box::new(StereoCalc::<C>::new(base, args))
+	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node> {
+		Box::new(StereoCalc::<C>::new(args))
 	}
 }
 

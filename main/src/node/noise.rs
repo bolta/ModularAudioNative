@@ -16,12 +16,11 @@ use rand::prelude::*;
  * 一様乱数によるノイズジェネレータ
  */
 pub struct UniformNoise {
-	base_: NodeBase,
 	gen: StdRng,
 }
 impl UniformNoise {
-	pub fn new(base: NodeBase) -> Self {
-		Self { base_: base, gen: StdRng::from_entropy() }
+	pub fn new() -> Self {
+		Self { gen: StdRng::from_entropy() }
 	}
 }
 #[node_impl]
@@ -30,7 +29,7 @@ impl Node for UniformNoise {
 	fn upstreams(&self) -> Upstreams { vec![
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, 2f32 * self.gen.gen::<f32>() - 1f32);
 	}
 }
@@ -39,7 +38,7 @@ pub struct UniformNoiseFactory { }
 impl NodeFactory for UniformNoiseFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(UniformNoise::new(base))
+	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(UniformNoise::new())
 	}
 }

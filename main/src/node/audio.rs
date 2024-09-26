@@ -24,19 +24,17 @@ struct SendWrapper(pa::Stream<pa::Blocking<pa::stream::Buffer>, pa::Output<Sampl
 unsafe impl Send for SendWrapper { }
 
 pub struct PortAudioOut {
-	base_: NodeBase,
 	input: ChanneledNodeIndex,
 	stream: Option<SendWrapper>,
 	buffer: Vec<Sample>,
 	buffer_size: usize,
 }
 impl PortAudioOut {
-	pub fn new(base: NodeBase, input: ChanneledNodeIndex) -> Self {
+	pub fn new(input: ChanneledNodeIndex) -> Self {
 		let channels = input.channels();
 		let buffer_size = FRAMES as usize * channels as usize;
 
 		Self {
-			base_: base,
 			input,
 			stream: None,
 			buffer: Vec::with_capacity(buffer_size),
@@ -83,7 +81,7 @@ impl Node for PortAudioOut {
 
 	fn upstreams(&self) -> Upstreams { vec![self.input] }
 
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		if self.buffer.len() < self.buffer_size { return; }
 
 		let b = &mut self.buffer;

@@ -11,7 +11,6 @@ use node_macro::node_impl;
 //// NES Freq Simulator
 
 pub struct NesFreq {
-	base_: NodeBase,
 	freq: MonoNodeIndex,
 
 	/// 三角波チャンネルとして計算するか。
@@ -20,8 +19,8 @@ pub struct NesFreq {
 	triangle: bool,
 }
 impl NesFreq {
-	pub fn new(base: NodeBase, freq: MonoNodeIndex, triangle: bool) -> Self {
-		Self { base_: base, freq, triangle }
+	pub fn new(freq: MonoNodeIndex, triangle: bool) -> Self {
+		Self { freq, triangle }
 	}
 }
 
@@ -32,7 +31,7 @@ impl Node for NesFreq {
 		self.freq.channeled(),
 	] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let freq = inputs[0];
 		// 周波数を一旦 2A03 のレジスタの値に変換し、また周波数に戻すことで、周波数分解能を 2A03 相当にする
 		// https://wikiwiki.jp/mck/周波数とレジスタの関係
@@ -54,8 +53,8 @@ impl NesFreqFactory {
 impl NodeFactory for NesFreqFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(NesFreq::new(base, freq, self.triangle))
+		Box::new(NesFreq::new(freq, self.triangle))
 	}
 }

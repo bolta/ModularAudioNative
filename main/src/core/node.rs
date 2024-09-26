@@ -13,17 +13,6 @@ use super::{
 
 pub type Upstreams = Vec<ChanneledNodeIndex>;
 
-pub struct NodeBase {
-	delay_samples: u32,
-}
-impl NodeBase {
-	pub fn new(delay_samples: u32) -> Self {
-		Self { delay_samples }
-	}
-
-	pub fn delay_samples(&self) -> u32 { self.delay_samples }
-}
-
 pub trait Node: Send {
 	fn type_label_default(&self) -> String {
 		// foo::bar::Baz<hoge::pita::Boke> → Baz<Boke>
@@ -37,25 +26,22 @@ pub trait Node: Send {
 	fn features(&self) -> Vec<Feature> { vec![] }
 	fn initialize(&mut self, _context: &Context, _env: &mut Environment) { }
 	// TODO inputs も output と同様にスライスでいいはず
-	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) { }
+	fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &Context, _env: &mut Environment) { }
 	fn update(&mut self, _inputs: &Vec<Sample>, _context: &Context, _env: &mut Environment) { }
 	fn finalize(&mut self, _context: &Context, _env: &mut Environment) { }
 	fn process_event(&mut self, _event: &dyn Event, _context: &Context, _env: &mut Environment) { }
 
-	fn delay_samples(&self) -> u32 { self.base().delay_samples() }
-
 	// 以下は node_impl 属性によって自動実装されるため実装不要
 	fn implements_execute(&self) -> bool;
 	fn implements_update(&self) -> bool;
-	fn base(&self) -> &NodeBase;
 }
 
-pub fn output_mono(output: &mut [OutputBuffer], value: Sample) {
-	output[0].push(value);
+pub fn output_mono(output: &mut [Sample], value: Sample) {
+	output[0] = value;
 }
-pub fn output_stereo(output: &mut [OutputBuffer], value_l: Sample, value_r: Sample) {
-	output[0].push(value_l);
-	output[1].push(value_r);
+pub fn output_stereo(output: &mut [Sample], value_l: Sample, value_r: Sample) {
+	output[0] = value_l;
+	output[1] = value_r;
 }
 
 #[derive(Clone)]

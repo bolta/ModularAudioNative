@@ -20,7 +20,6 @@ use node_macro::node_impl;
 use super::var::{SetEvent, EVENT_TYPE_SET};
 
 pub struct WaveformPlayer {
-	base_: NodeBase,
 	// TODO 波形のチャンネル数と照合
 	// ステレオの player でモノラルの波形を読む場合はステレオに拡張するとして、
 	// 逆の場合はエラー？
@@ -31,9 +30,8 @@ pub struct WaveformPlayer {
 	offset: f32,
 }
 impl WaveformPlayer {
-	pub fn new(base: NodeBase, channels: i32, index: WaveformIndex, freq: MonoNodeIndex) -> Self {
+	pub fn new(channels: i32, index: WaveformIndex, freq: MonoNodeIndex) -> Self {
 		Self {
-			base_: base,
 			channels,
 			index,
 			freq,
@@ -49,18 +47,18 @@ impl Node for WaveformPlayer {
 	fn channels(&self) -> i32 { self.channels }
 	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, env: &mut Environment) {
 		match self.state {
 			WaveformPlayerState::Note => {
 				let waveform = self.waveform(env);
 				for ch in 0usize .. self.channels as usize {
 					// TODO 補間
-					output[ch].push(waveform.sample(ch as i32, self.offset as usize));
+					output[ch] = waveform.sample(ch as i32, self.offset as usize);
 				}
 			}
 			WaveformPlayerState::Idle => {
 				for ch in 0usize .. self.channels as usize {
-					output[ch].push(0f32);
+					output[ch] = 0f32;
 				}
 			}
 		}
@@ -131,8 +129,8 @@ impl NodeFactory for WaveformPlayerFactory {
 			("waveform".to_string(), self.waveform_index.0 as Sample)
 		].into_iter().collect()
 	}
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 		let freq = piped_upstream.as_mono();
-		Box::new(WaveformPlayer::new(base, 1, self.waveform_index, freq))
+		Box::new(WaveformPlayer::new(1, self.waveform_index, freq))
 	}
 }

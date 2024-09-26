@@ -11,12 +11,11 @@ use crate::core::{
 use node_macro::node_impl;
 
 pub struct Var {
-	base_: NodeBase,
 	value: Sample,
 }
 
 impl Var {
-	pub fn new(base: NodeBase, value: Sample) -> Self { Self { base_: base, value } }
+	pub fn new(value: Sample) -> Self { Self { value } }
 }
 #[node_impl]
 impl Node for Var {
@@ -26,7 +25,7 @@ impl Node for Var {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![] }
 	fn activeness(&self) -> Activeness { Activeness::Evential }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.value);
 	}
 
@@ -58,14 +57,13 @@ impl NodeFactory for VarFactory {
 			("value".to_string(), self.value)
 		].into_iter().collect()
 	}
-	fn create_node(&self, base: NodeBase, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
-		Box::new(Var::new(base, self.value))
+	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		Box::new(Var::new(self.value))
 	}
 }
 
 #[derive(Clone)]
 pub struct SetEvent {
-	// base: TargetedEventBase,
 	target: EventTarget,
 	key: String,
 	value: Sample,

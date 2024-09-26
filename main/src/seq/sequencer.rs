@@ -21,15 +21,13 @@ use node_macro::node_impl;
 use std::collections::hash_map::HashMap;
 
 pub struct Sequencer {
-	base_: NodeBase,
 	sequences: HashMap<String, Sequence>,
 	// TODO 今後 context は任意個になる予定
 	context: Context,
 }
 impl Sequencer {
-	pub fn new(base: NodeBase, name: String, sequences: HashMap<String, Sequence>) -> Self {
+	pub fn new(name: String, sequences: HashMap<String, Sequence>) -> Self {
 		Self {
-			base_: base,
 			sequences,
 			context: Context {
 				name,
@@ -56,7 +54,7 @@ impl Node for Sequencer {
 		self.context.tick(&mut self.sequences, context, env);
 	}
 
-	// fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [OutputBuffer], _context: &CoreContext, _env: &mut Environment) {
+	// fn execute(&mut self, _inputs: &Vec<Sample>, _output: &mut [Sample], _context: &CoreContext, _env: &mut Environment) {
 	// 	if _context.elapsed_samples() == 0 {
 	// 		use std::{thread, time};
 	// 		let ten_millis = time::Duration::from_millis(1000);		

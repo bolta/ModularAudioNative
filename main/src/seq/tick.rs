@@ -2,16 +2,14 @@ use crate::core::{common::*, context::*, event::*, machine::*, node::*};
 use node_macro::node_impl;
 
 pub struct Tick {
-	base_: NodeBase,
 	timer: MonoNodeIndex,
 	cycle: f32, // 必ず整数だが、常に Sample と比較するので Sample で保持しておく
 	target_tag: String,
 	prev_tick_no: Sample, // 必ず整数だが、常に Sample と比較するので Sample で保持しておく
 }
 impl Tick {
-	pub fn new(base: NodeBase, timer: MonoNodeIndex, cycle: i32, target_tag: String) -> Self {
+	pub fn new(timer: MonoNodeIndex, cycle: i32, target_tag: String) -> Self {
 		Self {
-			base_: base,
 			timer,
 			cycle: cycle as Sample,
 			target_tag,
@@ -52,16 +50,14 @@ impl Node for Tick {
 }
 
 pub struct TickTimer {
-	base_: NodeBase,
 	tempo: MonoNodeIndex,
 	ticks_per_bar: i32,
 	cycle: f32,
 	timer: f32,
 }
 impl TickTimer {
-	pub fn new(base: NodeBase, tempo: MonoNodeIndex, ticks_per_bar: i32, cycle: i32) -> Self {
+	pub fn new(tempo: MonoNodeIndex, ticks_per_bar: i32, cycle: i32) -> Self {
 		Self {
-			base_: base,
 			tempo,
 			ticks_per_bar,
 			cycle: cycle as Sample,
@@ -74,7 +70,7 @@ impl Node for TickTimer {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.tempo.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Active }
-	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, _inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		output_mono(output, self.timer);
 	}
 	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
@@ -107,18 +103,17 @@ impl Event for TickEvent {
 pub const EVENT_TYPE_TICK: &str = "Tick::Tick";
 
 pub struct ExperGroove {
-	base_: NodeBase,
 	timer: MonoNodeIndex,
 }
 impl ExperGroove {
-	pub fn new(base: NodeBase, timer: MonoNodeIndex) -> Self { Self { base_: base, timer } }
+	pub fn new(timer: MonoNodeIndex) -> Self { Self { timer } }
 }
 #[node_impl]
 impl Node for ExperGroove {
 	fn channels(&self) -> i32 { 1 }
 	fn upstreams(&self) -> Upstreams { vec![self.timer.channeled()] }
 	fn activeness(&self) -> Activeness { Activeness::Passive }
-	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], _context: &Context, _env: &mut Environment) {
 		let timer = inputs[0];
 		fn l(nth: f32) -> f32 { 384f32 / nth }
 		// c16c16 -> c12c24
