@@ -4,6 +4,7 @@ use crate::core::{
 	machine::*,
 	node::*,
 	node_factory::*,
+	util::is_true,
 };
 use node_macro::node_impl;
 
@@ -16,7 +17,7 @@ macro_rules! simple_osc {
 			phase: f32,
 		}
 		impl $name {
-			pub fn new(base: NodeBase, freq: MonoNodeIndex) -> Self { Self { base_: base,  freq, phase: 0f32 } }
+			pub fn new(base: NodeBase, freq: MonoNodeIndex) -> Self { Self { base_: base, freq, phase: 0f32 } }
 		}
 		
 		#[node_impl]
@@ -44,6 +45,56 @@ macro_rules! simple_osc {
 				Box::new($name::new(base, freq))
 			}
 		}
+	}
+}
+
+ ////
+//// Phase
+
+// Phase の実装は各種オシレータとほぼ同じであり、位相をリセットする機構のために別に設けているだけ。
+// 今後各種オシレータのネイティブ実装は不要になるかもしれない（パフォーマンス面で問題がなければ）
+pub struct Phase {
+	base_: NodeBase,
+	freq: MonoNodeIndex,
+	reset: MonoNodeIndex,
+
+	phase: f32,
+}
+impl Phase {
+	pub fn new(base: NodeBase, freq: MonoNodeIndex, reset: MonoNodeIndex, initial: f32) -> Self {
+		Self { base_: base, freq, reset, phase: initial }
+	}
+}
+
+#[node_impl]
+impl Node for Phase {
+	fn channels(&self) -> i32 { 1 }
+	fn upstreams(&self) -> Upstreams { vec![self.freq.channeled(), self.reset.channeled()] }
+	fn activeness(&self) -> Activeness { Activeness::Active }
+	fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [OutputBuffer], _context: &Context, _env: &mut Environment) {
+		let reset = is_true(inputs[1]);
+		if reset { self.phase = 0f32; }
+		output_mono(output, self.phase);
+	}
+	fn update(&mut self, inputs: &Vec<Sample>, context: &Context, _env: &mut Environment) {
+		let freq = inputs[0];
+		self.phase = (self.phase + TWO_PI * freq / context.sample_rate_f32()) % TWO_PI;
+	}
+}
+
+pub struct PhaseFactory {
+	initial: f32,
+}
+impl PhaseFactory {
+	pub fn new(initial: f32) -> Self { Self { initial } }
+}
+impl NodeFactory for PhaseFactory {
+	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("reset", 1, 0f32)] }
+	fn input_channels(&self) -> i32 { 1 }
+	fn create_node(&self, base: NodeBase, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
+		let freq = piped_upstream.as_mono();
+		let reset = node_args.get("reset").unwrap().as_mono(); 
+		Box::new(Phase::new(base, freq, reset, self.initial))
 	}
 }
 

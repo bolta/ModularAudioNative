@@ -82,6 +82,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	result.insert("true".to_string(), true_value());
 
 	// musical
+	add_function!("phase", Phase { });
 	add_node_factory!("sineOsc", SineOscFactory { });
 	add_node_factory!("triangleOsc", TriangleOscFactory { });
 	add_node_factory!("sawOsc", SawOscFactory { });
@@ -150,6 +151,20 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 }
 
 // TODO 関数の置き場が必要
+pub struct Phase { }
+impl Function for Phase {
+	fn signature(&self) -> FunctionSignature { vec!["initial".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		let initial = match args.get(& "initial".to_string()) {
+			None => 0f32,
+			Some((initial_val, initial_loc)) => initial_val.as_float()
+					.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, initial_loc.clone())) ?,
+		};
+		let result = Rc::new(PhaseFactory::new(initial));
+
+		Ok((ValueBody::NodeFactory(result), call_loc))
+	}
+}
 
 pub struct WaveformPlayer { }
 impl Function for WaveformPlayer {

@@ -10,3 +10,6 @@ where F: Fn (usize) -> T {
 	for i in 0 .. len { result.push(make_elem(i)); }
 	result
 }
+
+// TODO 共通化する
+pub fn is_true(value: f32) -> bool { value > 0f32 }
