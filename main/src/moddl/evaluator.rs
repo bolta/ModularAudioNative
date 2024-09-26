@@ -30,7 +30,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::Remainder { lhs, rhs } => evaluate_binary_structure::<RemCalc>(lhs, rhs, vars, imports),
 		ExprBody::Add { lhs, rhs } => evaluate_binary_structure_overloaded::<AddCalc>(lhs, rhs, vars, imports, overload_add),
 		ExprBody::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars, imports),
-		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
+		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LtCalc>(lhs, rhs, vars, imports),
 		ExprBody::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
 		ExprBody::Equal { lhs, rhs } => evaluate_binary_structure::<EqCalc>(lhs, rhs, vars, imports),
 		ExprBody::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeCalc>(lhs, rhs, vars, imports),
