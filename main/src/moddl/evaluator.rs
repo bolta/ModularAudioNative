@@ -39,7 +39,9 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars, imports),
 		ExprBody::Or { lhs, rhs } => evaluate_binary_structure::<OrCalc>(lhs, rhs, vars, imports),
 
+		ExprBody::Not { arg } => evaluate_unary_structure::<NotCalc>(arg, vars, imports),
 		ExprBody::Negate { arg } => evaluate_unary_structure::<NegCalc>(arg, vars, imports),
+		ExprBody::Plus { arg } => evaluate_unary_structure::<PlusCalc>(arg, vars, imports),
 
 		ExprBody::Identifier(id) => {
 			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;

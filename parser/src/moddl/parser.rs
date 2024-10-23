@@ -332,15 +332,6 @@ parser![lambda_node_expr, Box<Expr>, {
 		}, loc))) },
 	)
 }];
-parser![negative_expr, Box<Expr>, {
-	map_res(
-		loc(preceded(
-			ss!(char('-')),
-			si!(expr()),
-		)),
-		|(arg, loc)| { ok(Box::new(Expr::new(ExprBody::Negate { arg }, loc)))},
-	)
-}];
 parser![parenthesized_expr, Box<Expr>, {
 	// preceded(si!(char('(')),
 	// 		terminated(expr(),
@@ -379,7 +370,6 @@ parser![primary_expr, Box<Expr>, {
 		do_expr(),
 		let_expr(),
 		identifier_expr(),
-		negative_expr(),
 		parenthesized_expr(),
 	))
 }];
@@ -487,6 +477,51 @@ parser![postfix, Postfix, {
 				char(')'),
 			),
 			|specs| ok(Postfix::LabelFilter(specs)),
+		),
+	))
+}];
+
+// 前置系の構文は任意の順序・回数で適用できるよう、まとめて解析する
+parser![prefix_expr, Box<Expr>, {
+	map_res(
+		tuple((
+			many0(loc(ss!(prefix()))),
+			si!(postfix_expr()),
+		)), |(prefixes, rhs)| {
+			let mut result = rhs;
+			for p in prefixes.into_iter().rev() {
+				let loc = p.1;
+				result = Box::new(match p.0 {
+					Prefix::Negate => Expr::new(ExprBody::Negate { arg: result }, loc),
+					Prefix::Plus => Expr::new(ExprBody::Plus { arg: result }, loc),
+					Prefix::Not => Expr::new(ExprBody::Not { arg: result }, loc),
+				})
+			}
+
+			ok(result)
+		}
+	)
+}];
+
+enum Prefix {
+	Negate,
+	Plus,
+	Not,
+}
+
+parser![prefix, Prefix, {
+	alt((
+		map_res(
+			ss!(char('-')),
+			|_| ok(Prefix::Negate),
+		),
+		map_res(
+			ss!(char('+')),
+			|_| ok(Prefix::Plus),
+		),
+		map_res(
+			ss!(char('!')),
+			|_| ok(Prefix::Not),
 		),
 	))
 }];
@@ -649,7 +684,7 @@ parser![assoc_entries, Assoc, {
 parser![node_with_args_expr, Box<Expr>, {
 	map_res(
 		tuple((
-			loc(si!(postfix_expr())),
+			loc(si!(prefix_expr())),
 			opt(
 				delimited(
 					ss!(char('{')),

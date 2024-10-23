@@ -50,6 +50,8 @@ binary_calc!(MulCalc, "*", |lhs, rhs| lhs * rhs);
 binary_calc!(DivCalc, "/", |lhs, rhs| lhs / rhs);
 binary_calc!(RemCalc, "%", |lhs, rhs| lhs % rhs);
 binary_calc!(PowCalc, "^", |lhs: Sample, rhs| lhs.powf(rhs));
+unary_calc!(NegCalc, "-", |arg: Sample| -arg);
+unary_calc!(PlusCalc, "+", |arg: Sample| arg);
 
  ////
 //// comparison operations
@@ -66,11 +68,11 @@ binary_calc!(GeCalc, ">=", |lhs, rhs| bool_to_sample(lhs >= rhs));
 
 binary_calc!(AndCalc, "&&", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs && rhs));
 binary_calc!(OrCalc, "||", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs || rhs));
+unary_calc!(NotCalc, "!", |arg: Sample| if arg == 0f32 { 1f32 } else { - arg.signum() });
 
  ////
 //// functions
 
-unary_calc!(NegCalc, "-", |arg: Sample| -arg);
 unary_calc!(LogCalc, "log", |arg: Sample| arg.ln());
 unary_calc!(Log10Calc, "log10", |arg: Sample| arg.log(10f32));
 unary_calc!(SinCalc, "sin", |arg: Sample| arg.sin());
