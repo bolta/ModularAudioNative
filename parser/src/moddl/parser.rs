@@ -730,8 +730,11 @@ binary_expr![comparison_expr, add_sub_expr, r"<=|<|==|!=|>=|>", |lhs, op, rhs| m
 	">=" => ExprBody::GreaterOrEqual { lhs, rhs },
 	_ => unreachable!(),
 }];
-binary_expr![logical_expr, comparison_expr, r"&&|\|\|", |lhs, op, rhs| match op {
+binary_expr![and_expr, comparison_expr, r"&&", |lhs, op, rhs| match op {
 	"&&" => ExprBody::And { lhs, rhs },
+	_ => unreachable!(),
+}];
+binary_expr![or_expr, and_expr, r"\|\|", |lhs, op, rhs| match op {
 	"||" => ExprBody::Or { lhs, rhs },
 	_ => unreachable!(),
 }];
@@ -741,7 +744,7 @@ binary_expr![logical_expr, comparison_expr, r"&&|\|\|", |lhs, op, rhs| match op 
 pub_parser![expr, Box<Expr>, {
 	// 効果ない？
 	|input| {
-		let (input, result) = logical_expr()(input)?;
+		let (input, result) = or_expr()(input)?;
 
 		Ok((input, result))
 	}
