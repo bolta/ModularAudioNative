@@ -68,7 +68,7 @@ binary_calc!(GeCalc, ">=", |lhs, rhs| bool_to_sample(lhs >= rhs));
 
 binary_calc!(AndCalc, "&&", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs && rhs));
 binary_calc!(OrCalc, "||", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs || rhs));
-unary_calc!(NotCalc, "!", |arg: Sample| if arg == 0f32 { 1f32 } else { - arg.signum() });
+unary_calc!(NotCalc, "!", |arg: Sample| bool_to_sample(! sample_to_bool(arg)));
 
  ////
 //// functions
