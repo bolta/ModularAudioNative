@@ -22,27 +22,90 @@ use crate::moddl::{
 };
 
 use std::{
-	env, process::exit, thread,
+	path::PathBuf, process::exit, thread
 };
 
 // パーザを切り出したがエラーを参照するため必要
 extern crate nom;
 
-fn main() {
-	match env::args().nth(1) {
-		None => {
-			eprintln!("Please specify a moddl file path.");
-			exit(1);
-		}
-		Some(moddl_path) => {
-			if let Err(e) = player::play(&PlayerOptions {
-				moddl_path,
-				// output: PlayerOutput::Wav { path: "out.wav".to_string() },
-				output: PlayerOutput::Audio,
-			}) {
-				println!("error: {}: {}", e.loc, e.body);
-				exit(1);
+
+use clap::{ error::ErrorKind, ArgGroup, CommandFactory, Error, Parser, ValueEnum };
+use regex::Regex;
+
+#[derive(Debug, Clone, ValueEnum)]
+enum CliOutput { Audio, Stdout, Null }
+
+#[derive(Debug, Parser)]
+#[command(group(ArgGroup::new("output_spec").required(false).args(["output", "output_file"])))]
+struct CliArgs {
+	#[arg(help = "path to moddl file to play")]
+	moddl_path: PathBuf,
+
+	#[arg(long, short('O'), help = "output type")]
+	output: Option<CliOutput>,
+
+	#[arg(long, short('o'), help = "output file path")]
+	output_file: Option<PathBuf>,
+
+	#[arg(long, short('S'), help = "stack size for moddl processor")]
+	stack_size: Option<String>,
+}
+
+const DEFAULT_STACK_SIZE: usize = 10 * 1024 * 1024;
+
+fn parse_stack_size(stack_size_arg: &Option<String>) -> Result<usize, Error> {
+	match stack_size_arg {
+		None => Ok(DEFAULT_STACK_SIZE),
+		Some(size) => {
+			let patt = Regex::new(r"^(\d+)([kKmM]?)$").unwrap();
+			let caps = patt.captures(size.as_str());
+			match &caps {
+				None => Err(CliArgs::command().error(ErrorKind::InvalidValue,
+						"stack size must be positive integer + optional (k|K|m|M)")),
+				Some(caps) => {
+					let num = caps.get(1).unwrap().as_str().parse::<usize>().unwrap();
+					let unit = match caps.get(2).unwrap().as_str() {
+						"" => 1,
+						"k" | "K" => 1024,
+						"m" | "M" => 1024 * 1024,
+						_ => unreachable!(),
+					};
+					Ok(num * unit)
+				},
 			}
 		}
 	}
+}
+
+fn main() {
+	let opts = CliArgs::parse();
+	let stack_size = parse_stack_size(&opts.stack_size).unwrap_or_else(|e| e.exit());
+
+	let player_opts = PlayerOptions {
+		moddl_path: opts.moddl_path,
+		output: match opts.output_file {
+			Some(path) => PlayerOutput::Wav { path },
+			None => match opts.output {
+				None
+				| Some(CliOutput::Audio) => PlayerOutput::Audio,
+				Some(CliOutput::Stdout) => PlayerOutput::Stdout,
+				Some(CliOutput::Null) => PlayerOutput::Null,
+			}
+		}
+	};
+
+	// Spawn thread with explicit stack size
+	let play_thread = thread::Builder::new()
+			.stack_size(stack_size)
+			// .spawn(main_)
+			.spawn(move || {
+				if let Err(e) = player::play(&player_opts) {
+					println!("error: {}: {}", e.loc, e.body);
+					exit(1);
+				}
+			})
+			.unwrap();
+
+	// Wait for thread to join
+	play_thread.join().unwrap();
 }

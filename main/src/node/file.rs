@@ -11,7 +11,7 @@ use node_macro::node_impl;
 
 use std::{
 	fs::File,
-	path::Path,
+	path::{Path, PathBuf},
 };
 use wav::{
 	bit_depth::BitDepth,
@@ -21,7 +21,7 @@ use wav::{
 
 pub struct WavFileOut {
 	input: ChanneledNodeIndex,
-	path: String,
+	path: PathBuf,
 
 	buffer: Vec<Sample>,
 	// buffer: BitDepth,
@@ -32,7 +32,7 @@ pub struct WavFileOut {
 	max_at_sample: i32,
 }
 impl WavFileOut {
-	pub fn new(input: ChanneledNodeIndex, path: String) -> Self {
+	pub fn new(input: ChanneledNodeIndex, path: PathBuf) -> Self {
 		Self {
 			input,
 			path,
@@ -80,17 +80,17 @@ impl Node for WavFileOut {
 		let write_buf = BitDepth::Sixteen(buf_16bit);
 
 		// TODO エラー処理
-		let mut out_file = File::create(Path::new(&self.path)).unwrap();
+		let mut out_file = File::create(&self.path).unwrap();
 		wav::write(header, &write_buf, &mut out_file).unwrap();
 	}
 }
 
 pub struct WavFileOutFactory {
 	channels: i32,
-	path: String,
+	path: PathBuf,
 }
 impl WavFileOutFactory {
-	pub fn new(channels: i32, path: String) -> Self {
+	pub fn new(channels: i32, path: PathBuf) -> Self {
 		Self { channels, path }
 	}
 }

@@ -1,11 +1,13 @@
+use std::path::PathBuf;
+
 pub struct PlayerOptions {
-	pub moddl_path: String,
+	pub moddl_path: PathBuf,
 	pub output: PlayerOutput,
 }
 
 pub enum PlayerOutput {
 	Audio,
-	Wav { path: String },
+	Wav { path: PathBuf },
 	Stdout,
 	Null,
 }
