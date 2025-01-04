@@ -24,7 +24,7 @@
 		array: "Array",
 		assoc: "Assoc",
 		ModuleDef: "ModuleDef",
-		nodeFactory: "NodeFactory",
+		nodeDef: "NodeDef",
 		function: "Function",
 		io: "Io",
  	},

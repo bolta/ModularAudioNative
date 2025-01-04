@@ -117,7 +117,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
-			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_factory() ?;
+			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_def() ?;
 
 			let arg_names = factory.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
@@ -142,7 +142,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 
 			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr.loc));
 
-			// ラベルをつけれる対象は、数値定数、引数なしの NodeFactory、引数ありの NodeFactory（NodeCreation）の 3 つ。
+			// ラベルをつけれる対象は、数値定数、引数なしの NodeDef、引数ありの NodeDef（NodeCreation）の 3 つ。
 			// 上記の値にラベルをつけると、結果は必ず ModuleDef になる。
 			// 上記以外にラベルをつけるのは無意味であり、警告とともにラベルは無視される
 			// 数値定数はラベルをつけると ModuleDef になるので、表現としては Float と ModuleDef::Constant の 2 通りある。
@@ -151,7 +151,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 				ValueBody::Float(value) => ValueBody::ModuleDef(
 					ModuleDef::Constant { value, label: Some(label.clone()) },
 				),
-				ValueBody::NodeFactory(factory) => ValueBody::ModuleDef(
+				ValueBody::NodeDef(factory) => ValueBody::ModuleDef(
 					ModuleDef::NodeCreation { factory, args: HashMap::new(), label: Some(label.clone()) },
 				),
 				ValueBody::ModuleDef(strukt) => ValueBody::ModuleDef(
@@ -392,7 +392,7 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 
 	let (arg_str, _) = arg_val.as_module_def() ?;
 	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
-		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
+		node_factory: Rc::new(CalcNodeDef::<C>::new()),
 		args: vec![Box::new(arg_str)],
 	}))
 }
@@ -457,7 +457,7 @@ fn evaluate_binary_structure_overloaded<C: Calc + 'static>(
 	let (l_str, _) = l_val.as_module_def() ?;
 	let (r_str, _) = r_val.as_module_def() ?;
 	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
-		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
+		node_factory: Rc::new(CalcNodeDef::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
 	}))
 }

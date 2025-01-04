@@ -22,19 +22,19 @@ use crate::core::common::*;
 use crate::core::node::Node;
 use crate::node::arith::*;
 use std::marker::PhantomData;
-pub trait CalcNodeFactoryTrait {
+pub trait CalcNodeDefTrait {
 	fn operator(&self) -> &str;
 	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
 	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
 }
 // #[derive(Clone)]
-pub struct CalcNodeFactory<C: 'static + Calc> {
+pub struct CalcNodeDef<C: 'static + Calc> {
 	_c: PhantomData<fn () -> C>,
 }
-impl <C: 'static + Calc> CalcNodeFactory<C> {
+impl <C: 'static + Calc> CalcNodeDef<C> {
 	pub fn new() -> Self { Self { _c: PhantomData } }
 }
-impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
+impl <C: 'static + Calc> CalcNodeDefTrait for CalcNodeDef<C> {
 	fn operator(&self) -> &str { C::operator() }
 	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
 		Box::new(MonoCalc::<C>::new(args))
@@ -48,12 +48,12 @@ impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
 pub enum ModuleDef {
-	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<ModuleDef>> },
+	Calc{ node_factory: Rc<dyn CalcNodeDefTrait>, args: Vec<Box<ModuleDef>> },
 	Connect(Box<ModuleDef>, Box<ModuleDef>),
 	Condition { cond: Box<ModuleDef>, then: Box<ModuleDef>, els: Box<ModuleDef> },
 	Lambda { input_param: String, body: Box<ModuleDef> },
 	NodeCreation {
-		factory: Rc<dyn NodeFactory>,
+		factory: Rc<dyn NodeDef>,
 		args: HashMap<String, Value>,
 		label: Option<QualifiedLabel>,
 	},
@@ -89,9 +89,9 @@ impl ModuleDef {
 			Self::Condition { cond, then, els } => format!("(if {} then {} else {})", cond.to_string(), then.to_string(), els.to_string()),
 			Self::Lambda { input_param, body } => format!("(={}=> {})", input_param, body.to_string()),
 			Self::NodeCreation { factory: _, args, label } => {
-				// TODO NodeFactory には名前をつけたい
+				// TODO NodeDef には名前をつけたい
 				// TODO その他の情報もなるべく出したい
-				let factory_str = "(NodeFactory)";
+				let factory_str = "(NodeDef)";
 				let args_str = match args.len() {
 					0 => "".to_string(),
 					_ => {
@@ -127,7 +127,7 @@ pub trait ValueExtraction {
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)>;
-	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
+	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeDef>, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
 }
@@ -153,8 +153,8 @@ impl ValueExtraction for Value {
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1, ValueType::Array) }
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)> { extract_any(self.0.as_module_def() , &self.1,
-			vec![ValueType::ModuleDef, ValueType::Number, ValueType::NodeFactory]) }
-	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeFactory) }
+			vec![ValueType::ModuleDef, ValueType::Number, ValueType::NodeDef]) }
+	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeDef>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
 }
@@ -171,7 +171,7 @@ pub enum ValueBody {
 	/// ノードの構造に関するツリー表現
 	ModuleDef(ModuleDef),
 	/// 引数を受け取ってノードを生成する関数
-	NodeFactory(Rc<dyn NodeFactory>),
+	NodeDef(Rc<dyn NodeDef>),
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
 }
@@ -236,7 +236,7 @@ impl ValueBody {
 		match self {
 			Self::ModuleDef(str) => Some(str.clone()),
 			Self::Float(value) => Some(ModuleDef::Constant { value: *value, label: None }),
-			Self::NodeFactory(fact) => Some(ModuleDef::NodeCreation {
+			Self::NodeDef(fact) => Some(ModuleDef::NodeCreation {
 				factory: fact.clone(),
 				args: HashMap::new(),
 				label: None,
@@ -244,9 +244,9 @@ impl ValueBody {
 			_ => None,
 		}
 	}
-	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
+	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeDef>> {
 		match self {
-			Self::NodeFactory(fact) => Some(fact.clone()),
+			Self::NodeDef(fact) => Some(fact.clone()),
 			_ => None,
 		}
 	}
@@ -305,7 +305,7 @@ impl ValueBody {
 			Self::ModuleDef(strukt) => format!("ModuleDef({})", strukt.to_string()),
 
 			// TODO 以下、もうちょっと何か出せるか？
-			Self::NodeFactory(_fact) => "(NodeFactory)".to_string(),
+			Self::NodeDef(_fact) => "(NodeDef)".to_string(),
 			Self::Function(_func) => "(Function)".to_string(),
 			Self::Io(_io) => "(Io)".to_string(),
 		}
@@ -323,7 +323,7 @@ pub enum ValueType {
 	Array,
 	Assoc,
 	ModuleDef,
-	NodeFactory,
+	NodeDef,
 	Function,
 	Io,
 }

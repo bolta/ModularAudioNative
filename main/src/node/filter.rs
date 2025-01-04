@@ -50,7 +50,7 @@ macro_rules! bi_quad_filter {
 		}
 		
 		pub struct $factory_name { }
-		impl NodeFactory for $factory_name {
+		impl NodeDef for $factory_name {
 			fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
 				spec("cutoff", 1),
 				spec("q", 1),

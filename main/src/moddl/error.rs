@@ -28,7 +28,7 @@ pub enum ErrorType {
 	TrackDefNotFound { track: String },
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
-	NodeFactoryNotFound, // TODO 発生条件確認
+	NodeDefNotFound, // TODO 発生条件確認
 	// TODO 「ModuleDef ModuleDef に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
@@ -67,7 +67,7 @@ impl Display for ErrorType {
 			Self::TrackDefDuplicate { track, existing_def_loc }
 					=> write!(f, "Definition for track ^{} is duplicate: definition already exists at {}.", track, existing_def_loc),
 			Self::VarNotFound { var } => write!(f, "Variable `{}` not found.", var),
-			// NodeFactoryNotFound,
+			// NodeDefNotFound,
 			// ChannelMismatch,
 			Self::TypeMismatch { expected }=> write!(f, "Type mismatch: expected: {}", expected),
 			Self::TypeMismatchAny { expected }=> write!(f, "Type mismatch: expected one of: {}", expected.iter().join(", ")),

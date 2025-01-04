@@ -48,7 +48,7 @@ impl VarFactory {
 		Self { value }
 	}
 }
-impl NodeFactory for VarFactory {
+impl NodeDef for VarFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn default_prop_key(&self) -> Option<String> { Some("value".to_string()) }

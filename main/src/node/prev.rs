@@ -2,7 +2,7 @@ use crate::{core::{
 	common::*,
 	context::*,
 	machine::*,
-	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeFactory},
+	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeDef},
 }, moddl::{error::ModdlResult, import::ImportCache, io::Io, value::{Value, ValueBody}}};
 use node_macro::node_impl;
 use parser::common::Location;
@@ -55,7 +55,7 @@ impl PrevInFactory {
 		Self { id }
 	}
 }
-impl NodeFactory for PrevInFactory {
+impl NodeDef for PrevInFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -95,7 +95,7 @@ impl PrevOutFactory {
 		Self { id }
 	}
 }
-impl NodeFactory for PrevOutFactory {
+impl NodeDef for PrevOutFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -118,8 +118,8 @@ impl Io for PrevIo {
 		self.id.0 += 1;
 
 		Ok((ValueBody::Assoc(vec![
-			("in".to_string(), (ValueBody::NodeFactory(Rc::new(PrevInFactory::new(id))), loc.clone())),
-			("out".to_string(), (ValueBody::NodeFactory(Rc::new(PrevOutFactory::new(id))), loc.clone())),
+			("in".to_string(), (ValueBody::NodeDef(Rc::new(PrevInFactory::new(id))), loc.clone())),
+			("out".to_string(), (ValueBody::NodeDef(Rc::new(PrevOutFactory::new(id))), loc.clone())),
 		].into_iter().collect()), loc.clone()))
 	}
 }

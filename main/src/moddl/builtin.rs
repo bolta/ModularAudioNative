@@ -64,7 +64,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	}
 	macro_rules! add_node_factory {
 		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), (ValueBody::NodeFactory(Rc::new($fact)), Location::dummy()));
+			result.insert($name.to_string(), (ValueBody::NodeDef(Rc::new($fact)), Location::dummy()));
 		}
 	}
 	macro_rules! add_function {
@@ -162,7 +162,7 @@ impl Function for Phase {
 		};
 		let result = Rc::new(PhaseFactory::new(initial));
 
-		Ok((ValueBody::NodeFactory(result), call_loc))
+		Ok((ValueBody::NodeDef(result), call_loc))
 	}
 }
 
@@ -176,7 +176,7 @@ impl Function for WaveformPlayer {
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Waveform }, wave_loc.clone())) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
 
-		Ok((ValueBody::NodeFactory(result), call_loc))
+		Ok((ValueBody::NodeDef(result), call_loc))
 	}
 }
 
@@ -190,7 +190,7 @@ impl Function for NesFreq {
 		};
 		let result = Rc::new(NesFreqFactory::new(triangle));
 
-		Ok((ValueBody::NodeFactory(result), call_loc))
+		Ok((ValueBody::NodeDef(result), call_loc))
 	}
 }
 
@@ -208,7 +208,7 @@ impl Function for Delay {
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, max_time_loc.clone())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
-		Ok((ValueBody::NodeFactory(result), call_loc))
+		Ok((ValueBody::NodeDef(result), call_loc))
 	}
 }
 
@@ -227,7 +227,7 @@ macro_rules! unary_math_func {
 		
 				} else if let Some(val) = arg.as_module_def() {
 					Ok((ValueBody::ModuleDef(ModuleDef::Calc {
-						node_factory: Rc::new(CalcNodeFactory::<$calc_type>::new()),
+						node_factory: Rc::new(CalcNodeDef::<$calc_type>::new()),
 						args: vec![Box::new(val)],
 					}), call_loc))
 		
@@ -387,7 +387,7 @@ impl Function for Type {
 			ValueBody::Array(_) => "Array",
 			ValueBody::Assoc(_) => "Assoc",
 			ValueBody::ModuleDef(_) => "ModuleDef",
-			ValueBody::NodeFactory(_) => "NodeFactory",
+			ValueBody::NodeDef(_) => "NodeDef",
 			ValueBody::Function(_) => "Function",
 			ValueBody::Io(_) => "Io",
 		};

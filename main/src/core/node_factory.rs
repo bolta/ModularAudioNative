@@ -37,7 +37,7 @@ pub fn spec_with_default(name: &str, channels: i32, default: Sample) -> NodeArgS
 
 pub type NodeArgs = HashMap<String, ChanneledNodeIndex>;
 
-pub trait NodeFactory {
+pub trait NodeDef {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec>;
 	fn input_channels(&self) -> i32;
 	fn default_prop_key(&self) -> Option<String> { None }
@@ -47,7 +47,7 @@ pub trait NodeFactory {
 }
 
 pub struct PanFactory { }
-impl NodeFactory for PanFactory {
+impl NodeDef for PanFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("pos", 1)] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

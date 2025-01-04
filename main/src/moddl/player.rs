@@ -443,7 +443,7 @@ fn build_instrument(
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
-		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
+		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeDef>/* , label: String */|
 				-> ModdlResult<NodeArgs> {
 			let specs = fact.node_arg_specs();
 			let mut node_args = NodeArgs::new();
@@ -452,15 +452,15 @@ fn build_instrument(
 				let strukt = if let Some(arg_val) = arg_val {
 					// arg_val.1.as_module_def()
 					// 		// node_args に指定された引数なのに ModuleDef に変換できない
-					// 		.ok_or_else(|| error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
+					// 		.ok_or_else(|| error(ErrorType::NodeDefNotFound, Location::dummy())) ?
 
-					// 変更前のコード↑では NodeFactoryNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
+					// 変更前のコード↑では NodeDefNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
 					arg_val.1.as_module_def().map(|v| v.0)?
 				} else if let Some(default) = default {
 					ValueBody::Float(default).as_module_def().unwrap()
 				} else {
 					// 必要な引数が与えられていない
-					Err(error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
+					Err(error(ErrorType::NodeDefNotFound, Location::dummy())) ?
 				};
 				// ラベルが明示されていればそちらを使う
 				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
@@ -523,7 +523,7 @@ fn build_instrument(
 
 			// ModuleDef::Identifier(id) => {
 			// 	// id は今のところ引数なしのノード生成しかない
-			// 	let fact = factories.get(id).ok_or_else(|| ErrorType::NodeFactoryNotFound) ?;
+			// 	let fact = factories.get(id).ok_or_else(|| ErrorType::NodeDefNotFound) ?;
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			ModuleDef::NodeCreation { factory, args, label } => {
@@ -579,7 +579,7 @@ fn build_instrument(
 	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits, false)
 }
 
-// fn create_node_by_factory(factory: &Rc<dyn NodeFactory>, args: &HashMap<String, Value>) {
+// fn create_node_by_factory(factory: &Rc<dyn NodeDef>, args: &HashMap<String, Value>) {
 // 	let (node_args, delay) = make_node_args(args, factory) ?;
 
 // 	let local_tag = label.as_ref().or(default_tag.as_ref());
@@ -630,7 +630,7 @@ fn apply_input(
 	track: Option<&str>,
 	nodes: &mut AllNodes,
 	submachine_idx: MachineIndex,
-	fact: &Rc<dyn NodeFactory>,
+	fact: &Rc<dyn NodeDef>,
 	node_args: &NodeArgs,
 	label: Option<String>,
 	input: NodeId,
@@ -784,7 +784,7 @@ fn create_calc_node(
 	nodes: &mut AllNodes,
 	submachine_idx: MachineIndex,
 	arg_nodes: Vec<NodeId>,
-	node_factory: &dyn CalcNodeFactoryTrait,
+	node_factory: &dyn CalcNodeDefTrait,
 ) -> ModdlResult<NodeId> {
 	// TODO 共通化
 	macro_rules! add_node {
@@ -843,7 +843,7 @@ macro_rules! binary {
 	($name: ident, $calc: ident) => {
 		fn $name(track: Option<&str>, nodes: &mut AllNodes, submachine_idx: MachineIndex,
 			l_node: NodeId, r_node: NodeId) -> ModdlResult<NodeId> {
-				create_calc_node(track, nodes, submachine_idx, vec![l_node, r_node], &CalcNodeFactory::<$calc>::new())
+				create_calc_node(track, nodes, submachine_idx, vec![l_node, r_node], &CalcNodeDef::<$calc>::new())
 		}
 	};
 }

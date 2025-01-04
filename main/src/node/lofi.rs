@@ -51,7 +51,7 @@ impl Node for QuantCrush {
 }
 
 pub struct QuantCrushFactory { }
-impl NodeFactory for QuantCrushFactory {
+impl NodeDef for QuantCrushFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
 		spec("resolution", 1),
 		spec_with_default("min", 1, -1f32),
@@ -110,7 +110,7 @@ impl SampleCrushFactory {
 		Self { default_sample_rate }
 	} 
 }
-impl NodeFactory for SampleCrushFactory {
+impl NodeDef for SampleCrushFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
 		spec_with_default("sampleRate", 1, self.default_sample_rate as f32),
 	] }

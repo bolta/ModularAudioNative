@@ -79,7 +79,7 @@ impl Node for Limit {
 }
 
 pub struct LimitFactory { }
-impl NodeFactory for LimitFactory {
+impl NodeDef for LimitFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("min", 1), spec("max", 1)] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

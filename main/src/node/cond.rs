@@ -35,7 +35,7 @@ impl Node for Condition {
 	}
 }
 // pub struct ConditionFactory { }
-// impl NodeFactory for ConditionFactory {
+// impl NodeDef for ConditionFactory {
 // 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec("cond", 1), spec("then", 1), spec("else", 1)] }
 // 	fn input_channels(&self) -> i32 { 1 }
 // 	fn create_node(&self, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
