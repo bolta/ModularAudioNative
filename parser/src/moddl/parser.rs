@@ -240,7 +240,7 @@ parser![lambda_func_expr, Box<Expr>, {
 					),
 					map_res(si!(identifier()), |id| ok(vec![(id, None)])),
 				)),
-				ss!(tag("=>")),
+				ss!(tag("->")),
 			),
 			si!(expr()),
 		))),

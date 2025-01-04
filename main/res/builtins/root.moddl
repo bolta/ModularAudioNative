@@ -10,8 +10,8 @@
 	flat: flat,
 	reduce: reduce,
 
-	flatMap: (source, mapper) => source~map(mapper)~flat(),
-	sum: source => source~reduce(0, (acc, elem) => acc + elem),
+	flatMap: (source, mapper) -> source~map(mapper)~flat(),
+	sum: source -> source~reduce(0, (acc, elem) -> acc + elem),
 
 	// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
 	Type: {
