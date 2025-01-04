@@ -750,7 +750,7 @@ pub_parser![expr, Box<Expr>, {
 	}
 }];
 
-parser![directive_statement, Statement, {
+parser![construction_statement, Statement, {
 	map_res(
 			tuple((
 				ss!(char('@')),
@@ -758,7 +758,7 @@ parser![directive_statement, Statement, {
 				opt(separated_list0(ss!(char(',')), si!(expr()))),
 				statement_ending(),
 			)),
-			|(_, name, args, _)| ok(Statement::Directive {
+			|(_, name, args, _)| ok(Statement::Construction {
 				name: name.to_string(),
 				args: args.unwrap_or_else(|| vec![]).drain(..).map(|x| *x).collect(),
 			}))
@@ -779,7 +779,7 @@ parser![mml_statement, Statement, {
 }];
 parser![statement, (Statement, Location), {
 	loc(alt((
-		directive_statement(),
+		construction_statement(),
 		mml_statement(),
 	)))
 }];
@@ -797,24 +797,24 @@ pub_parser![compilation_unit, CompilationUnit, {
 // TODO ちゃんとテストする
 #[cfg(test)]
 #[test]
-fn test_directive_statement() {
+fn test_construction_statement() {
 	// TODO クソ書きづらい
-	// if let (_, Statement::Directive{name, args}) = directive_statement()("@tempo 120\n").unwrap() {
+	// if let (_, Statement::Construction{name, args}) = construction_statement()("@tempo 120\n").unwrap() {
 	// 	assert_eq!(name, "tempo".to_string());
 	// } else {
 	// 	assert!(false);
 	// }
-	assert!(directive_statement()("@tempo").is_ok());
-	assert!(directive_statement()("@tempo\n").is_ok());
-	assert!(directive_statement()("@tempo 120\n").is_ok());
-	assert!(directive_statement()("@tempo 120,240\n").is_ok());
-	assert!(directive_statement()("@ tempo\t120 , 240   \n").is_ok());
-	assert!(directive_statement()("@tempo 120, (240)\n").is_ok());
-	assert!(directive_statement()("@tempo 2 | 3 | 4\n").is_ok());
-	assert!(directive_statement()("@tempo 2 + 3 - 4\n").is_ok());
+	assert!(construction_statement()("@tempo").is_ok());
+	assert!(construction_statement()("@tempo\n").is_ok());
+	assert!(construction_statement()("@tempo 120\n").is_ok());
+	assert!(construction_statement()("@tempo 120,240\n").is_ok());
+	assert!(construction_statement()("@ tempo\t120 , 240   \n").is_ok());
+	assert!(construction_statement()("@tempo 120, (240)\n").is_ok());
+	assert!(construction_statement()("@tempo 2 | 3 | 4\n").is_ok());
+	assert!(construction_statement()("@tempo 2 + 3 - 4\n").is_ok());
 
-	assert!(directive_statement()("@tempo,120\n").is_err());
-	assert!(directive_statement()("@tempo 120 240\n").is_err());
+	assert!(construction_statement()("@tempo,120\n").is_err());
+	assert!(construction_statement()("@tempo 120 240\n").is_err());
 }
 // TODO ちゃんとテストする
 #[cfg(test)]

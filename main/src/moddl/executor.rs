@@ -28,7 +28,7 @@ pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_pat
 
 fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match stmt {
-		Statement::Directive { name, args } => {
+		Statement::Construction { name, args } => {
 			match name.as_str() {
 				"tempo" => {
 					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
@@ -157,7 +157,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					// let value = evaluate_arg(&args, 1, &pctx.vars, stmt_loc);
 				}
 				other => {
-					println!("unknown directive: {}", other);
+					println!("unknown construction: {}", other);
 				}
 			}
 		}
@@ -176,7 +176,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 	}
 
 	match stmt {
-		Statement::Directive { name, args: _ } if name.as_str() == "option" => { }
+		Statement::Construction { name, args: _ } if name.as_str() == "option" => { }
 		_ => { 	pctx.allows_option_here = false; }
 	}
 
@@ -254,7 +254,7 @@ fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Sc
 		Ok(value)
 
 } else {
-		Err(error(ErrorType::DirectiveArgNotFound, stmt_loc.clone()))
+		Err(error(ErrorType::ConstructionArgNotFound, stmt_loc.clone()))
 	}
 }
 

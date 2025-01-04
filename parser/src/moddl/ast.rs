@@ -7,7 +7,7 @@ pub struct CompilationUnit {
 
 #[derive(Debug)]
 pub enum Statement {
-	Directive { name: String, args: Vec<Expr> },
+	Construction { name: String, args: Vec<Expr> },
 	Mml { tracks: Vec<String>, mml: String },
 }
 
