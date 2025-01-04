@@ -23,7 +23,7 @@
 		string: "String",
 		array: "Array",
 		assoc: "Assoc",
-		nodeStructure: "NodeStructure",
+		ModuleDef: "ModuleDef",
 		nodeFactory: "NodeFactory",
 		function: "Function",
 		io: "Io",

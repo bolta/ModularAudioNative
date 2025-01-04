@@ -245,7 +245,7 @@ impl Iterator for EventIter {
 const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこから取るようにする
 
 // TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
 		tempo: f32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
 		-> ModdlResult<NodeId> {
 	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
@@ -348,12 +348,12 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &NodeStructure, mml: &'a str,
 	Ok(output)
 }
 
-fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) /* -> HashMap<String, String> */ {
-	fn visit_struct(strukt: &NodeStructure, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) {
+fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) /* -> HashMap<String, String> */ {
+	fn visit_struct(strukt: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) {
 		match strukt {
-			NodeStructure::NodeCreation { factory, args, label } => {
+			ModuleDef::NodeCreation { factory, args, label } => {
 				for (_, (arg, _)) in args {
-					if let ValueBody::NodeStructure(arg) = arg {
+					if let ValueBody::ModuleDef(arg) = arg {
 						visit_struct(arg, track, use_default_labels, result);
 					}
 				}
@@ -369,31 +369,31 @@ fn collect_label_defaults(instrm_def: &NodeStructure, track: &str, use_default_l
 					}
 				}
 			},
-			NodeStructure::Calc { args, .. } => {
+			ModuleDef::Calc { args, .. } => {
 				for arg in args { visit_struct(arg, track, use_default_labels, result); }
 			},
-			NodeStructure::Connect(lhs, rhs) => {
+			ModuleDef::Connect(lhs, rhs) => {
 				visit_struct(lhs, track, use_default_labels, result);
 				visit_struct(rhs, track, use_default_labels, result);
 			},
-			NodeStructure::Condition { cond, then, els } => {
+			ModuleDef::Condition { cond, then, els } => {
 				visit_struct(cond, track, use_default_labels, result);
 				visit_struct(then, track, use_default_labels, result);
 				visit_struct(els, track, use_default_labels, result);
 			},
-			NodeStructure::Lambda { body, .. } => {
+			ModuleDef::Lambda { body, .. } => {
 				visit_struct(body, track, use_default_labels, result);
 			},
-			NodeStructure::Constant { label, .. } => {
+			ModuleDef::Constant { label, .. } => {
 				if let Some(label) = label {
 					// TODO ラベル名をトラック名で修飾する処理は共通化する
 					// TODO VarFactory から取った方が統一感ある
 					result.insert(format!("{}.{}", track, label.0), VAR_DEFAULT_KEY.to_string());
 				}
 			},
-			NodeStructure::Placeholder { .. } => { },
+			ModuleDef::Placeholder { .. } => { },
 			// この中のラベルは使わないので収集しない
-			NodeStructure::LabelGuard(_) => { },
+			ModuleDef::LabelGuard(_) => { },
 
 		}
 	}
@@ -408,7 +408,7 @@ pub type PlaceholderStack = Stack<HashMap<String, NodeId>>;
 
 fn build_instrument(
 	track: &str,
-	instrm_def: &NodeStructure,
+	instrm_def: &ModuleDef,
 	nodes: &mut AllNodes,
 	submachine_idx: MachineIndex,
 	freq: NodeId,
@@ -419,7 +419,7 @@ fn build_instrument(
 ) -> ModdlResult<NodeId> {
 	fn visit_struct(
 		track: &str,
-		strukt: &NodeStructure,
+		strukt: &ModuleDef,
 		nodes: &mut AllNodes,
 		submachine_idx: MachineIndex,
 		input: NodeId,
@@ -450,14 +450,14 @@ fn build_instrument(
 			for NodeArgSpec { name, channels, default } in specs {
 				let arg_val = args.iter().find(|(n, _)| **n == *name );
 				let strukt = if let Some(arg_val) = arg_val {
-					// arg_val.1.as_node_structure()
-					// 		// node_args に指定された引数なのに NodeStructure に変換できない
+					// arg_val.1.as_module_def()
+					// 		// node_args に指定された引数なのに ModuleDef に変換できない
 					// 		.ok_or_else(|| error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
 
 					// 変更前のコード↑では NodeFactoryNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
-					arg_val.1.as_node_structure().map(|v| v.0)?
+					arg_val.1.as_module_def().map(|v| v.0)?
 				} else if let Some(default) = default {
-					ValueBody::Float(default).as_node_structure().unwrap()
+					ValueBody::Float(default).as_module_def().unwrap()
 				} else {
 					// 必要な引数が与えられていない
 					Err(error(ErrorType::NodeFactoryNotFound, Location::dummy())) ?
@@ -479,7 +479,7 @@ fn build_instrument(
 		};
 		
 		match strukt {
-			NodeStructure::Calc { node_factory, args } => {
+			ModuleDef::Calc { node_factory, args } => {
 				// TODO Result が絡んでるときも map できれいに書きたい
 				let mut arg_nodes = vec![];
 				for arg in args {
@@ -489,13 +489,13 @@ fn build_instrument(
 				create_calc_node(Some(track), nodes, submachine_idx, arg_nodes, node_factory.borrow())
 			},
 
-			NodeStructure::Connect(lhs, rhs) => {
+			ModuleDef::Connect(lhs, rhs) => {
 				// TODO mono/stereo 変換
 				let l_node = recurse!(lhs, input, inside_label_guard) ?;
 				recurse!(rhs, l_node, inside_label_guard)
 			},
 
-			NodeStructure::Condition { cond, then, els } => {
+			ModuleDef::Condition { cond, then, els } => {
 				let cond_result = recurse!(cond, input, inside_label_guard) ?;
 				let cond_result = ensure_on_machine(nodes, cond_result, submachine_idx);
 				let then_result = recurse!(then, input, inside_label_guard) ?;
@@ -510,7 +510,7 @@ fn build_instrument(
 				add_node!(node)
 			},
 
-			NodeStructure::Lambda { input_param, body } => {
+			ModuleDef::Lambda { input_param, body } => {
 				placeholders.push_clone();
 				placeholders.top_mut().insert(input_param.clone(), input);
 
@@ -521,12 +521,12 @@ fn build_instrument(
 				result
 			}
 
-			// NodeStructure::Identifier(id) => {
+			// ModuleDef::Identifier(id) => {
 			// 	// id は今のところ引数なしのノード生成しかない
 			// 	let fact = factories.get(id).ok_or_else(|| ErrorType::NodeFactoryNotFound) ?;
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
-			NodeStructure::NodeCreation { factory, args, label } => {
+			ModuleDef::NodeCreation { factory, args, label } => {
 				let node_args = make_node_args(args, factory) ?;
 
 				let local_tag = if inside_label_guard {
@@ -545,7 +545,7 @@ fn build_instrument(
 				apply_input(Some(track), nodes, submachine_idx, factory, &node_args, full_tag,input)
 			}
 			// TODO Constant は、NodeCreation で VarFactory を使ったのと同じにできるはず。共通化する
-			NodeStructure::Constant { value, label } => {
+			ModuleDef::Constant { value, label } => {
 				let node = Box::new(Var::new(*value));
 				let local_tag = if inside_label_guard {
 					None
@@ -566,11 +566,11 @@ fn build_instrument(
 				}
 				
 			},
-			NodeStructure::Placeholder { name } => {
+			ModuleDef::Placeholder { name } => {
 				// 名前に対応する placeholder は必ずある
 				Ok(placeholders.top()[name])
 			},
-			NodeStructure::LabelGuard(inner) => {
+			ModuleDef::LabelGuard(inner) => {
 				recurse!(inner, input, true)
 			}
 		}

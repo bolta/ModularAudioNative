@@ -225,15 +225,15 @@ macro_rules! unary_math_func {
 				if let Some(val) = arg.as_float() {
 					Ok((ValueBody::Float(<$calc_type>::calc(&vec![val])), call_loc))
 		
-				} else if let Some(val) = arg.as_node_structure() {
-					Ok((ValueBody::NodeStructure(NodeStructure::Calc {
+				} else if let Some(val) = arg.as_module_def() {
+					Ok((ValueBody::ModuleDef(ModuleDef::Calc {
 						node_factory: Rc::new(CalcNodeFactory::<$calc_type>::new()),
 						args: vec![Box::new(val)],
 					}), call_loc))
 		
 				} else {
 					Err(error(ErrorType::TypeMismatchAny {
-						expected: vec![ValueType::Number, ValueType::NodeStructure],
+						expected: vec![ValueType::Number, ValueType::ModuleDef],
 					}, arg_loc.clone()))
 				}
 			}
@@ -386,7 +386,7 @@ impl Function for Type {
 			ValueBody::String(_) => "String",
 			ValueBody::Array(_) => "Array",
 			ValueBody::Assoc(_) => "Assoc",
-			ValueBody::NodeStructure(_) => "NodeStructure",
+			ValueBody::ModuleDef(_) => "ModuleDef",
 			ValueBody::NodeFactory(_) => "NodeFactory",
 			ValueBody::Function(_) => "Function",
 			ValueBody::Io(_) => "Io",

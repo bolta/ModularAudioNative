@@ -19,9 +19,9 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 // dbg!(expr as *const Expr);
 	let body = match &expr.body {
 		ExprBody::Connect { lhs, rhs } => {
-			let (l_str, _) = evaluate(lhs, vars, imports)?.as_node_structure() ?;
-			let (r_str, _) = evaluate(rhs, vars, imports)?.as_node_structure() ?;
-			Ok(ValueBody::NodeStructure(NodeStructure::Connect(Box::new(l_str), Box::new(r_str))))
+			let (l_str, _) = evaluate(lhs, vars, imports)?.as_module_def() ?;
+			let (r_str, _) = evaluate(rhs, vars, imports)?.as_module_def() ?;
+			Ok(ValueBody::ModuleDef(ModuleDef::Connect(Box::new(l_str), Box::new(r_str))))
 		},
 
 		ExprBody::Power { lhs, rhs } => evaluate_binary_structure::<PowCalc>(lhs, rhs, vars, imports),
@@ -85,10 +85,10 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::LambdaNode { input_param, body } => {
 			let vars = Scope::child_of(vars.clone());
 			vars.borrow_mut().set(input_param,
-					(ValueBody::NodeStructure(NodeStructure::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
-			let result = Ok(ValueBody::NodeStructure(NodeStructure::Lambda {
+					(ValueBody::ModuleDef(ModuleDef::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
+			let result = Ok(ValueBody::ModuleDef(ModuleDef::Lambda {
 				input_param: input_param.clone(),
-				body: Box::new(evaluate(body, &vars, imports)?.as_node_structure()?.0), // TODO loc も引き渡す
+				body: Box::new(evaluate(body, &vars, imports)?.as_module_def()?.0), // TODO loc も引き渡す
 			}));
 			result
 		},
@@ -128,7 +128,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 				value_args.insert(name.clone(), evaluate(expr, vars, imports) ?);
 			}
 
-			Ok(ValueBody::NodeStructure(NodeStructure::NodeCreation {
+			Ok(ValueBody::ModuleDef(ModuleDef::NodeCreation {
 				factory,
 				label: None,
 				args: value_args,
@@ -143,21 +143,21 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr.loc));
 
 			// ラベルをつけれる対象は、数値定数、引数なしの NodeFactory、引数ありの NodeFactory（NodeCreation）の 3 つ。
-			// 上記の値にラベルをつけると、結果は必ず NodeStructure になる。
+			// 上記の値にラベルをつけると、結果は必ず ModuleDef になる。
 			// 上記以外にラベルをつけるのは無意味であり、警告とともにラベルは無視される
-			// 数値定数はラベルをつけると NodeStructure になるので、表現としては Float と NodeStructure::Constant の 2 通りある。
+			// 数値定数はラベルをつけると ModuleDef になるので、表現としては Float と ModuleDef::Constant の 2 通りある。
 			// すでにラベルがついている値にさらにラベルをつけるのは問題ない
 			let new_val = match inner_val {
-				ValueBody::Float(value) => ValueBody::NodeStructure(
-					NodeStructure::Constant { value, label: Some(label.clone()) },
+				ValueBody::Float(value) => ValueBody::ModuleDef(
+					ModuleDef::Constant { value, label: Some(label.clone()) },
 				),
-				ValueBody::NodeFactory(factory) => ValueBody::NodeStructure(
-					NodeStructure::NodeCreation { factory, args: HashMap::new(), label: Some(label.clone()) },
+				ValueBody::NodeFactory(factory) => ValueBody::ModuleDef(
+					ModuleDef::NodeCreation { factory, args: HashMap::new(), label: Some(label.clone()) },
 				),
-				ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(
+				ValueBody::ModuleDef(strukt) => ValueBody::ModuleDef(
 					match strukt {
-						NodeStructure::Constant { value, label: _ } => NodeStructure::Constant { value, label: Some(label.clone()) },
-						NodeStructure::NodeCreation { factory, args, label: _ } => NodeStructure::NodeCreation { factory, args, label: Some(label.clone()) },
+						ModuleDef::Constant { value, label: _ } => ModuleDef::Constant { value, label: Some(label.clone()) },
+						ModuleDef::NodeCreation { factory, args, label: _ } => ModuleDef::NodeCreation { factory, args, label: Some(label.clone()) },
 						_ => {
 							warn_ineffective_label();
 							strukt
@@ -174,29 +174,29 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		},
 
 		ExprBody::LabelFilter { strukt, filter } => {
-			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
+			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_module_def() ?;
 			let filter = build_label_filter(filter, &struct_loc) ?;
 
-			Ok(ValueBody::NodeStructure(filter_labels(unguard_labels(&struct_val), &struct_loc, &filter) ?))
+			Ok(ValueBody::ModuleDef(filter_labels(unguard_labels(&struct_val), &struct_loc, &filter) ?))
 		},
 		ExprBody::LabelPrefix { strukt, prefix } => {
-			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_node_structure() ?;
+			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_module_def() ?;
 
-			Ok(ValueBody::NodeStructure(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))
+			Ok(ValueBody::ModuleDef(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))
 		},
 	} ?;
 	Ok((body, expr.loc.clone()))
 }
 
-fn unguard_labels(strukt: &NodeStructure) -> &NodeStructure {
+fn unguard_labels(strukt: &ModuleDef) -> &ModuleDef {
 	// LabelGuard だったら開封する
 	match strukt {
-		NodeStructure::LabelGuard(inner) => inner,
+		ModuleDef::LabelGuard(inner) => inner,
 		_ => strukt,
 	}
 }
 
-fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -> ModdlResult<NodeStructure> {
+fn filter_labels(strukt: &ModuleDef, loc: &Location, filter: &LabelFilter) -> ModdlResult<ModuleDef> {
 	let transform_label = |label: &Option<QualifiedLabel>| match label {
 		None => None,
 		Some(label) => {
@@ -212,7 +212,7 @@ fn filter_labels(strukt: &NodeStructure, loc: &Location, filter: &LabelFilter) -
 	transform_labels(strukt, loc, &transform_label)
 }
 
-fn add_prefix_to_labels(strukt: &NodeStructure, loc: &Location, prefix: &str) -> ModdlResult<NodeStructure> {
+fn add_prefix_to_labels(strukt: &ModuleDef, loc: &Location, prefix: &str) -> ModdlResult<ModuleDef> {
 	let transform_label = |label: &Option<QualifiedLabel>| match label {
 		None => None,
 		Some(label) => { Some(QualifiedLabel(format!("{}.{}", prefix, label.0))) },
@@ -221,49 +221,49 @@ fn add_prefix_to_labels(strukt: &NodeStructure, loc: &Location, prefix: &str) ->
 	transform_labels(strukt, loc, &transform_label)
 }
 
-fn transform_labels<F>(strukt: &NodeStructure, loc: &Location, transform_label: &F) -> ModdlResult<NodeStructure>
+fn transform_labels<F>(strukt: &ModuleDef, loc: &Location, transform_label: &F) -> ModdlResult<ModuleDef>
 where F: Fn (&Option<QualifiedLabel>) -> Option<QualifiedLabel> {
 	let recurse = |strukt| transform_labels(strukt, loc, transform_label);
 
 	match strukt {
-		NodeStructure::Calc { node_factory, args } => Ok(NodeStructure::Calc {
+		ModuleDef::Calc { node_factory, args } => Ok(ModuleDef::Calc {
 			node_factory: node_factory.clone(),
 			args: {
 				let results: ModdlResult<Vec<_>> = args.iter().map(|arg| recurse(arg)).collect();
 				results?.into_iter().map(Box::new).collect()
 			},
 		}),
-		NodeStructure::Connect(lhs, rhs) => Ok(NodeStructure::Connect(
+		ModuleDef::Connect(lhs, rhs) => Ok(ModuleDef::Connect(
 			Box::new(recurse(lhs) ?),
 			Box::new(recurse(rhs) ?),
 		)),
-		NodeStructure::Condition { cond, then, els } => Ok(NodeStructure::Condition {
+		ModuleDef::Condition { cond, then, els } => Ok(ModuleDef::Condition {
 			cond: Box::new(recurse(cond) ?),
 			then: Box::new(recurse(then) ?),
 			els: Box::new(recurse(els) ?),
 		}),
-		NodeStructure::Lambda { input_param, body } => Ok(NodeStructure::Lambda {
+		ModuleDef::Lambda { input_param, body } => Ok(ModuleDef::Lambda {
 			input_param: input_param.clone(),
 			body: Box::new(recurse(body) ?),
 		}),
-		NodeStructure::NodeCreation { factory, args, label } => Ok(NodeStructure::NodeCreation {
+		ModuleDef::NodeCreation { factory, args, label } => Ok(ModuleDef::NodeCreation {
 			factory: factory.clone(),
 			args: args.keys().map(|arg_name| {
 				let (value, value_loc) = &args[arg_name];
 				let new_value = match value {
-					ValueBody::NodeStructure(strukt) => ValueBody::NodeStructure(recurse(strukt) ?),
+					ValueBody::ModuleDef(strukt) => ValueBody::ModuleDef(recurse(strukt) ?),
 					_ => value.clone(),
 				};
 				Ok((arg_name.clone(), (new_value, value_loc.clone())))
 			}).collect::<ModdlResult<HashMap<String, Value>>>() ?,
 			label: transform_label(label),
 		}),
-		NodeStructure::Constant { value, label } => Ok(NodeStructure::Constant {
+		ModuleDef::Constant { value, label } => Ok(ModuleDef::Constant {
 			value: *value,
 			label: transform_label(label),
 		}),
-		NodeStructure::Placeholder { .. }
-		| NodeStructure::LabelGuard(..) // この中のラベルは無視するため、何もしない
+		ModuleDef::Placeholder { .. }
+		| ModuleDef::LabelGuard(..) // この中のラベルは無視するため、何もしない
 		=> Ok(strukt.clone()),
 	}
 }
@@ -385,13 +385,13 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 	let arg_val = evaluate(arg, vars, imports) ?;
 
 	// ラベルのついていない定数はコンパイル時に計算する。
-	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
+	// ラベルがついた定数（ModuleDef になる）は演奏中の設定の対象になるため対象外
 	if let Some(arg_float) = arg_val.0.as_float() {
 		return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
 	}
 
-	let (arg_str, _) = arg_val.as_node_structure() ?;
-	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
+	let (arg_str, _) = arg_val.as_module_def() ?;
+	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(arg_str)],
 	}))
@@ -449,14 +449,14 @@ fn evaluate_binary_structure_overloaded<C: Calc + 'static>(
 	}
 
 	// ラベルのついていない定数はコンパイル時に計算する。
-	// ラベルがついた定数（NodeStructure になる）は演奏中の設定の対象になるため対象外
+	// ラベルがついた定数（ModuleDef になる）は演奏中の設定の対象になるため対象外
 	if let (Some(l_float), Some(r_float)) = (l_body.as_float(), r_body.as_float()) {
 		return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
 	}
 
-	let (l_str, _) = l_val.as_node_structure() ?;
-	let (r_str, _) = r_val.as_node_structure() ?;
-	Ok(ValueBody::NodeStructure(NodeStructure::Calc {
+	let (l_str, _) = l_val.as_module_def() ?;
+	let (r_str, _) = r_val.as_module_def() ?;
+	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
 		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
 	}))
@@ -474,14 +474,14 @@ fn evaluate_conditional_expr(cond: &Expr, then: &Expr, els: &Expr, vars: &Rc<Ref
 		};
 	}
 
-	// cond が定数式でない場合は NodeStructure として演奏時に評価する。
-	// then と else も NodeStructure でなければならないので、定数式にはならない
+	// cond が定数式でない場合は ModuleDef として演奏時に評価する。
+	// then と else も ModuleDef でなければならないので、定数式にはならない
 	let then_val = evaluate(then, vars, imports) ?;
 	let else_val = evaluate(els, vars, imports) ?;
-	let (cond_str, _) = cond_val.as_node_structure() ?;
-	let (then_str, _) = then_val.as_node_structure() ?;
-	let (else_str, _) = else_val.as_node_structure() ?;
-	Ok(ValueBody::NodeStructure(NodeStructure::Condition {
+	let (cond_str, _) = cond_val.as_module_def() ?;
+	let (then_str, _) = then_val.as_module_def() ?;
+	let (else_str, _) = else_val.as_module_def() ?;
+	Ok(ValueBody::ModuleDef(ModuleDef::Condition {
 		cond: Box::new(cond_str),
 		then: Box::new(then_str),
 		els: Box::new(else_str),

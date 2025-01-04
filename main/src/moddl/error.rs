@@ -29,7 +29,7 @@ pub enum ErrorType {
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
 	VarNotFound { var: String },
 	NodeFactoryNotFound, // TODO 発生条件確認
-	// TODO 「NodeStructure の解析中に、NodeStructure に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
+	// TODO 「ModuleDef ModuleDef に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
 	// TODO 「piped_upstreams の個数（過）不足」は、内部エラーで panic でもいいか？
 	ChannelMismatch,
 	// TypeMismatchAny だけでもいい気はする

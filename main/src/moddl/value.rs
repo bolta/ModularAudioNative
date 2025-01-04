@@ -47,11 +47,11 @@ impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 /// 生成すべき Node の構造を表現する型。
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
-pub enum NodeStructure {
-	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<NodeStructure>> },
-	Connect(Box<NodeStructure>, Box<NodeStructure>),
-	Condition { cond: Box<NodeStructure>, then: Box<NodeStructure>, els: Box<NodeStructure> },
-	Lambda { input_param: String, body: Box<NodeStructure> },
+pub enum ModuleDef {
+	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<ModuleDef>> },
+	Connect(Box<ModuleDef>, Box<ModuleDef>),
+	Condition { cond: Box<ModuleDef>, then: Box<ModuleDef>, els: Box<ModuleDef> },
+	Lambda { input_param: String, body: Box<ModuleDef> },
 	NodeCreation {
 		factory: Rc<dyn NodeFactory>,
 		args: HashMap<String, Value>,
@@ -62,19 +62,19 @@ pub enum NodeStructure {
 		label: Option<QualifiedLabel>,
 	},
 	Placeholder { name: String },
-	LabelGuard(Box<NodeStructure>),
+	LabelGuard(Box<ModuleDef>),
 }
-impl NodeStructure {
+impl ModuleDef {
 	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
-			NodeStructure::NodeCreation { label, .. } | NodeStructure::Constant { label, .. } => label.clone(),
+			ModuleDef::NodeCreation { label, .. } | ModuleDef::Constant { label, .. } => label.clone(),
 			_ => None,
 		}
 	}
 
 	pub fn to_string(&self) -> String {
 		match self {
-			NodeStructure::Calc{ node_factory, args } => {
+			ModuleDef::Calc{ node_factory, args } => {
 				match args.len() {
 					2 => format!("({} {} {})", args[0].to_string(), node_factory.operator(), args[1].to_string()),
 					_ => {
@@ -126,7 +126,7 @@ pub trait ValueExtraction {
 	fn as_string(&self) -> ModdlResult<(String, Location)>;
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
-	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)>;
+	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)>;
 	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
@@ -152,8 +152,8 @@ impl ValueExtraction for Value {
 	fn as_string(&self) -> ModdlResult<(String, Location)> { extract(self.0.as_string() , &self.1, ValueType::String) }
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)> { extract(self.0.as_array() , &self.1, ValueType::Array) }
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
-	fn as_node_structure(&self) -> ModdlResult<(NodeStructure, Location)> { extract_any(self.0.as_node_structure() , &self.1,
-			vec![ValueType::NodeStructure, ValueType::Number, ValueType::NodeFactory]) }
+	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)> { extract_any(self.0.as_module_def() , &self.1,
+			vec![ValueType::ModuleDef, ValueType::Number, ValueType::NodeFactory]) }
 	fn as_node_factory(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeFactory) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
@@ -169,7 +169,7 @@ pub enum ValueBody {
 	Array(Vec<Value>),
 	Assoc(HashMap<String, Value>),
 	/// ノードの構造に関するツリー表現
-	NodeStructure(NodeStructure),
+	ModuleDef(ModuleDef),
 	/// 引数を受け取ってノードを生成する関数
 	NodeFactory(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
@@ -226,17 +226,17 @@ impl ValueBody {
 		}
 	}
 
-	pub fn as_node_structure(&self) -> Option<NodeStructure> {
+	pub fn as_module_def(&self) -> Option<ModuleDef> {
 		// Value から直接 Node に変換しようとすると NodeHost が必要になったり、
 		// Node をタグ付きで生成したいときに困ったりとよろしくないことが多いので、
 		// Node への変換は提供しない。
-		// 代わりに、Node の一歩手前というか、ノードグラフの設計図となる NodeStructure を提供し、
+		// 代わりに、Node の一歩手前というか、ノードグラフの設計図となる ModuleDef を提供し、
 		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
 		// 数値や変数参照から Node への暗黙の変換もここで提供する
 		match self {
-			Self::NodeStructure(str) => Some(str.clone()),
-			Self::Float(value) => Some(NodeStructure::Constant { value: *value, label: None }),
-			Self::NodeFactory(fact) => Some(NodeStructure::NodeCreation {
+			Self::ModuleDef(str) => Some(str.clone()),
+			Self::Float(value) => Some(ModuleDef::Constant { value: *value, label: None }),
+			Self::NodeFactory(fact) => Some(ModuleDef::NodeCreation {
 				factory: fact.clone(),
 				args: HashMap::new(),
 				label: None,
@@ -267,7 +267,7 @@ impl ValueBody {
 
 	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
-			Self::NodeStructure(strukt) => strukt.label(),
+			Self::ModuleDef(strukt) => strukt.label(),
 			_ => None,
 		}
 	}
@@ -302,7 +302,7 @@ impl ValueBody {
 				let content = entries.iter().map(|(k, (v, _))| format!("{}: {}", k, v.force_to_string())).join(", ");
 				format!("{{ {} }}", content)
 			},
-			Self::NodeStructure(strukt) => format!("NodeStructure({})", strukt.to_string()),
+			Self::ModuleDef(strukt) => format!("ModuleDef({})", strukt.to_string()),
 
 			// TODO 以下、もうちょっと何か出せるか？
 			Self::NodeFactory(_fact) => "(NodeFactory)".to_string(),
@@ -322,7 +322,7 @@ pub enum ValueType {
 	String,
 	Array,
 	Assoc,
-	NodeStructure,
+	ModuleDef,
 	NodeFactory,
 	Function,
 	Io,

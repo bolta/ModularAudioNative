@@ -4,7 +4,7 @@ use parser::common::Location;
 
 use crate::wave::waveform_host::WaveformHost;
 
-use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor::process_statements, path::resolve_path, scope::Scope, value::{NodeStructure, Value, ValueBody}};
+use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor::process_statements, path::resolve_path, scope::Scope, value::{ModuleDef, Value, ValueBody}};
 
 pub struct ImportCache<'a> {
 	imports: HashMap<PathBuf, Value>,
@@ -41,14 +41,14 @@ impl <'a> ImportCache<'a> {
 
 fn guard_labels((val, loc): Value) -> Value {
 	let new_val = match val {
-		ValueBody::NodeStructure(strukt) => {
-			ValueBody::NodeStructure(
+		ValueBody::ModuleDef(strukt) => {
+			ValueBody::ModuleDef(
 				match strukt {
-					NodeStructure::LabelGuard(_) => {
+					ModuleDef::LabelGuard(_) => {
 						strukt.clone()
 					},
 					_ => {
-						NodeStructure::LabelGuard(Box::new(strukt.clone()))
+						ModuleDef::LabelGuard(Box::new(strukt.clone()))
 					},
 				}
 			)

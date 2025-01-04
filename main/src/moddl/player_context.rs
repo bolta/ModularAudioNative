@@ -83,7 +83,7 @@ impl PlayerContext {
 pub enum MuteSolo { Mute, Solo }
 
 pub enum TrackDef {
-	Instrument(NodeStructure),
-	Effect(HashSet<String>, NodeStructure),
-	Groove(NodeStructure),
+	Instrument(ModuleDef),
+	Effect(HashSet<String>, ModuleDef),
+	Groove(ModuleDef),
 }

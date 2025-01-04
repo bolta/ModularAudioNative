@@ -37,7 +37,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					// let instrm = & args[1];
 					for track in tracks {
-						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_node_structure()?.0;
+						let instrm = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 						pctx.add_track_def(&track, TrackDef::Instrument(instrm), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
 					}
@@ -53,11 +53,11 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					
 					for source_track in &source_tracks {
 						pctx.vars.borrow_mut().set(source_track,
-								(ValueBody::NodeStructure(NodeStructure::Placeholder { name: source_track.clone() }), source_loc.clone())) ?;
+								(ValueBody::ModuleDef(ModuleDef::Placeholder { name: source_track.clone() }), source_loc.clone())) ?;
 						pctx.terminal_tracks.remove(source_track);
 					}
 
-					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc, imports)?.as_node_structure()?.0;
+					let effect = evaluate_and_perform_arg(&args, 2, &vars, stmt_loc, imports)?.as_module_def()?.0;
 					for track in tracks {
 						pctx.add_track_def(&track, TrackDef::Effect(source_tracks.iter().map(|t| t.clone()).collect(), effect.clone()), stmt_loc) ?;
 						pctx.terminal_tracks.insert(track);
@@ -71,7 +71,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
 					let control_track = &tracks[0];
 					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
-					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_node_structure()?.0;
+					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
 					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
