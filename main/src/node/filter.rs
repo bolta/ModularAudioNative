@@ -17,14 +17,14 @@ macro_rules! bi_quad_filter {
 	($name: ident, $factory_name: ident, $make_coeffs: expr) => {
 		pub struct $name {
 			signal: MonoNodeIndex,
-			cutoff: MonoNodeIndex,
+			freq: MonoNodeIndex,
 			q: MonoNodeIndex,
 		
 			filter: BiQuadFilterCore,
 		}
 		impl $name {
-			pub fn new(signal: MonoNodeIndex, cutoff: MonoNodeIndex, q: MonoNodeIndex) -> Self {
-				Self { signal, cutoff, q, filter: BiQuadFilterCore::new() }
+			pub fn new(signal: MonoNodeIndex, freq: MonoNodeIndex, q: MonoNodeIndex) -> Self {
+				Self { signal, freq, q, filter: BiQuadFilterCore::new() }
 			}
 		}
 		#[node_impl]
@@ -32,16 +32,16 @@ macro_rules! bi_quad_filter {
 			fn channels(&self) -> i32 { 1 }
 			fn upstreams(&self) -> Upstreams { vec![
 				self.signal.channeled(),
-				self.cutoff.channeled(),
+				self.freq.channeled(),
 				self.q.channeled(),
 			] }
 			fn activeness(&self) -> Activeness { Activeness::Active }
 			fn execute(&mut self, inputs: &Vec<Sample>, output: &mut [Sample], context: &Context, _env: &mut Environment) {
 				let in_value = inputs[0];
-				let cutoff = inputs[1];
+				let freq = inputs[1];
 				let q = inputs[2];
 		
-				let coeffs = $make_coeffs(cutoff, q, context.sample_rate_f32());
+				let coeffs = $make_coeffs(freq, q, context.sample_rate_f32());
 		
 				// self.filter.sample() の中で状態の更新も行われるので self.update() は実装しない
 				let out_value = self.filter.sample(in_value, &coeffs);
@@ -52,22 +52,22 @@ macro_rules! bi_quad_filter {
 		pub struct $factory_name { }
 		impl NodeDef for $factory_name {
 			fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
-				spec("cutoff", 1),
+				spec("freq", 1),
 				spec("q", 1),
 			] }
 			fn input_channels(&self) -> i32 { 1 }
 			fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
 				let signal = piped_upstream.as_mono();
-				let cutoff = node_args.get("cutoff").unwrap().as_mono(); 
+				let freq = node_args.get("freq").unwrap().as_mono(); 
 				let q = node_args.get("q").unwrap().as_mono(); 
-				Box::new($name::new(signal, cutoff, q))
+				Box::new($name::new(signal, freq, q))
 			}
 		}
 	}
 }
 
-bi_quad_filter!(LowPassFilter, LowPassFilterFactory, (|cutoff, q, sample_rate| {
-	let vars = intermediate_vars(cutoff, q, sample_rate);
+bi_quad_filter!(LowPassFilter, LowPassFilterFactory, (|freq, q, sample_rate| {
+	let vars = intermediate_vars(freq, q, sample_rate);
 	let b1 = 1f32 - vars.cos_w0;
 	let b0 = b1 / 2f32;
 	BiQuadFilterCoeffs {
@@ -79,8 +79,8 @@ bi_quad_filter!(LowPassFilter, LowPassFilterFactory, (|cutoff, q, sample_rate| {
 		a2: 1f32 - vars.alpha,
 	}
 }));
-bi_quad_filter!(HighPassFilter, HighPassFilterFactory, (|cutoff, q, sample_rate| {
-	let vars = intermediate_vars(cutoff, q, sample_rate);
+bi_quad_filter!(HighPassFilter, HighPassFilterFactory, (|freq, q, sample_rate| {
+	let vars = intermediate_vars(freq, q, sample_rate);
 	let b = 1f32 + vars.cos_w0;
 	let b0 = b / 2f32;
 	BiQuadFilterCoeffs {
@@ -92,8 +92,8 @@ bi_quad_filter!(HighPassFilter, HighPassFilterFactory, (|cutoff, q, sample_rate|
 		a2: 1f32 - vars.alpha,
 	}
 }));
-bi_quad_filter!(BandPassFilter, BandPassFilterFactory, (|cutoff, q, sample_rate| {
-	let vars = intermediate_vars(cutoff, q, sample_rate);
+bi_quad_filter!(BandPassFilter, BandPassFilterFactory, (|freq, q, sample_rate| {
+	let vars = intermediate_vars(freq, q, sample_rate);
 	let b0 = q * vars.alpha;
 	BiQuadFilterCoeffs {
 		b0,
@@ -143,8 +143,8 @@ struct BiQuadFilterIntermediateVars {
 	alpha: Sample,
 }
 
-fn intermediate_vars(cutoff: Sample, q: Sample, sample_rate: Sample) -> BiQuadFilterIntermediateVars {
-	let w0 = TWO_PI * cutoff / sample_rate;
+fn intermediate_vars(freq: Sample, q: Sample, sample_rate: Sample) -> BiQuadFilterIntermediateVars {
+	let w0 = TWO_PI * freq / sample_rate;
 	let cos_w0 = w0.cos();
 	let sin_w0 = w0.sin();
 	let alpha = sin_w0 / (2f32 * q);
