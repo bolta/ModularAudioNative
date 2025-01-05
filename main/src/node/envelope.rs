@@ -63,7 +63,7 @@ impl Node for ExpEnv {
 const AMPLITUDE_MIN: f32 = 1f32 / 65536f32;
 
 pub struct ExpEnvFactory { }
-impl NodeDef for ExpEnvFactory {
+impl NodeFactory for ExpEnvFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("ratioPerSec", 1, 0.125f32)] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -188,7 +188,7 @@ impl Node for AdsrEnv {
 #[derive(Eq, PartialEq)] enum AdsrEnvState { Idle, Initial, Attack, Decay, Sustain, Release }
 
 pub struct AdsrEnvFactory { }
-impl NodeDef for AdsrEnvFactory {
+impl NodeFactory for AdsrEnvFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> {
 		vec![
 			spec_with_default("attack", 1, 0f32),

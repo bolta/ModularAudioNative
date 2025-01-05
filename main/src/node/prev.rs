@@ -2,7 +2,7 @@ use crate::{core::{
 	common::*,
 	context::*,
 	machine::*,
-	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeDef},
+	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeFactory},
 }, moddl::{error::ModdlResult, import::ImportCache, io::Io, value::{Value, ValueBody}}};
 use node_macro::node_impl;
 use parser::common::Location;
@@ -55,7 +55,7 @@ impl PrevInFactory {
 		Self { id }
 	}
 }
-impl NodeDef for PrevInFactory {
+impl NodeFactory for PrevInFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -95,7 +95,7 @@ impl PrevOutFactory {
 		Self { id }
 	}
 }
-impl NodeDef for PrevOutFactory {
+impl NodeFactory for PrevOutFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

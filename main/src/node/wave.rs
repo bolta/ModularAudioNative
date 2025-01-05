@@ -120,7 +120,7 @@ impl WaveformPlayerFactory {
 		Self { waveform_index }
 	}
 }
-impl NodeDef for WaveformPlayerFactory {
+impl NodeFactory for WaveformPlayerFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn default_prop_key(&self) -> Option<String> { Some("waveform".to_string()) }

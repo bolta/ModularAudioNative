@@ -35,7 +35,7 @@ impl Node for UniformNoise {
 }
 
 pub struct UniformNoiseFactory { }
-impl NodeDef for UniformNoiseFactory {
+impl NodeFactory for UniformNoiseFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, _piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

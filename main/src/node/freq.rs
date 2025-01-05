@@ -50,7 +50,7 @@ pub struct NesFreqFactory {
 impl NesFreqFactory {
 	pub fn new(triangle: bool) -> Self { Self { triangle } }
 }
-impl NodeDef for NesFreqFactory {
+impl NodeFactory for NesFreqFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

@@ -52,7 +52,7 @@ impl Node for Glide {
 }
 
 pub struct GlideFactory { }
-impl NodeDef for GlideFactory {
+impl NodeFactory for GlideFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
 		spec("halflife", 1),
 	] }

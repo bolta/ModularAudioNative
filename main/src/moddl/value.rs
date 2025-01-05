@@ -22,19 +22,19 @@ use crate::core::common::*;
 use crate::core::node::Node;
 use crate::node::arith::*;
 use std::marker::PhantomData;
-pub trait CalcNodeDefTrait {
+pub trait CalcNodeFactoryTrait {
 	fn operator(&self) -> &str;
 	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node>;
 	fn create_stereo(&self, args: Vec<StereoNodeIndex>) -> Box<dyn Node>;
 }
 // #[derive(Clone)]
-pub struct CalcNodeDef<C: 'static + Calc> {
+pub struct CalcNodeFactory<C: 'static + Calc> {
 	_c: PhantomData<fn () -> C>,
 }
-impl <C: 'static + Calc> CalcNodeDef<C> {
+impl <C: 'static + Calc> CalcNodeFactory<C> {
 	pub fn new() -> Self { Self { _c: PhantomData } }
 }
-impl <C: 'static + Calc> CalcNodeDefTrait for CalcNodeDef<C> {
+impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 	fn operator(&self) -> &str { C::operator() }
 	fn create_mono(&self, args: Vec<MonoNodeIndex>) -> Box<dyn Node> {
 		Box::new(MonoCalc::<C>::new(args))
@@ -48,12 +48,12 @@ impl <C: 'static + Calc> CalcNodeDefTrait for CalcNodeDef<C> {
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
 pub enum ModuleDef {
-	Calc{ node_factory: Rc<dyn CalcNodeDefTrait>, args: Vec<Box<ModuleDef>> },
+	Calc{ node_factory: Rc<dyn CalcNodeFactoryTrait>, args: Vec<Box<ModuleDef>> },
 	Connect(Box<ModuleDef>, Box<ModuleDef>),
 	Condition { cond: Box<ModuleDef>, then: Box<ModuleDef>, els: Box<ModuleDef> },
 	Lambda { input_param: String, body: Box<ModuleDef> },
 	NodeCreation {
-		factory: Rc<dyn NodeDef>,
+		factory: Rc<dyn NodeFactory>,
 		args: HashMap<String, Value>,
 		label: Option<QualifiedLabel>,
 	},
@@ -127,7 +127,7 @@ pub trait ValueExtraction {
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)>;
-	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeDef>, Location)>;
+	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
 }
@@ -154,7 +154,7 @@ impl ValueExtraction for Value {
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)> { extract_any(self.0.as_module_def() , &self.1,
 			vec![ValueType::ModuleDef, ValueType::Number, ValueType::NodeDef]) }
-	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeDef>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
+	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
 }
@@ -171,7 +171,7 @@ pub enum ValueBody {
 	/// ノードの構造に関するツリー表現
 	ModuleDef(ModuleDef),
 	/// 引数を受け取ってノードを生成する関数
-	NodeDef(Rc<dyn NodeDef>),
+	NodeDef(Rc<dyn NodeFactory>),
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
 }
@@ -244,7 +244,7 @@ impl ValueBody {
 			_ => None,
 		}
 	}
-	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeDef>> {
+	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
 		match self {
 			Self::NodeDef(fact) => Some(fact.clone()),
 			_ => None,

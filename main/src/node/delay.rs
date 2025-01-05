@@ -61,7 +61,7 @@ impl DelayFactory {
 		Self { max_time, sample_rate }
 	}
 }
-impl NodeDef for DelayFactory {
+impl NodeFactory for DelayFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![
 		spec_with_default("time", 1, self.max_time),
 		spec_with_default("feedback", 1, 0f32),

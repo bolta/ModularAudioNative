@@ -36,7 +36,7 @@ macro_rules! simple_osc {
 		}
 
 		pub struct $factory_name { }
-		impl NodeDef for $factory_name {
+		impl NodeFactory for $factory_name {
 			fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![] }
 			fn input_channels(&self) -> i32 { 1 }
 			fn create_node(&self, _node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -86,7 +86,7 @@ pub struct PhaseFactory {
 impl PhaseFactory {
 	pub fn new(initial: f32) -> Self { Self { initial } }
 }
-impl NodeDef for PhaseFactory {
+impl NodeFactory for PhaseFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("reset", 1, 0f32)] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {
@@ -144,7 +144,7 @@ impl Node for PulseOsc {
 }
 
 pub struct PulseOscFactory { }
-impl NodeDef for PulseOscFactory {
+impl NodeFactory for PulseOscFactory {
 	fn node_arg_specs(&self) -> Vec<NodeArgSpec> { vec![spec_with_default("duty", 1, 0.5f32)] }
 	fn input_channels(&self) -> i32 { 1 }
 	fn create_node(&self, node_args: &NodeArgs, piped_upstream: ChanneledNodeIndex) -> Box<dyn Node> {

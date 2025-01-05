@@ -62,7 +62,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 			result.insert($name.to_string(), (ValueBody::Float($value), Location::dummy()));
 		}
 	}
-	macro_rules! add_node_factory {
+	macro_rules! add_node_def_by_factory {
 		($name: expr, $fact: expr) => {
 			result.insert($name.to_string(), (ValueBody::NodeDef(Rc::new($fact)), Location::dummy()));
 		}
@@ -83,21 +83,21 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	// musical
 	add_function!("phase", Phase { });
-	add_node_factory!("sineOsc", SineOscFactory { });
-	add_node_factory!("triangleOsc", TriangleOscFactory { });
-	add_node_factory!("sawOsc", SawOscFactory { });
-	add_node_factory!("pulseOsc", PulseOscFactory { });
-	add_node_factory!("uniformNoise", UniformNoiseFactory { });
-	add_node_factory!("expEnv", ExpEnvFactory { });
-	add_node_factory!("adsrEnv", AdsrEnvFactory { });
-	add_node_factory!("limit", LimitFactory { });
-	add_node_factory!("lpf", LowPassFilterFactory { });
-	add_node_factory!("hpf", HighPassFilterFactory { });
-	add_node_factory!("bpf", BandPassFilterFactory { });
-	add_node_factory!("quantCrush", QuantCrushFactory { });
-	add_node_factory!("sampleCrush", SampleCrushFactory::new(sample_rate));
-	add_node_factory!("pan", PanFactory { });
-	add_node_factory!("glide", GlideFactory { });
+	add_node_def_by_factory!("sineOsc", SineOscFactory { });
+	add_node_def_by_factory!("triangleOsc", TriangleOscFactory { });
+	add_node_def_by_factory!("sawOsc", SawOscFactory { });
+	add_node_def_by_factory!("pulseOsc", PulseOscFactory { });
+	add_node_def_by_factory!("uniformNoise", UniformNoiseFactory { });
+	add_node_def_by_factory!("expEnv", ExpEnvFactory { });
+	add_node_def_by_factory!("adsrEnv", AdsrEnvFactory { });
+	add_node_def_by_factory!("limit", LimitFactory { });
+	add_node_def_by_factory!("lpf", LowPassFilterFactory { });
+	add_node_def_by_factory!("hpf", HighPassFilterFactory { });
+	add_node_def_by_factory!("bpf", BandPassFilterFactory { });
+	add_node_def_by_factory!("quantCrush", QuantCrushFactory { });
+	add_node_def_by_factory!("sampleCrush", SampleCrushFactory::new(sample_rate));
+	add_node_def_by_factory!("pan", PanFactory { });
+	add_node_def_by_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 	add_function!("nesFreq", NesFreq { });
 	add_function!("delay", Delay::new(sample_rate));
@@ -227,7 +227,8 @@ macro_rules! unary_math_func {
 		
 				} else if let Some(val) = arg.as_module_def() {
 					Ok((ValueBody::ModuleDef(ModuleDef::Calc {
-						node_factory: Rc::new(CalcNodeDef::<$calc_type>::new()),
+						node_factory: Rc::new(CalcNodeFactory
+							::<$calc_type>::new()),
 						args: vec![Box::new(val)],
 					}), call_loc))
 		

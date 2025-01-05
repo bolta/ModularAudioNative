@@ -443,7 +443,7 @@ fn build_instrument(
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
-		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeDef>/* , label: String */|
+		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
 				-> ModdlResult<NodeArgs> {
 			let specs = fact.node_arg_specs();
 			let mut node_args = NodeArgs::new();
@@ -630,7 +630,7 @@ fn apply_input(
 	track: Option<&str>,
 	nodes: &mut AllNodes,
 	submachine_idx: MachineIndex,
-	fact: &Rc<dyn NodeDef>,
+	fact: &Rc<dyn NodeFactory>,
 	node_args: &NodeArgs,
 	label: Option<String>,
 	input: NodeId,
@@ -784,7 +784,7 @@ fn create_calc_node(
 	nodes: &mut AllNodes,
 	submachine_idx: MachineIndex,
 	arg_nodes: Vec<NodeId>,
-	node_factory: &dyn CalcNodeDefTrait,
+	node_factory: &dyn CalcNodeFactoryTrait,
 ) -> ModdlResult<NodeId> {
 	// TODO 共通化
 	macro_rules! add_node {
@@ -843,7 +843,7 @@ macro_rules! binary {
 	($name: ident, $calc: ident) => {
 		fn $name(track: Option<&str>, nodes: &mut AllNodes, submachine_idx: MachineIndex,
 			l_node: NodeId, r_node: NodeId) -> ModdlResult<NodeId> {
-				create_calc_node(track, nodes, submachine_idx, vec![l_node, r_node], &CalcNodeDef::<$calc>::new())
+				create_calc_node(track, nodes, submachine_idx, vec![l_node, r_node], &CalcNodeFactory::<$calc>::new())
 		}
 	};
 }

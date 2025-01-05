@@ -392,7 +392,7 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 
 	let (arg_str, _) = arg_val.as_module_def() ?;
 	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
-		node_factory: Rc::new(CalcNodeDef::<C>::new()),
+		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(arg_str)],
 	}))
 }
@@ -457,7 +457,7 @@ fn evaluate_binary_structure_overloaded<C: Calc + 'static>(
 	let (l_str, _) = l_val.as_module_def() ?;
 	let (r_str, _) = r_val.as_module_def() ?;
 	Ok(ValueBody::ModuleDef(ModuleDef::Calc {
-		node_factory: Rc::new(CalcNodeDef::<C>::new()),
+		node_factory: Rc::new(CalcNodeFactory::<C>::new()),
 		args: vec![Box::new(l_str), Box::new(r_str)],
 	}))
 }
