@@ -21,3 +21,12 @@ jobs:
       run: cargo build --release --verbose
     # - name: Run tests
     #   run: cargo test --verbose
+    - name: Upload 
+      uses: actions/upload-artifact@v4
+      with:
+        name: moddl
+        path: |
+          target/release/moddl.exe
+          target/release/portaudio_x64.dll
+          target/release/builtins/
+          
