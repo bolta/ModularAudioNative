@@ -383,7 +383,7 @@ impl Function for Type {
 			ValueBody::Float(_) => "Number",
 			ValueBody::WaveformIndex(_) => "Waveform",
 			ValueBody::TrackSet(_) => "TrackSet",
-			ValueBody::IdentifierLiteral(_) => "QuotedIdentifier",
+			ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",
 			ValueBody::String(_) => "String",
 			ValueBody::Array(_) => "Array",
 			ValueBody::Assoc(_) => "Assoc",

@@ -74,7 +74,7 @@ pub enum ExprBody {
 
 	FloatLiteral(f32),
 	TrackSetLiteral(Vec<String>),
-	IdentifierLiteral(String),
+	QuotedIdentifier(String),
 	StringLiteral(String),
 	// FIXME この Box は取り除ける？
 	ArrayLiteral(Vec<Box<Expr>>),

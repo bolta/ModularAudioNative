@@ -48,7 +48,7 @@ parser![track_set_literal, Box<Expr>, {
 }];
 parser![identifier_literal, Box<Expr>, {
 	map_res(si!(preceded(char(':'), loc(identifier()))),
-			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::IdentifierLiteral(id.to_string()), loc))) })
+			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::QuotedIdentifier(id.to_string()), loc))) })
 }];
 parser![string_literal, Box<Expr>, {
 	// TODO " などをエスケープできるようにする

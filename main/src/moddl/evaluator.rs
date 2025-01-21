@@ -47,7 +47,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
 			Ok(val.clone())
 		},
-		ExprBody::IdentifierLiteral(id) => Ok(ValueBody::IdentifierLiteral(id.clone())),
+		ExprBody::QuotedIdentifier(id) => Ok(ValueBody::QuotedIdentifier(id.clone())),
 		ExprBody::StringLiteral(content) => Ok(ValueBody::String(content.clone())),
 		ExprBody::ArrayLiteral(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正

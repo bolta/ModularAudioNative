@@ -164,7 +164,7 @@ pub enum ValueBody {
 	Float(f32),
 	WaveformIndex(WaveformIndex),
 	TrackSet(Vec<String>),
-	IdentifierLiteral(String),
+	QuotedIdentifier(String),
 	String(String),
 	Array(Vec<Value>),
 	Assoc(HashMap<String, Value>),
@@ -200,7 +200,7 @@ impl ValueBody {
 	}
 	pub fn as_identifier_literal(&self) -> Option<String> {
 		match self {
-			Self::IdentifierLiteral(id) => Some(id.clone()),
+			Self::QuotedIdentifier(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
@@ -291,7 +291,7 @@ impl ValueBody {
 				// 複数文字のトラック名は現状ないが、仮の記法で出力しておく
 				format!("^({})", tracks.join(", "))
 			},
-			Self::IdentifierLiteral(id) => format!(":{}", id),
+			Self::QuotedIdentifier(id) => format!(":{}", id),
 			// 文字列だけは「式っぽい」整形を受けず中身そのままなので、少し毛色が違う
 			Self::String(value) => value.clone(),
 			Self::Array(elems) => {
