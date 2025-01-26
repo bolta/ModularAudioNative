@@ -15,9 +15,9 @@ use std::{
 	rc::Rc,
 };
 
-pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<Value> {
+pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache) -> ModdlResult<Value> {
 // dbg!(expr as *const Expr);
-	let body = match &expr.body {
+	let body = match expr {
 		ExprBody::Connect { lhs, rhs } => {
 			let (l_str, _) = evaluate(lhs, vars, imports)?.as_module_def() ?;
 			let (r_str, _) = evaluate(rhs, vars, imports)?.as_module_def() ?;
@@ -44,7 +44,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::Plus { arg } => evaluate_unary_structure::<PlusCalc>(arg, vars, imports),
 
 		ExprBody::Identifier(id) => {
-			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr.loc.clone()) }) ?;
+			let (val, _) = vars.borrow().lookup(id).ok_or_else(|| { error(ErrorType::VarNotFound { var: id.clone() }, expr_loc.clone()) }) ?;
 			Ok(val.clone())
 		},
 		ExprBody::QuotedIdentifier(id) => Ok(ValueBody::QuotedIdentifier(id.clone())),
@@ -61,7 +61,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = HashMap::<String, Value>::with_capacity(content.len());
 			for (key, value_expr) in content {
-				result.insert(key.clone(), evaluate(&*value_expr, vars, imports) ?);
+				result.insert(key.clone(), evaluate(&value_expr, vars, imports) ?);
 			}
 			Ok(ValueBody::Assoc(result))
 		},
@@ -85,7 +85,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::LambdaNode { input_param, body } => {
 			let vars = Scope::child_of(vars.clone());
 			vars.borrow_mut().set(input_param,
-					(ValueBody::ModuleDef(ModuleDef::Placeholder { name: input_param.clone() }), expr.loc.clone())) ?;
+					(ValueBody::ModuleDef(ModuleDef::Placeholder { name: input_param.clone() }), expr_loc.clone())) ?;
 			let result = Ok(ValueBody::ModuleDef(ModuleDef::Lambda {
 				input_param: input_param.clone(),
 				body: Box::new(evaluate(body, &vars, imports)?.as_module_def()?.0), // TODO loc も引き渡す
@@ -101,26 +101,26 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			let (function, _) = evaluate(function, vars, imports)?.as_function() ?;
 
 			let arg_names = function.signature().iter().map(|name| name.to_string()).collect();
-			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
+			let resolved_args = resolve_args(&arg_names, args, expr_loc) ?;
 			let mut value_args = HashMap::new();
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			for (name, expr) in &resolved_args {
 				value_args.insert(name.clone(), evaluate(expr, vars, imports) ?);
 			}
 
-			function.call(&value_args, &vars, expr.loc.clone(), imports).map(|(v, _)| v)
+			function.call(&value_args, &vars, expr_loc.clone(), imports).map(|(v, _)| v)
 		},
 		ExprBody::PropertyAccess { assoc, name } => {
 			let assoc_val = evaluate(assoc, vars, imports) ?;
 			let (assoc, _) = assoc_val.as_assoc() ?;
 			let val = assoc.get(name);
-			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr.loc.clone()))?.clone())
+			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr_loc.clone()))?.clone())
 		},
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
 			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_def() ?;
 
 			let arg_names = factory.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
-			let resolved_args = resolve_args(&arg_names, args, &expr.loc) ?;
+			let resolved_args = resolve_args(&arg_names, args, &expr_loc) ?;
 
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut value_args = HashMap::new();
@@ -140,7 +140,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 		ExprBody::Labeled { label, inner } => {
 			let (inner_val, _) = evaluate(inner, vars, imports) ?;
 
-			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr.loc));
+			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr_loc));
 
 			// ラベルをつけれる対象は、数値定数、引数なしの NodeDef、引数ありの NodeDef（NodeCreation）の 3 つ。
 			// 上記の値にラベルをつけると、結果は必ず ModuleDef になる。
@@ -185,7 +185,7 @@ pub fn evaluate(expr: &Expr, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCach
 			Ok(ValueBody::ModuleDef(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))
 		},
 	} ?;
-	Ok((body, expr.loc.clone()))
+	Ok((body, expr_loc.clone()))
 }
 
 fn unguard_labels(strukt: &ModuleDef) -> &ModuleDef {

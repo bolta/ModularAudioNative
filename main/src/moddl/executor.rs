@@ -45,7 +45,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				"effect" => {
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					let source_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
-					let source_loc = &args[1].loc;
+					let source_loc = &args[1].1;
 					// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
 					// 定義を評価する際、source_tracks の各々を placeholder として定義しておく。
@@ -68,13 +68,13 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 				},
 				"groove" => {
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
-					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].loc.clone())); }
+					if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].1.clone())); }
 					let control_track = &tracks[0];
 					let target_tracks = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
 					let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 					pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 					// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
+					pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
 					for track in &target_tracks {
 						if let Some((_, existing_assign_loc)) = pctx.grooves.get(track) {
 							return Err(error(ErrorType::GrooveTargetDuplicate {
@@ -82,7 +82,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 								existing_assign_loc: existing_assign_loc.clone(),
 								}, stmt_loc.clone()));
 						}
-						pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].loc.clone()));
+						pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
 					}
 				}
 				"let" => {

@@ -35,7 +35,7 @@ parser![statement_ending, (), {
 }];
 
 parser![float_literal, Box<Expr>, {
-	map_res(loc(float()), |(v, loc)| ok(Box::new(Expr::new(ExprBody::FloatLiteral(v), loc))))
+	map_res(loc(float()), |(v, loc)| ok(Box::new((ExprBody::FloatLiteral(v), loc))))
 }];
 
 parser![track_set, Vec<String>, {
@@ -44,16 +44,16 @@ parser![track_set, Vec<String>, {
 }];
 parser![track_set_literal, Box<Expr>, {
 	map_res(preceded(si!(char('^')), loc(track_set())),
-			|(tracks, loc)| { ok(Box::new(Expr::new(ExprBody::TrackSetLiteral(tracks), loc))) })
+			|(tracks, loc)| { ok(Box::new((ExprBody::TrackSetLiteral(tracks), loc))) })
 }];
 parser![identifier_literal, Box<Expr>, {
 	map_res(si!(preceded(char(':'), loc(identifier()))),
-			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::QuotedIdentifier(id.to_string()), loc))) })
+			|(id, loc)| { ok(Box::new((ExprBody::QuotedIdentifier(id.to_string()), loc))) })
 }];
 parser![string_literal, Box<Expr>, {
 	// TODO " などをエスケープできるようにする
 	map_res(si!(delimited(char('"'), loc(re_find(re(r#"[^"]*"#))), char('"'))),
-			|(str, loc)| { ok(Box::new(Expr::new(ExprBody::StringLiteral(str.to_string()), loc))) })
+			|(str, loc)| { ok(Box::new((ExprBody::StringLiteral(str.to_string()), loc))) })
 }];
 parser![array_literal, Box<Expr>, {
 	map_res(
@@ -65,7 +65,7 @@ parser![array_literal, Box<Expr>, {
 			),
 			si!(char(']')),
 		)),
-		|(elems, loc)| { ok(Box::new(Expr::new(ExprBody::ArrayLiteral(elems), loc))) },
+		|(elems, loc)| { ok(Box::new((ExprBody::ArrayLiteral(elems), loc))) },
 	)
 }];
 
@@ -125,7 +125,7 @@ fn translate_data_array(elems: &Vec<(DataArrayElement, Location)>, outer_loc: Lo
 		let elem_loc = &elem.1;
 		match &elem.0 {
 			DataArrayElement::Value(v) => {
-				result.push(Box::new(Expr::new(ExprBody::FloatLiteral((sign * v) as f32), elem_loc.clone())));
+				result.push(Box::new((ExprBody::FloatLiteral((sign * v) as f32), elem_loc.clone())));
 			},
 			DataArrayElement::Sign(s) => {
 				sign = *s;
@@ -136,7 +136,7 @@ fn translate_data_array(elems: &Vec<(DataArrayElement, Location)>, outer_loc: Lo
 		}
 	}
 
-	Box::new(Expr::new(ExprBody::ArrayLiteral(result), outer_loc))
+	Box::new((ExprBody::ArrayLiteral(result), outer_loc))
 }
 
 fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
@@ -190,12 +190,12 @@ parser![assoc_literal, Box<Expr>, {
 			ss!(opt(assoc_entries())),
 			si!(char('}')),
 		)),
-		|(elems, loc)| { ok(Box::new(Expr::new(ExprBody::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())), loc))) },
+		|(elems, loc)| { ok(Box::new((ExprBody::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())), loc))) },
 	)
 }];
 parser![identifier_expr, Box<Expr>, {
 	map_res(loc(identifier()),
-			|(id, loc)| { ok(Box::new(Expr::new(ExprBody::Identifier(id.to_string()), loc))) })
+			|(id, loc)| { ok(Box::new((ExprBody::Identifier(id.to_string()), loc))) })
 }];
 // 専用の構文は必要なかったかも…短絡評価は不要なので、関数で if(cond, then, else) でもよかったかも
 // （括弧を減らせるのはメリットと思われるけど）
@@ -215,7 +215,7 @@ parser![conditional_expr, Box<Expr>, {
 				si!(expr()),
 			),
 		))),
-		|((cond, then, els), loc)| ok(Box::new(Expr::new(ExprBody::Condition { cond, then, els }, loc))),
+		|((cond, then, els), loc)| ok(Box::new((ExprBody::Condition { cond, then, els }, loc))),
 	)
 }];
 
@@ -244,7 +244,7 @@ parser![lambda_func_expr, Box<Expr>, {
 			),
 			si!(expr()),
 		))),
-		|((params, body), loc)| { ok(Box::new(Expr::new(ExprBody::LambdaFunction {
+		|((params, body), loc)| { ok(Box::new((ExprBody::LambdaFunction {
 			params: params.into_iter().map(|(name, default)| FunctionParam {
 				name: name.to_string(),
 				default,
@@ -270,12 +270,12 @@ parser![do_expr, Box<Expr>, {
 		))),
 		// do <id> <- <io>; <body> は <io>->then(<id> => <body>) の糖衣構文
 		// さらには then(<io>, <id> => <body>) の糖衣構文
-		|((id, io, body), loc)| { ok(Box::new(Expr::new(ExprBody::FunctionCall {
-			function: Box::new(Expr::new(ExprBody::Identifier("then".to_string()), loc.clone())),
+		|((id, io, body), loc)| { ok(Box::new((ExprBody::FunctionCall {
+			function: Box::new((ExprBody::Identifier("then".to_string()), loc.clone())),
 			args: Args {
 				unnamed: vec![
 					io,
-					Box::new(Expr::new(ExprBody::LambdaFunction {
+					Box::new((ExprBody::LambdaFunction {
 						params: vec![FunctionParam { name: id.to_string(), default: None }],
 						body,
 					}, loc.clone()))
@@ -301,8 +301,8 @@ parser![let_expr, Box<Expr>, {
 			si!(expr()),
 		))),
 		// <id> = <def>; <body> は (<id> => <body>)(<def>) の糖衣構文
-		|((id, def, body), loc)| { ok(Box::new(Expr::new(ExprBody::FunctionCall {
-			function: Box::new(Expr::new(ExprBody::LambdaFunction {
+		|((id, def, body), loc)| { ok(Box::new((ExprBody::FunctionCall {
+			function: Box::new((ExprBody::LambdaFunction {
 				params: vec![FunctionParam { name: id.to_string(), default: None }],
 				body,
 			}, loc.clone())),
@@ -326,7 +326,7 @@ parser![lambda_node_expr, Box<Expr>, {
 				si!(expr()),
 			)),
 		)),
-		|((input_param, body), loc)| { ok(Box::new(Expr::new(ExprBody::LambdaNode {
+		|((input_param, body), loc)| { ok(Box::new((ExprBody::LambdaNode {
 			input_param: input_param.to_string(),
 			body,
 		}, loc))) },
@@ -345,7 +345,7 @@ parser![parenthesized_expr, Box<Expr>, {
 		let (input, _) = si!(char(')'))(input) ?;
 
 		// 位置だけ開き括弧の位置に修正
-		let result = Box::new(Expr::new(inner.body, loc));
+		let result = Box::new((inner.0, loc));
 
 		Ok((input, result))
 	}
@@ -385,21 +385,21 @@ parser![postfix_expr, Box<Expr>, {
 			for p in postfixes {
 				let loc = p.1;
 				result = Box::new(match p.0 {
-					Postfix::Label(label) => Expr::new(ExprBody::Labeled { label, inner: result }, loc),
-					Postfix::FunctionCall(args) => Expr::new(ExprBody::FunctionCall { function: result, args }, loc),
+					Postfix::Label(label) => (ExprBody::Labeled { label, inner: result }, loc),
+					Postfix::FunctionCall(args) => (ExprBody::FunctionCall { function: result, args }, loc),
 					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
 					// 糖衣構文として、このレイヤーで吸収してしまう
-					Postfix::MethodCall { name, args } => Expr::new(ExprBody::FunctionCall {
+					Postfix::MethodCall { name, args } => (ExprBody::FunctionCall {
 						// TODO 位置は関数名の位置であるべきだと思われるが、-> の位置になっている
-						function: Box::new(Expr::new(ExprBody::Identifier(name), loc.clone())),
+						function: Box::new((ExprBody::Identifier(name), loc.clone())),
 						args: Args {
 							unnamed: [vec![result], args.unnamed].concat(),
 							named: args.named,
 						},
 					}, loc),
-					Postfix::PropertyAccess { name } => Expr::new(ExprBody::PropertyAccess { assoc: result, name }, loc),
-					Postfix::LabelFilter(specs) => Expr::new(ExprBody::LabelFilter { strukt: result, filter: specs }, loc),
-					Postfix::LabelPrefix(prefix) => Expr::new(ExprBody::LabelPrefix { strukt: result, prefix }, loc),
+					Postfix::PropertyAccess { name } => (ExprBody::PropertyAccess { assoc: result, name }, loc),
+					Postfix::LabelFilter(specs) => (ExprBody::LabelFilter { strukt: result, filter: specs }, loc),
+					Postfix::LabelPrefix(prefix) => (ExprBody::LabelPrefix { strukt: result, prefix }, loc),
 				})
 			}
 
@@ -492,9 +492,9 @@ parser![prefix_expr, Box<Expr>, {
 			for p in prefixes.into_iter().rev() {
 				let loc = p.1;
 				result = Box::new(match p.0 {
-					Prefix::Negate => Expr::new(ExprBody::Negate { arg: result }, loc),
-					Prefix::Plus => Expr::new(ExprBody::Plus { arg: result }, loc),
-					Prefix::Not => Expr::new(ExprBody::Not { arg: result }, loc),
+					Prefix::Negate => (ExprBody::Negate { arg: result }, loc),
+					Prefix::Plus => (ExprBody::Plus { arg: result }, loc),
+					Prefix::Not => (ExprBody::Not { arg: result }, loc),
 				})
 			}
 
@@ -600,7 +600,7 @@ macro_rules! binary_expr {
 				let result = match tail {
 					None => head,
 					Some(mut tail) => {
-						tail.drain(..).fold(head, |l, ((op, loc), r)| Box::new(Expr::new($make_expr(l, op, r), loc)))
+						tail.drain(..).fold(head, |l, ((op, loc), r)| Box::new(($make_expr(l, op, r), loc)))
 					}
 				};
 				Ok((input, result))
@@ -635,7 +635,7 @@ parser![named_entry, (String, Box<Expr>), {
 // 					))
 // 				)
 // 			),
-// 			|entries| ok(Box::new(Expr::new(ExprBody::AssocArrayLiteral(entries)))
+// 			|entries| ok(Box::new((ExprBody::AssocArrayLiteral(entries)))
 // 	)
 // }];
 
@@ -696,7 +696,7 @@ parser![node_with_args_expr, Box<Expr>, {
 		|((x, loc), args)| ok(match args {
 			None => x,
 			Some(args) => {
-				Box::new(Expr::new(ExprBody::NodeWithArgs {
+				Box::new((ExprBody::NodeWithArgs {
 					node_def: x,
 					args,
 				}, loc))

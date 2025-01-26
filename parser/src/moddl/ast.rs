@@ -48,7 +48,7 @@ pub enum LabelFilterSpec {
 	Rename(QualifiedLabel, QualifiedLabel),
 }
 
-pub type Expr = Located<ExprBody>;
+pub type Expr = (ExprBody, Location);
 
 #[derive(Clone, Debug, Serialize)]
 pub enum ExprBody {
