@@ -93,7 +93,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			result
 		},
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
-		ExprBody::Number(value) => Ok(ValueBody::Float(*value)),
+		ExprBody::Number(value) => Ok(ValueBody::Number(*value)),
 		ExprBody::TrackSet(tracks) => Ok(ValueBody::TrackSet(tracks.clone())),
 		ExprBody::FunctionCall { function, args } => {
 			let (function, _) = evaluate(function, vars, imports)?.as_function() ?;
@@ -144,7 +144,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			// 数値定数はラベルをつけると ModuleDef になるので、表現としては Float と ModuleDef::Constant の 2 通りある。
 			// すでにラベルがついている値にさらにラベルをつけるのは問題ない
 			let new_val = match inner_val {
-				ValueBody::Float(value) => ValueBody::ModuleDef(
+				ValueBody::Number(value) => ValueBody::ModuleDef(
 					ModuleDef::Constant { value, label: Some(label.clone()) },
 				),
 				ValueBody::NodeDef(factory) => ValueBody::ModuleDef(
@@ -382,8 +382,8 @@ fn evaluate_unary_structure<C: Calc + 'static>(
 
 	// ラベルのついていない定数はコンパイル時に計算する。
 	// ラベルがついた定数（ModuleDef になる）は演奏中の設定の対象になるため対象外
-	if let Some(arg_float) = arg_val.0.as_float() {
-		return Ok(ValueBody::Float(C::calc(&vec![arg_float])));
+	if let Some(arg_num) = arg_val.0.as_number() {
+		return Ok(ValueBody::Number(C::calc(&vec![arg_num])));
 	}
 
 	let (arg_str, _) = arg_val.as_module_def() ?;
@@ -446,8 +446,8 @@ fn evaluate_binary_structure_overloaded<C: Calc + 'static>(
 
 	// ラベルのついていない定数はコンパイル時に計算する。
 	// ラベルがついた定数（ModuleDef になる）は演奏中の設定の対象になるため対象外
-	if let (Some(l_float), Some(r_float)) = (l_body.as_float(), r_body.as_float()) {
-		return Ok(ValueBody::Float(C::calc(&vec![l_float, r_float])));
+	if let (Some(l_num), Some(r_num)) = (l_body.as_number(), r_body.as_number()) {
+		return Ok(ValueBody::Number(C::calc(&vec![l_num, r_num])));
 	}
 
 	let (l_str, _) = l_val.as_module_def() ?;

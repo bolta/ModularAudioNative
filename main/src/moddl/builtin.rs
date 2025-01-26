@@ -59,7 +59,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	// ビルトインは位置を持たない（dummy）
 	macro_rules! add_number {
 		($name: expr, $value: expr) => {
-			result.insert($name.to_string(), (ValueBody::Float($value), Location::dummy()));
+			result.insert($name.to_string(), (ValueBody::Number($value), Location::dummy()));
 		}
 	}
 	macro_rules! add_node_def_by_factory {
@@ -157,7 +157,7 @@ impl Function for Phase {
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let initial = match args.get(& "initial".to_string()) {
 			None => 0f32,
-			Some((initial_val, initial_loc)) => initial_val.as_float()
+			Some((initial_val, initial_loc)) => initial_val.as_number()
 					.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, initial_loc.clone())) ?,
 		};
 		let result = Rc::new(PhaseFactory::new(initial));
@@ -204,7 +204,7 @@ impl Function for Delay {
 	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (max_time_val, max_time_loc) = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
-		let max_time = max_time_val.as_float()
+		let max_time = max_time_val.as_number()
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, max_time_loc.clone())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
@@ -222,8 +222,8 @@ macro_rules! unary_math_func {
 			fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 				let (arg, arg_loc) = args.get(& "arg".to_string())
 						.ok_or_else(|| error(ErrorType::ArgMissing { name: "arg".to_string() }, call_loc.clone())) ?;
-				if let Some(val) = arg.as_float() {
-					Ok((ValueBody::Float(<$calc_type>::calc(&vec![val])), call_loc))
+				if let Some(val) = arg.as_number() {
+					Ok((ValueBody::Number(<$calc_type>::calc(&vec![val])), call_loc))
 		
 				} else if let Some(val) = arg.as_module_def() {
 					Ok((ValueBody::ModuleDef(ModuleDef::Calc {
@@ -265,7 +265,7 @@ impl Function for At {
 	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "index".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
-		let (index, _) = get_required_arg(args, "index", &call_loc)?.as_float() ?;
+		let (index, _) = get_required_arg(args, "index", &call_loc)?.as_number() ?;
 
 		source.get(index as usize).map(|elem| elem.clone()).ok_or_else(|| error(ErrorType::IndexOutOfBounds, call_loc.clone()))
 	}
@@ -380,7 +380,7 @@ impl Function for Type {
 		let (arg, _) = get_required_arg(args, "arg", &call_loc)?;
 
 		let type_id = match arg {
-			ValueBody::Float(_) => "Number",
+			ValueBody::Number(_) => "Number",
 			ValueBody::WaveformIndex(_) => "Waveform",
 			ValueBody::TrackSet(_) => "TrackSet",
 			ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",

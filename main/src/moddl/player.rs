@@ -316,7 +316,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 
 		let body = value.0;
 		match body {
-			ValueBody::Float(f) => Ok(f),
+			ValueBody::Number(f) => Ok(f),
 			ValueBody::WaveformIndex(i) => Ok(i.0 as f32),
 			_ => Err(error(ErrorType::TypeMismatchAny { expected: vec![
 				ValueType::Number,
@@ -457,7 +457,7 @@ fn build_instrument(
 					// 変更前のコード↑では NodeDefNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
 					arg_val.1.as_module_def().map(|v| v.0)?
 				} else if let Some(default) = default {
-					ValueBody::Float(default).as_module_def().unwrap()
+					ValueBody::Number(default).as_module_def().unwrap()
 				} else {
 					// 必要な引数が与えられていない
 					Err(error(ErrorType::NodeDefNotFound, Location::dummy())) ?

@@ -31,7 +31,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 		Statement::Construction { name, args } => {
 			match name.as_str() {
 				"tempo" => {
-					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
+					(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
 				},
 				"instrument" => {
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
@@ -64,7 +64,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"grooveCycle" => {
-					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0 as i32;
+					(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0 as i32;
 				},
 				"groove" => {
 					let tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_track_set()?.0;
@@ -86,7 +86,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"let" => {
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
 					let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
 					pctx.vars.borrow_mut().set(&name, value) ?;
 				}
@@ -98,7 +98,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					}
 				}
 				"waveform" => {
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
 					let (value, value_loc) = evaluate_and_perform_arg(&args, 1, &pctx.vars, stmt_loc, imports) ?;
 					let waveform = if let Some(path) = value.as_string() {
 						// TODO 読み込み失敗時のエラー処理
@@ -116,12 +116,12 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 					pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 				}
 				"ticksPerBar" => {
-					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = value as i32;
 				}
 				"ticksPerBeat" => {
-					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_float()?.0;
+					let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
 					// TODO さらに、正の整数であることを検証
 					(*pctx).ticks_per_bar = 4 * value as i32;
 				}
@@ -144,7 +144,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 						return Err(error(ErrorType::OptionNotAllowedHere, stmt_loc.clone()));
 					}
 
-					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_identifier_literal()?.0;
+					let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
 					match name.as_str() {
 						"defaultLabels" => {
 							pctx.use_default_labels = true;
@@ -189,12 +189,12 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 
 	let data_values = get_optional_value("data").map(|value| value.as_array()).transpose()?.map(|v| v.0);
 	let path = get_optional_value("path").map(|value| value.as_string()).transpose()?.map(|v| v.0);
-	let sample_rate = get_optional_value("sampleRate").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let sample_rate = get_optional_value("sampleRate").map(|value| value.as_number()).transpose()?.map(|v| v.0);
 
-	let original_freq = get_optional_value("originalFreq").map(|value| value.as_float()).transpose()?.map(|v| v.0);
-	let start_offset = get_optional_value("startOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
-	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
-	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_float()).transpose()?.map(|v| v.0);
+	let original_freq = get_optional_value("originalFreq").map(|value| value.as_number()).transpose()?.map(|v| v.0);
+	let start_offset = get_optional_value("startOffset").map(|value| value.as_number()).transpose()?.map(|v| v.0);
+	let mut end_offset =  get_optional_value("endOffset").map(|value| value.as_number()).transpose()?.map(|v| v.0);
+	let mut loop_offset =  get_optional_value("loopOffset").map(|value| value.as_number()).transpose()?.map(|v| v.0);
 
 	match (data_values, path, sample_rate) {
 		(Some(data_values), None, Some(sample_rate)) => {
@@ -202,7 +202,7 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 			let channels = 1;
 			let mut data = vec![];
 			for v in data_values {
-				if let Ok((f, _)) = v.as_float() {
+				if let Ok((f, _)) = v.as_number() {
 					data.push(f);
 				} else if let Ok((looop, _)) = v.as_array() {
 					match loop_offset {
@@ -210,7 +210,7 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 						None => { loop_offset = Some(data.len() as f32); },
 					}
 					for v in looop {
-						let (f, _) = v.as_float() ?;
+						let (f, _) = v.as_number() ?;
 						data.push(f);
 					}
 					match end_offset {

@@ -22,7 +22,7 @@ impl Rand {
 }
 impl Io for Rand {
 	fn perform(&mut self, loc: &Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
-		Ok((ValueBody::Float(self.gen.gen()), loc.clone()))
+		Ok((ValueBody::Number(self.gen.gen()), loc.clone()))
 	}
 }
 
