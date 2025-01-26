@@ -35,7 +35,7 @@ parser![statement_ending, (), {
 }];
 
 parser![float_literal, Box<Expr>, {
-	map_res(loc(float()), |(v, loc)| ok(Box::new((ExprBody::FloatLiteral(v), loc))))
+	map_res(loc(float()), |(v, loc)| ok(Box::new((ExprBody::Number(v), loc))))
 }];
 
 parser![track_set, Vec<String>, {
@@ -44,7 +44,7 @@ parser![track_set, Vec<String>, {
 }];
 parser![track_set_literal, Box<Expr>, {
 	map_res(preceded(si!(char('^')), loc(track_set())),
-			|(tracks, loc)| { ok(Box::new((ExprBody::TrackSetLiteral(tracks), loc))) })
+			|(tracks, loc)| { ok(Box::new((ExprBody::TrackSet(tracks), loc))) })
 }];
 parser![identifier_literal, Box<Expr>, {
 	map_res(si!(preceded(char(':'), loc(identifier()))),
@@ -53,7 +53,7 @@ parser![identifier_literal, Box<Expr>, {
 parser![string_literal, Box<Expr>, {
 	// TODO " などをエスケープできるようにする
 	map_res(si!(delimited(char('"'), loc(re_find(re(r#"[^"]*"#))), char('"'))),
-			|(str, loc)| { ok(Box::new((ExprBody::StringLiteral(str.to_string()), loc))) })
+			|(str, loc)| { ok(Box::new((ExprBody::String(str.to_string()), loc))) })
 }];
 parser![array_literal, Box<Expr>, {
 	map_res(
@@ -65,7 +65,7 @@ parser![array_literal, Box<Expr>, {
 			),
 			si!(char(']')),
 		)),
-		|(elems, loc)| { ok(Box::new((ExprBody::ArrayLiteral(elems), loc))) },
+		|(elems, loc)| { ok(Box::new((ExprBody::Array(elems), loc))) },
 	)
 }];
 
@@ -125,7 +125,7 @@ fn translate_data_array(elems: &Vec<(DataArrayElement, Location)>, outer_loc: Lo
 		let elem_loc = &elem.1;
 		match &elem.0 {
 			DataArrayElement::Value(v) => {
-				result.push(Box::new((ExprBody::FloatLiteral((sign * v) as f32), elem_loc.clone())));
+				result.push(Box::new((ExprBody::Number((sign * v) as f32), elem_loc.clone())));
 			},
 			DataArrayElement::Sign(s) => {
 				sign = *s;
@@ -136,7 +136,7 @@ fn translate_data_array(elems: &Vec<(DataArrayElement, Location)>, outer_loc: Lo
 		}
 	}
 
-	Box::new((ExprBody::ArrayLiteral(result), outer_loc))
+	Box::new((ExprBody::Array(result), outer_loc))
 }
 
 fn data_array_element_nonloop_unsigned<'a>(digits: i32) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, DataArrayElement, nom::error::VerboseError<Span<'a>>> {
@@ -190,7 +190,7 @@ parser![assoc_literal, Box<Expr>, {
 			ss!(opt(assoc_entries())),
 			si!(char('}')),
 		)),
-		|(elems, loc)| { ok(Box::new((ExprBody::AssocLiteral(elems.unwrap_or_else(|| Assoc::new())), loc))) },
+		|(elems, loc)| { ok(Box::new((ExprBody::Assoc(elems.unwrap_or_else(|| Assoc::new())), loc))) },
 	)
 }];
 parser![identifier_expr, Box<Expr>, {
@@ -244,7 +244,7 @@ parser![lambda_func_expr, Box<Expr>, {
 			),
 			si!(expr()),
 		))),
-		|((params, body), loc)| { ok(Box::new((ExprBody::LambdaFunction {
+		|((params, body), loc)| { ok(Box::new((ExprBody::Function {
 			params: params.into_iter().map(|(name, default)| FunctionParam {
 				name: name.to_string(),
 				default,
@@ -275,7 +275,7 @@ parser![do_expr, Box<Expr>, {
 			args: Args {
 				unnamed: vec![
 					io,
-					Box::new((ExprBody::LambdaFunction {
+					Box::new((ExprBody::Function {
 						params: vec![FunctionParam { name: id.to_string(), default: None }],
 						body,
 					}, loc.clone()))
@@ -302,7 +302,7 @@ parser![let_expr, Box<Expr>, {
 		))),
 		// <id> = <def>; <body> は (<id> => <body>)(<def>) の糖衣構文
 		|((id, def, body), loc)| { ok(Box::new((ExprBody::FunctionCall {
-			function: Box::new((ExprBody::LambdaFunction {
+			function: Box::new((ExprBody::Function {
 				params: vec![FunctionParam { name: id.to_string(), default: None }],
 				body,
 			}, loc.clone())),
@@ -326,7 +326,7 @@ parser![lambda_node_expr, Box<Expr>, {
 				si!(expr()),
 			)),
 		)),
-		|((input_param, body), loc)| { ok(Box::new((ExprBody::LambdaNode {
+		|((input_param, body), loc)| { ok(Box::new((ExprBody::InputRef {
 			input_param: input_param.to_string(),
 			body,
 		}, loc))) },

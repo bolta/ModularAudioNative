@@ -48,8 +48,8 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			Ok(val.clone())
 		},
 		ExprBody::QuotedIdentifier(id) => Ok(ValueBody::QuotedIdentifier(id.clone())),
-		ExprBody::StringLiteral(content) => Ok(ValueBody::String(content.clone())),
-		ExprBody::ArrayLiteral(content) => {
+		ExprBody::String(content) => Ok(ValueBody::String(content.clone())),
+		ExprBody::Array(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = vec![];
 			for elem in content {
@@ -57,7 +57,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			}
 			Ok(ValueBody::Array(result))
 		},
-		ExprBody::AssocLiteral(content) => {
+		ExprBody::Assoc(content) => {
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
 			let mut result = HashMap::<String, Value>::with_capacity(content.len());
 			for (key, value_expr) in content {
@@ -66,7 +66,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			Ok(ValueBody::Assoc(result))
 		},
 		ExprBody::Condition { cond, then, els } => evaluate_conditional_expr(cond, then, els, vars, imports),
-		ExprBody::LambdaFunction { params, body } => {
+		ExprBody::Function { params, body } => {
 			let mut param_values: Vec<Param> = vec![];
 			params.iter().try_for_each(|param| {
 				param_values.push(Param {
@@ -82,7 +82,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			// 何とかして参照した方が効率的だが
 			Ok(ValueBody::Function(Rc::new(LambdaFunction::new(param_values, *body.clone(), vars))))
 		}
-		ExprBody::LambdaNode { input_param, body } => {
+		ExprBody::InputRef { input_param, body } => {
 			let vars = Scope::child_of(vars.clone());
 			vars.borrow_mut().set(input_param,
 					(ValueBody::ModuleDef(ModuleDef::Placeholder { name: input_param.clone() }), expr_loc.clone())) ?;
@@ -93,10 +93,8 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 			result
 		},
 		// Expr::ModuleParamExpr { module_def, label: String, ctor_params: AssocArray, signal_params: AssocArray } => {}
-		ExprBody::FloatLiteral(value) => Ok(ValueBody::Float(*value)),
-		ExprBody::TrackSetLiteral(tracks) => Ok(ValueBody::TrackSet(tracks.clone())),
-		// Expr::MmlLiteral(String) => {}
-		// Expr::AssocArrayLiteral(AssocArray) => {}
+		ExprBody::Number(value) => Ok(ValueBody::Float(*value)),
+		ExprBody::TrackSet(tracks) => Ok(ValueBody::TrackSet(tracks.clone())),
 		ExprBody::FunctionCall { function, args } => {
 			let (function, _) = evaluate(function, vars, imports)?.as_function() ?;
 
@@ -134,8 +132,6 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 				args: value_args,
 			}))
 		},
-
-		ExprBody::MmlLiteral(_) => unimplemented!(),
 
 		ExprBody::Labeled { label, inner } => {
 			let (inner_val, _) = evaluate(inner, vars, imports) ?;
