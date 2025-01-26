@@ -21,6 +21,7 @@ use nom_locate::{
 	position,
 };
 use regex::Regex;
+use serde::Serialize;
 
 pub fn ok<T>(value: T) -> Result<T, ()> { Ok::<_, ()>(value) }
 
@@ -50,7 +51,7 @@ pub fn re_find<'a>(regex: Regex) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, &
 }
 
 pub type Span<'a> = LocatedSpan<&'a str, Rc<PathBuf>>;
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Located<T> {
 	pub body: T,
 	pub loc: Location, // Option にするかも
@@ -63,7 +64,7 @@ impl <T> Located<T> {
 
 /// LocatedSpan からエラーメッセージの表示に過不足のない情報だけ抽出したもの
 /// （取り回しのためソースの寿命に依存しない形で）
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Location {
 	pub path: Rc<PathBuf>,
 	/// 行番号（1 始まり）

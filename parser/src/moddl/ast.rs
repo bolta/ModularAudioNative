@@ -1,11 +1,17 @@
-use crate::common::{Location, Located};
+use serde::Serialize;
 
-#[derive(Debug)]
+use crate::common::Location;
+
+pub fn to_json(ser: &impl Serialize) -> String {
+	serde_json::to_string(ser).unwrap()
+}
+
+#[derive(Debug, Serialize)]
 pub struct CompilationUnit {
 	pub statements: Vec<(Statement, Location)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Statement {
 	Construction { name: String, args: Vec<Expr> },
 	Mml { tracks: Vec<String>, mml: String },
@@ -13,7 +19,7 @@ pub enum Statement {
 
 pub type Assoc = Vec<(String, Box<Expr>)>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Args {
 	pub unnamed: Vec<Box<Expr>>,
 	pub named: Assoc,
@@ -24,17 +30,17 @@ impl Args {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct FunctionParam {
 	pub name: String,
 	pub default: Option<Box<Expr>>,
 }
 
 /// foo.bar.baz みたいな . でつながった識別子
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct QualifiedLabel(pub String);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum LabelFilterSpec {
 	AllowAll,
 	Allow(QualifiedLabel),
@@ -44,7 +50,7 @@ pub enum LabelFilterSpec {
 
 pub type Expr = Located<ExprBody>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ExprBody {
 	Connect { lhs: Box<Expr>, rhs: Box<Expr> },
 	Power { lhs: Box<Expr>, rhs: Box<Expr> },
