@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::{Path, PathBuf}, rc::Rc};
 
-use parser::common::Location;
+use parser::{common::Location, moddl::ast::CompilationUnit};
 
 use crate::wave::waveform_host::WaveformHost;
 
@@ -9,12 +9,14 @@ use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor:
 pub struct ImportCache<'a> {
 	imports: HashMap<PathBuf, Value>,
 	pub waveforms: &'a mut WaveformHost,
+	asts: Option<HashMap<PathBuf, CompilationUnit>>,
 }
 impl <'a> ImportCache<'a> {
-	pub fn new(waveforms: &'a mut WaveformHost) -> Self {
+	pub fn new(waveforms: &'a mut WaveformHost, collect_asts: bool) -> Self {
 		Self {
 			imports: HashMap::new(),
 			waveforms,
+			asts: if collect_asts { Some(HashMap::new()) } else { None },
 		}
 	}
 
@@ -37,6 +39,13 @@ impl <'a> ImportCache<'a> {
 			}
 		}
 	}
+
+	pub fn add_ast(&mut self, moddl_path: &Path, ast: &CompilationUnit) {
+		if let Some(ref mut asts) = self.asts {
+			asts.insert(moddl_path.to_path_buf(), ast.clone());
+		}
+	}
+	pub fn asts(&self) -> &Option<HashMap<PathBuf, CompilationUnit>> { &self.asts }
 }
 
 fn guard_labels((val, loc): Value) -> Value {

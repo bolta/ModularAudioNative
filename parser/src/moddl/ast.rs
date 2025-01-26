@@ -6,12 +6,12 @@ pub fn to_json(ser: &impl Serialize) -> String {
 	serde_json::to_string(ser).unwrap()
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CompilationUnit {
 	pub statements: Vec<(Statement, Location)>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Statement {
 	Construction { name: String, args: Vec<Expr> },
 	Mml { tracks: Vec<String>, mml: String },

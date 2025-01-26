@@ -41,13 +41,19 @@ struct CliArgs {
 	#[arg(help = "path to moddl file to play")]
 	moddl_path: PathBuf,
 
-	#[arg(long, short('O'), help = "output type")]
+	#[arg(long, help = "dumps AST of source file in JSON")]
+	dump_ast: bool,
+
+	#[arg(long, help = "omits building machines and playing song")]
+	no_play: bool,
+
+	#[arg(long, short('O'), help = "specifies output type")]
 	output: Option<CliOutput>,
 
-	#[arg(long, short('o'), help = "output file path")]
+	#[arg(long, short('o'), help = "specifies output file path")]
 	output_file: Option<PathBuf>,
 
-	#[arg(long, short('S'), help = "stack size for moddl processor")]
+	#[arg(long, short('S'), help = "specifies stack size for moddl processor")]
 	stack_size: Option<String>,
 }
 
@@ -83,6 +89,8 @@ fn main() {
 
 	let player_opts = PlayerOptions {
 		moddl_path: opts.moddl_path,
+		dump_ast: opts.dump_ast,
+		no_play: opts.no_play,
 		output: match opts.output_file {
 			Some(path) => PlayerOutput::Wav { path },
 			None => match opts.output {

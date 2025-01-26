@@ -52,10 +52,14 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl = read_file(moddl_path) ?;
 	let sample_rate = 44100; // TODO 値を外から渡せるように
 	let mut waveforms = WaveformHost::new();
-	let mut imports = ImportCache::new(&mut waveforms);
+	let mut imports = ImportCache::new(&mut waveforms, options.dump_ast);
 	let root_vars = Scope::root(builtin_vars(sample_rate, &mut imports) ?);
 	let mut pctx = process_statements(moddl.as_str(), root_vars, moddl_path, &mut imports) ?;
-	
+
+	if let Some(asts) = imports.asts() {
+		println!("{}", serde_json::to_string(asts).unwrap());
+	}
+
 	// TODO シングルマシン（シングルスレッド）モードは現状これだけだとだめ（Tick が重複してすごい速さで演奏される）
 	let mut nodes = AllNodes::new(false);
 
@@ -113,6 +117,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			None => { },
 		};
 	}
+
+	if options.no_play { return Ok(()); }
 
 	let mut terminal_tracks: Vec<&String> = pctx.terminal_tracks.iter().collect();
 	terminal_tracks.sort_unstable();
@@ -716,7 +722,7 @@ impl AllNodes {
 
 		self.machines.push(MachineSpec { name, nodes: NodeHost::new() });
 		let submachine_idx = MachineIndex(self.machines.len() - 1);
-		println!("machines[{}]: {}", submachine_idx.0, & self.machines[submachine_idx.0].name);
+		eprintln!("machines[{}]: {}", submachine_idx.0, & self.machines[submachine_idx.0].name);
 
 		submachine_idx
 	}

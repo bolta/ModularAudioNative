@@ -10,16 +10,17 @@ use parser::{
 };
 
 use std::{
-	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
+	cell::RefCell, collections::hash_map::HashMap, path::{Path, PathBuf}, rc::Rc
 };
 
 pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
 	let mut pctx = PlayerContext::init(moddl_path, root_scope);
 
-	let (_, CompilationUnit { statements }) = compilation_unit()(Span::new_extra(moddl, Rc::new(moddl_path.to_path_buf())))
+	let (_, unit) = compilation_unit()(Span::new_extra(moddl, Rc::new(moddl_path.to_path_buf())))
 	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
+	imports.add_ast(moddl_path, &unit);
 
-	for stmt in &statements {
+	for stmt in &unit.statements {
 		process_statement(&stmt, &mut pctx, imports) ?;
 	}
 
