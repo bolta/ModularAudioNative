@@ -118,6 +118,9 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!(Round::name(), Round { });
 	add_function!(Trunc::name(), Trunc { });
 
+	// collection
+	add_function!("count", Count { });
+
 	// array
 	add_function!("at", At { });
 	// concat は flat を使って ModDL で実装する
@@ -346,6 +349,26 @@ impl Function for Reduce {
 			]), vars, reducer_loc.clone(), imports)?.0;
 		}
 		Ok((result, call_loc))
+	}
+}
+
+pub struct Count { }
+impl Function for Count {
+	fn signature(&self) -> FunctionSignature { vec!["collection".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (arg, arg_loc) = get_required_arg(args, "collection", &call_loc)?;
+
+		let result = if let Some(array) = arg.as_array() {
+			array.len()
+		} else if let Some(assoc) = arg.as_assoc() {
+			assoc.len()
+		} else {
+			return Err(error(ErrorType::TypeMismatchAny {
+				expected: vec![ValueType::Array, ValueType::Assoc],
+			}, arg_loc.clone()));
+		} as f32;
+
+		Ok((ValueBody::Number(result), call_loc))
 	}
 }
 

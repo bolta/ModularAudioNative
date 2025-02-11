@@ -1,11 +1,6 @@
-// TODO 無駄な記述が多いのでなんとかしたい
-// __Native から一部または全部をローカル変数にできればいいのだが
-@let :map, __Native.map
-@let :flat, __Native.flat
-@let :reduce, __Native.reduce
-@let :type, __Native.type
+@letAll __Native
 
-// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
+// TODO Type って大文字？
 @let :Type, {
 	number: "Number",
 	waveform: "Waveform",
@@ -20,12 +15,14 @@
 	io: "Io",
 }
 
+/**
+ * 手書き波形の中のループ（入れ子配列）を（先頭の 1 つ以外は意味ないが、全て）抽出する。
+ * TODO 先頭の 1 つだけか null を返す方がよい。仕様としてまだよくないので公開はしない
+ */
+@let :waveLoops, wave -> wave~filter(e -> e~type() == Type.array)
+
 // ひとまずネイティブ実装の値は全てグローバルに置く
 @export __Native + {
-	// map: map,
-	// flat: flat,
-	// reduce: reduce,
-
 	flatMap: (source, mapper) -> source~map(mapper)~flat(),
 	sum: source -> source~reduce(0, (acc, elem) -> acc + elem),
 
@@ -34,6 +31,15 @@
 			then e~map(mapper)
 			else mapper(e)
 	),
+
+	/**
+	 * 手書き波形にループがあるとき、その周期の長さをサンプル単位で求める。ループより手前のサンプルは無視する。
+	 * ループがない場合は IndexOutOfBounds エラーになるので、
+	 * ループがあることが保証されない場合は事前に waveIsLooped でチェックすること
+	 */
+	waveLoopLength: wave -> wave~waveLoops()~at(0)~count(),
+
+	waveIsLooped: wave -> wave~waveLoops()~count() > 0,
 
 	Type: Type,
 }
