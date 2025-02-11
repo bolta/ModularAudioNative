@@ -106,11 +106,17 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_number!("pi", std::f32::consts::PI);
 	add_number!("tau", std::f32::consts::TAU);
 	add_number!("e", std::f32::consts::E);
+	add_function!(Sqrt::name(), Sqrt { });
+	add_function!(Cbrt::name(), Cbrt { });
 	add_function!(Log::name(), Log { });
 	add_function!(Log10::name(), Log10 { });
 	add_function!(Sin::name(), Sin { });
 	add_function!(Cos::name(), Cos { });
 	add_function!(Tan::name(), Tan { });
+	add_function!(Asin::name(), Asin { });
+	add_function!(Acos::name(), Acos { });
+	add_function!(Atan::name(), Atan { });
+	// TODO atan2 を追加
 	add_function!(Abs::name(), Abs { });
 	add_function!(Signum::name(), Signum { });
 	add_function!(Floor::name(), Floor { });
@@ -248,11 +254,16 @@ macro_rules! unary_math_func {
 	}
 }
 
+unary_math_func!(Sqrt, SqrtCalc);
+unary_math_func!(Cbrt, CbrtCalc);
 unary_math_func!(Log, LogCalc);
 unary_math_func!(Log10, Log10Calc);
 unary_math_func!(Sin, SinCalc);
 unary_math_func!(Cos, CosCalc);
 unary_math_func!(Tan, TanCalc);
+unary_math_func!(Asin, AsinCalc);
+unary_math_func!(Acos, AcosCalc);
+unary_math_func!(Atan, AtanCalc);
 unary_math_func!(Abs, AbsCalc);
 unary_math_func!(Signum, SignumCalc);
 unary_math_func!(Floor, FloorCalc);

@@ -74,11 +74,17 @@ unary_calc!(NotCalc, "!", not);
  ////
 //// functions
 
+unary_calc!(SqrtCalc, "sqrt", |arg: Sample| arg.sqrt());
+unary_calc!(CbrtCalc, "cbrt", |arg: Sample| arg.cbrt());
 unary_calc!(LogCalc, "log", |arg: Sample| arg.ln());
 unary_calc!(Log10Calc, "log10", |arg: Sample| arg.log(10f32));
 unary_calc!(SinCalc, "sin", |arg: Sample| arg.sin());
 unary_calc!(CosCalc, "cos", |arg: Sample| arg.cos());
 unary_calc!(TanCalc, "tan", |arg: Sample| arg.tan());
+unary_calc!(AsinCalc, "asin", |arg: Sample| arg.asin());
+unary_calc!(AcosCalc, "acos", |arg: Sample| arg.acos());
+unary_calc!(AtanCalc, "atan", |arg: Sample| arg.atan());
+binary_calc!(Atan2Calc, "atan2", |y: Sample, x: Sample| y.atan2(x));
 unary_calc!(AbsCalc, "abs", |arg: Sample| arg.abs());
 unary_calc!(SignumCalc, "signum", |arg: Sample| arg.signum());
 unary_calc!(FloorCalc, "floor", |arg: Sample| arg.floor());
