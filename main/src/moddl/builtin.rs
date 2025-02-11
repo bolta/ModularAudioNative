@@ -204,9 +204,9 @@ impl Delay {
 	pub fn new(sample_rate: i32) -> Self { Self { sample_rate } }
 }
 impl Function for Delay {
-	fn signature(&self) -> FunctionSignature { vec!["max_time".to_string()] }
+	fn signature(&self) -> FunctionSignature { vec!["maxTime".to_string()] }
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
-		let (max_time_val, max_time_loc) = args.get(& "max_time".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "max_time".to_string() }, Location::dummy())) ?;
+		let (max_time_val, max_time_loc) = args.get(& "maxTime".to_string()).ok_or_else(|| error(ErrorType::ArgMissing { name: "maxTime".to_string() }, Location::dummy())) ?;
 		let max_time = max_time_val.as_number()
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, max_time_loc.clone())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
