@@ -3,29 +3,37 @@
 @let :map, __Native.map
 @let :flat, __Native.flat
 @let :reduce, __Native.reduce
+@let :type, __Native.type
+
+// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
+@let :Type, {
+	number: "Number",
+	waveform: "Waveform",
+	trackSet: "TrackSet",
+	quotedIdentifier: "QuotedIdentifier",
+	string: "String",
+	array: "Array",
+	assoc: "Assoc",
+	moduleDef: "ModuleDef",
+	nodeDef: "NodeDef",
+	function: "Function",
+	io: "Io",
+}
 
 // ひとまずネイティブ実装の値は全てグローバルに置く
 @export __Native + {
-	map: map,
-	flat: flat,
-	reduce: reduce,
+	// map: map,
+	// flat: flat,
+	// reduce: reduce,
 
 	flatMap: (source, mapper) -> source~map(mapper)~flat(),
 	sum: source -> source~reduce(0, (acc, elem) -> acc + elem),
 
-	// TODO パッケージ扱いなので PascalCase にするが、単に連想がここにあるのとどう違うのか、という気もする…
-	Type: {
-		// 型名は PascalCase なので、キーもそのまま PascalCase にしたが、こういうイレギュラーなのもよくないだろうか
-		number: "Number",
-		waveform: "Waveform",
-		trackSet: "TrackSet",
-		quotedIdentifier: "QuotedIdentifier",
-		string: "String",
-		array: "Array",
-		assoc: "Assoc",
-		moduleDef: "ModuleDef",
-		nodeDef: "NodeDef",
-		function: "Function",
-		io: "Io",
- 	},
+	waveMap: (wave, mapper) -> wave~map(e ->
+		if e~type() == Type.array
+			then e~map(mapper)
+			else mapper(e)
+	),
+
+	Type: Type,
 }

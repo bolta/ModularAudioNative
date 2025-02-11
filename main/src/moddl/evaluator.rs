@@ -32,8 +32,8 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 		ExprBody::Subtract { lhs, rhs } => evaluate_binary_structure::<SubCalc>(lhs, rhs, vars, imports),
 		ExprBody::Less { lhs, rhs } => evaluate_binary_structure::<LtCalc>(lhs, rhs, vars, imports),
 		ExprBody::LessOrEqual { lhs, rhs } => evaluate_binary_structure::<LeCalc>(lhs, rhs, vars, imports),
-		ExprBody::Equal { lhs, rhs } => evaluate_binary_structure::<EqCalc>(lhs, rhs, vars, imports),
-		ExprBody::NotEqual { lhs, rhs } => evaluate_binary_structure::<NeCalc>(lhs, rhs, vars, imports),
+		ExprBody::Equal { lhs, rhs } => evaluate_binary_structure_overloaded::<EqCalc>(lhs, rhs, vars, imports, overload_eq),
+		ExprBody::NotEqual { lhs, rhs } => evaluate_binary_structure_overloaded::<NeCalc>(lhs, rhs, vars, imports, overload_ne),
 		ExprBody::Greater { lhs, rhs } => evaluate_binary_structure::<GtCalc>(lhs, rhs, vars, imports),
 		ExprBody::GreaterOrEqual { lhs, rhs } => evaluate_binary_structure::<GeCalc>(lhs, rhs, vars, imports),
 		ExprBody::And { lhs, rhs } => evaluate_binary_structure::<AndCalc>(lhs, rhs, vars, imports),
@@ -419,6 +419,27 @@ fn overload_add(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBod
 		},
 		_ => None,
 	}
+}
+
+fn overload_eq(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
+	match (lhs, rhs) {
+		// 他にもあれば追加する。ただし必ず boolean の Number 値を返すこと
+		(ValueBody::String(lhs), ValueBody::String(rhs)) => {
+			Some(Ok(ValueBody::Number(bool_to_sample(lhs == rhs))))
+		},
+		_ => None,
+	}
+}
+fn overload_ne(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
+	// == のオーバーロードがある場合、常にその否定を返す
+	overload_eq(lhs, rhs).map(|res|
+		res.map(|val|
+			match val {
+				ValueBody::Number(b) => ValueBody::Number(not(b)),
+				_ => unreachable!("overload_eq is expected to return a boolean value"),
+			}
+		)
+	)
 }
 
 fn evaluate_binary_structure<C: Calc + 'static>(

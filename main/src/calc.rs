@@ -10,8 +10,9 @@ pub trait Calc {
 }
 
 // TODO 定数を ModDL と共通化
-fn bool_to_sample(b: bool) -> Sample { if b { 1f32 } else { -1f32 } }
+pub fn bool_to_sample(b: bool) -> Sample { if b { 1f32 } else { -1f32 } }
 pub fn sample_to_bool(s: Sample) -> bool { s > 0f32 }
+pub fn not(s: Sample) -> Sample { bool_to_sample(! sample_to_bool(s)) }
 fn bool_binary(lhs: Sample, rhs: Sample, op: fn (lhs: bool, rhs: bool) -> bool) -> Sample {
 	bool_to_sample(op(sample_to_bool(lhs), sample_to_bool(rhs)))
 }
@@ -68,7 +69,7 @@ binary_calc!(GeCalc, ">=", |lhs, rhs| bool_to_sample(lhs >= rhs));
 
 binary_calc!(AndCalc, "&&", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs && rhs));
 binary_calc!(OrCalc, "||", |lhs, rhs| bool_binary(lhs, rhs, |lhs, rhs| lhs || rhs));
-unary_calc!(NotCalc, "!", |arg: Sample| bool_to_sample(! sample_to_bool(arg)));
+unary_calc!(NotCalc, "!", not);
 
  ////
 //// functions
