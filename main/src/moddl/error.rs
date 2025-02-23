@@ -46,7 +46,7 @@ pub enum ErrorType {
 	IndexOutOfBounds,
 	ExportDuplicate,
 	ExportNotFound,
-	LabelFilterInconsistent,
+	LabelTransformerInconsistent,
 	BadWaveform, // こういうの一つ一つ専用エラーにするのってどうなんだろう…
 
 	TickUnderflow { length: Length },

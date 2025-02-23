@@ -310,7 +310,7 @@ fn build_label_filter(specs: &Vec<LabelFilterSpec>, loc: &Location) -> ModdlResu
 }
 
 fn validate_label_filter_specs(specs: &Vec<LabelFilterSpec>, loc: &Location) -> ModdlResult<()> {
-	let make_error = || Err(error(ErrorType::LabelFilterInconsistent, loc.clone()));
+	let make_error = || Err(error(ErrorType::LabelTransformerInconsistent, loc.clone()));
 
 	/// これらのモードのうち、どれかに該当すれば OK（判定において Rename は関係ないので無視する）
 	enum Mode {
