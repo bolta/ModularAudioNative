@@ -36,7 +36,6 @@ impl Node for NesFreq {
 		// 周波数を一旦 2A03 のレジスタの値に変換し、また周波数に戻すことで、周波数分解能を 2A03 相当にする
 		// https://wikiwiki.jp/mck/周波数とレジスタの関係
 		let ratio = if self.triangle { 2f32 } else { 1f32 };
-		// var r = Math.Min(Math.Max(0, Math.Round(1789772.7272f / f / 16)), 2047);
 		let register = 0f32.max((1789772.7272f32 / (freq * ratio) / 16f32).round()).min(2047f32);
 		let result = 1789772.7272f32 / register / 16f32 / ratio;
 
