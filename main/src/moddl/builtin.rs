@@ -133,6 +133,9 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	// add_function!("concat", Concat { });
 	add_function!("flat", Flat { });
 
+	// assoc
+	add_function!("keys", Keys { });
+
 	// type
 	add_function!("type", Type { });
 
@@ -380,6 +383,17 @@ impl Function for Count {
 		} as f32;
 
 		Ok((ValueBody::Number(result), call_loc))
+	}
+}
+
+pub struct Keys { }
+impl Function for Keys {
+	fn signature(&self) -> FunctionSignature { vec!["assoc".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (assoc, assoc_loc) = get_required_arg(args, "assoc", &call_loc)?.as_assoc() ?;
+
+		let content = assoc.keys().map(|key| (ValueBody::String(key.clone()), assoc_loc.clone())).collect();
+		Ok((ValueBody::Array(content), call_loc))
 	}
 }
 
