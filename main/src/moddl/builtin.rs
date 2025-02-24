@@ -135,6 +135,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	// assoc
 	add_function!("keys", Keys { });
+	add_function!("containsKey", ContainsKey { });
 
 	// type
 	add_function!("type", Type { });
@@ -394,6 +395,19 @@ impl Function for Keys {
 
 		let content = assoc.keys().map(|key| (ValueBody::String(key.clone()), assoc_loc.clone())).collect();
 		Ok((ValueBody::Array(content), call_loc))
+	}
+}
+
+pub struct ContainsKey { }
+impl Function for ContainsKey {
+	fn signature(&self) -> FunctionSignature { vec!["assoc".to_string(), "key".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (assoc, _) = get_required_arg(args, "assoc", &call_loc)?.as_assoc() ?;
+		let (key, _) = get_required_arg(args, "key", &call_loc)?.as_string() ?;
+
+		let result = bool_to_sample(assoc.contains_key(&key));
+
+		Ok((ValueBody::Number(result), call_loc))
 	}
 }
 
