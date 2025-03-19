@@ -1,0 +1,19 @@
+@tempo 120
+
+// ticksPerBar、grooveCycle、swing の cycleTick の比は整数比でなければならない
+// ↑ もう少し緩和できるかもだが、こうであれば間違いなく、かつ普通これでいいだろう
+@let :ticksPerBar, 384
+@ticksPerBar ticksPerBar
+@grooveCycle ticksPerBar * 0.3
+
+@let :l8, ticksPerBar / 8
+@groove ^G, ^a, swing(l8, (3 / 5)@r)~toModuleDef()
+
+@instrument ^a, uniformNoise | hpf { 8000, 15 } * adsrEnv { decay: 0.1@d, sustain: 0.1 }
+
+a o4l16v15
+// TODO この { } は要らないはずなのだが、ないと d が戻らなくなってしまう
+a [0 cc{yd,0.5c8}]
+
+// TODO これ書かないと演奏されないのはだいぶ問題
+G [0 r1]

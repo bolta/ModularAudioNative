@@ -16,6 +16,29 @@
 }
 
 /**
+ * 周期の短いグルーヴ関数を、それを任意の長さで繰り返したグルーヴ関数に変換する。
+ * たとえば l8 の長さしかないグルーヴ関数を l4, l1 等任意の長さの grooveCycle で使えるようにする
+ */
+@let :repeatGroove, (grooveFunc, cycleTicks) ->
+	x -> grooveFunc(x % cycleTicks) + floor(x / cycleTicks) * cycleTicks
+
+/**
+ * cycleTicks を周期として、それを本来なら 2 等分する音符を ratio : (1 - ratio) で跳ねさせるグルーヴ関数。
+ * たとえば、swing(=[%l8], 2 / 3) は x16x16 を x12x24 のように跳ねさせる。
+ */
+@let :swing, (cycleTicks, ratio) ->
+	// [0, cycleTicks) の範囲だけを考慮し、一度だけ跳ねるグルーヴ関数
+	let primSwing = x -> if x < cycleTicks * ratio
+		then x / (2 * ratio)
+		else x / (2 * (1 - ratio)) + (1 - 2 * ratio) / (1 - ratio) * cycleTicks / 2;
+	repeatGroove(primSwing, cycleTicks)
+
+/**
+ * 単項関数をエフェクトのモジュール定義に変換する
+ */
+@let :toModuleDef, f -> =x=> f(x)
+
+/**
  * 手書き波形の中のループ（入れ子配列）を（先頭の 1 つ以外は意味ないが、全て）抽出する。
  * TODO 先頭の 1 つだけか null を返す方がよい。仕様としてまだよくないので公開はしない
  */
@@ -36,10 +59,15 @@
 	 * 手書き波形にループがあるとき、その周期の長さをサンプル単位で求める。ループより手前のサンプルは無視する。
 	 * ループがない場合は IndexOutOfBounds エラーになるので、
 	 * ループがあることが保証されない場合は事前に waveIsLooped でチェックすること
+	 * TODO ループがない場合はエラーにせず null を返した方がよい
 	 */
 	waveLoopLength: wave -> wave~waveLoops()~at(0)~count(),
 
 	waveIsLooped: wave -> wave~waveLoops()~count() > 0,
 
 	Type: Type,
+
+	repeatGroove: repeatGroove,
+	swing: swing,
+	toModuleDef: toModuleDef,
 }
