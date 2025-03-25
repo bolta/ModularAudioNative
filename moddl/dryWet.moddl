@@ -1,0 +1,6 @@
+@let :effect, =x=> x * 80 | sineOsc
+
+@instrument ^a, (sineOsc * adsrEnv) | effect~dryWet(dry: 1@d, wet: 0.25@w)
+
+a o5l4v15
+a cder yd,0.25 yw,1 cder
