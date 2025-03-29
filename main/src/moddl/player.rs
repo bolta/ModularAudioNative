@@ -169,7 +169,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	// TODO タグ名共通化
 	nodes.add_node_with_tag(machine_out, "terminator".to_string(),
-			Box::new(Terminator::new(master_node)));
+			Box::new(Terminator::new(master_node, pctx.track_defs.len())));
 
 	// 一定時間で終了
 	// TODO コマンドオプションで指定できるように

@@ -16,10 +16,10 @@ pub struct Terminator {
 	thread_count: i32,
 }
 impl Terminator {
-	pub fn new(input: ChanneledNodeIndex) -> Self {
+	pub fn new(input: ChanneledNodeIndex, track_count: usize) -> Self {
 		Self {
 			input,
-			thread_count: 0,
+			thread_count: track_count as i32,
 		}
 	}
 }
@@ -33,8 +33,10 @@ impl Node for Terminator {
 	}
 	fn process_event(&mut self, event: &dyn Event, context: &Context, env: &mut Environment) {
 		if event.event_type() == EVENT_TYPE_JOB_STARTING {
-			self.thread_count += 1;
-			println!("job starting -> {}", self.thread_count);
+			// 空のシーケンスがあるときにいきなり終了してしまう問題があったので、
+			// シーケンスの開始を捉えて +1 するのではなく、最初からトラック数を入れておくよう変更
+			// self.thread_count += 1;
+			// println!("job starting -> {}", self.thread_count);
 		}
 		if event.event_type() == EVENT_TYPE_JOB_ENDED {
 			self.thread_count -= 1;
