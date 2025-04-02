@@ -385,7 +385,7 @@ parser![postfix_expr, Box<Expr>, {
 			for p in postfixes {
 				let loc = p.1;
 				result = Box::new(match p.0 {
-					Postfix::Label(label) => (ExprBody::Labeled { label, inner: result }, loc),
+					Postfix::PropertyAccess { name } => (ExprBody::PropertyAccess { assoc: result, name }, loc),
 					Postfix::FunctionCall(args) => (ExprBody::FunctionCall { function: result, args }, loc),
 					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
 					// 糖衣構文として、このレイヤーで吸収してしまう
@@ -397,7 +397,8 @@ parser![postfix_expr, Box<Expr>, {
 							named: args.named,
 						},
 					}, loc),
-					Postfix::PropertyAccess { name } => (ExprBody::PropertyAccess { assoc: result, name }, loc),
+					Postfix::NodeArgs(args) => (ExprBody::NodeWithArgs { node_def: result, args: args }, loc),
+					Postfix::Label(label) => (ExprBody::Labeled { label, inner: result }, loc),
 					Postfix::LabelFilter(specs) => (ExprBody::LabelFilter { strukt: result, filter: specs }, loc),
 					Postfix::LabelPrefix(prefix) => (ExprBody::LabelPrefix { strukt: result, prefix }, loc),
 				})
@@ -409,29 +410,49 @@ parser![postfix_expr, Box<Expr>, {
 }];
 
 enum Postfix {
-	Label(QualifiedLabel),
+	PropertyAccess { name: String },
 	FunctionCall(Args),
 	MethodCall { name: String, args: Args },
-	PropertyAccess { name: String },
+	NodeArgs(Args),
+	Label(QualifiedLabel),
 	LabelFilter(Vec<LabelFilterSpec>),
 	LabelPrefix(QualifiedLabel),
 }
 
+/*
+parser![node_with_args_expr, Box<Expr>, {
+	map_res(
+		tuple((
+			loc(si!(prefix_expr())),
+			opt(
+				delimited(
+					ss!(char('{')),
+					si!(args()),
+					si!(char('}')),
+				)
+			),
+		)),
+		|((x, loc), args)| ok(match args {
+			None => x,
+			Some(args) => {
+				Box::new((ExprBody::NodeWithArgs {
+					node_def: x,
+					args,
+				}, loc))
+			},
+		}),
+	)
+}];
+
+*/
 parser![postfix, Postfix, {
 	alt((
 		map_res(
 			preceded(
-				ss!(tag("@@")),
-				qualified_label(),
+				ss!(char('.')),
+				identifier(),
 			),
-			|prefix| ok(Postfix::LabelPrefix(prefix)),
-		),
-		map_res(
-			preceded(
-				ss!(char('@')),
-				qualified_label(),
-			),
-			|label| ok(Postfix::Label(label)),
+			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
 		),
 		map_res(
 			delimited(
@@ -461,11 +482,19 @@ parser![postfix, Postfix, {
 			}),
 		),
 		map_res(
-			preceded(
-				ss!(char('.')),
-				identifier(),
+			delimited(
+				ss!(char('{')),
+				ss!(args()),
+				si!(char('}')),
 			),
-			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
+			|args| ok(Postfix::NodeArgs(args)),
+		),
+		map_res(
+			preceded(
+				ss!(char('@')),
+				qualified_label(),
+			),
+			|label| ok(Postfix::Label(label)),
 		),
 		map_res(
 			delimited(
@@ -477,6 +506,13 @@ parser![postfix, Postfix, {
 				char(')'),
 			),
 			|specs| ok(Postfix::LabelFilter(specs)),
+		),
+		map_res(
+			preceded(
+				ss!(tag("@@")),
+				qualified_label(),
+			),
+			|prefix| ok(Postfix::LabelPrefix(prefix)),
 		),
 	))
 }];
@@ -681,33 +717,9 @@ parser![assoc_entries, Assoc, {
 	)
 }];
 
-parser![node_with_args_expr, Box<Expr>, {
-	map_res(
-		tuple((
-			loc(si!(prefix_expr())),
-			opt(
-				delimited(
-					ss!(char('{')),
-					si!(args()),
-					si!(char('}')),
-				)
-			),
-		)),
-		|((x, loc), args)| ok(match args {
-			None => x,
-			Some(args) => {
-				Box::new((ExprBody::NodeWithArgs {
-					node_def: x,
-					args,
-				}, loc))
-			},
-		}),
-	)
-}];
-
 // 演算子の文字列は calc.rs にもあるので、両者を一致させること
 
-binary_expr![connective_expr, node_with_args_expr, r"[\|]", |lhs, _op, rhs| ExprBody::Connect { lhs, rhs }];
+binary_expr![connective_expr, prefix_expr, r"[\|]", |lhs, _op, rhs| ExprBody::Connect { lhs, rhs }];
 // TODO ↓これだと左結合になってしまう
 binary_expr![power_expr, connective_expr, r"[\^]", |lhs, _op, rhs| ExprBody::Power { lhs, rhs }];
 binary_expr![mul_div_mod_expr, power_expr, r"[*/%]", |lhs, op, rhs| match op {
