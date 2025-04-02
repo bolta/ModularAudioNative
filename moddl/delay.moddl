@@ -1,12 +1,12 @@
-@let `tempo`, 126
+@let :tempo, 126
 @tempo tempo
 
-@let `delayTime`, 240 / tempo * 3 / 16 // 8.
-// @let `delayTime1`, 240 / tempo * 2 / 16 // 16
-// @let `delayTime2`, 240 / tempo * 4 / 16 // 4
+@let :delayTime, 240 / tempo * 3 / 16 // =[l8.]
 
-@instrument ^a, (pulseOsc * adsrEnv) | delay(delayTime) { feedback: 0.75 }
+@instrument ^a, (pulseOsc * adsrEnv) | delay(delayTime) { feedback: 0.95 }~dryWet(wet: 0.5)
+@instrument ^b, uniformNoise * expEnv { ratioPerSec: 1/100000 }
 
 a o4l1 q0.125
+a cdefgab>c
 
-a cdefgab>c r1^1^1^1 q0c
+b [0 v15c4 v8c4c4c4]
