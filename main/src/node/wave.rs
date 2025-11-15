@@ -52,8 +52,20 @@ impl Node for WaveformPlayer {
 			WaveformPlayerState::Note => {
 				let waveform = self.waveform(env);
 				for ch in 0usize .. self.channels as usize {
-					// TODO 補間
-					output[ch] = waveform.sample(ch as i32, self.offset as usize);
+					output[ch] = {
+						// TODO とりあえず両隣のサンプルで線形補間するが、補間の有無・方法を選べるように
+						let offset_prev = self.offset as usize;
+						let sample_prev = waveform.sample(ch as i32, offset_prev);
+						// TODO offset_next を求めるときにループを考慮する
+						let offset_next = offset_prev + 1;
+						if offset_next >= waveform.len() {
+							sample_prev
+						} else {
+							let sample_next = waveform.sample(ch as i32, offset_next);
+							let ratio = self.offset - self.offset.floor();
+							(1f32 - ratio) * sample_prev + ratio * sample_next
+						}
+					};
 				}
 			}
 			WaveformPlayerState::Idle => {
