@@ -21,41 +21,19 @@ pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_pat
 	.map_err(|e| error(ErrorType::Syntax(nom_error_to_owned(e)), Location::dummy())) ?;
 	imports.add_ast(moddl_path, &unit);
 
-	let declared_tracks = collect_track_decls(&unit.statements, &mut pctx, imports) ?;
-
 	for stmt in &unit.statements {
-		process_statement(&stmt, &mut pctx, imports, &declared_tracks) ?;
+		process_statement(&stmt, &mut pctx, imports) ?;
 	}
 
 	Ok(pctx)
 }
 
-fn collect_track_decls(stmts: &Vec<(Statement, Location)>, pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<Vec<String>> {
-	let mut declared_tracks = HashSet::new();
-	for (stmt, loc) in stmts {
-		if let Statement::Construction { name, args } = stmt {
-			// TODO ConstructionType への解決は構文解析時にやっちゃった方がよさそう
-			if matches!(ConstructionType::from_name(name.as_str()),
-					Some(ConstructionType::Instrument | ConstructionType::Effect | ConstructionType::Groove)) {
-				// TODO 定義するトラックが Io の場合（まあないと思うが…）、この後の process_statement と 2 回重複して perform されてしまう
-				let new_tracks = evaluate_and_perform_arg(&args, 0, &pctx.vars, loc, imports)?.as_track_set()?.0;
-				for track in new_tracks {
-					declared_tracks.insert(track);
-				}
-			}
-		}
-	}
-
-	Ok(declared_tracks.into_iter().collect())
-}
-
-fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext, imports: &mut ImportCache,
-		declared_tracks: &Vec<String>) -> ModdlResult<()> {
+fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match stmt {
 		Statement::Construction { name, args } => {
 			match ConstructionType::from_name(name) {
 				Some(typ) => {
-					process_construction(typ, args, stmt_loc, pctx, imports, declared_tracks) ?;
+					process_construction(typ, args, stmt_loc, pctx, imports) ?;
 				},
 				None => {
 					println!("unknown construction: {}", name);
@@ -63,8 +41,8 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 			}
 		}
 		Statement::Mml { tracks, mml } => {
-			let tracks = if is_track_wildcard(tracks) { declared_tracks } else { tracks };
-			for track in tracks {
+			let tracks = if is_track_wildcard(tracks) { pctx.defined_track_names() } else { tracks.clone() };
+			for track in &tracks {
 				if pctx.get_track_def(track).is_none() {
 					return Err(error(ErrorType::TrackDefNotFound { track: track.clone() }, stmt_loc.clone()));
 				}
@@ -85,8 +63,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 	Ok(())
 }
 
-fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Location, pctx: &mut PlayerContext, imports: &mut ImportCache,
-		declared_tracks: &Vec<String>) -> ModdlResult<()> {
+fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Location, pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match typ {
 		ConstructionType::Tempo => {
 			(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
@@ -102,8 +79,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 		}
 		ConstructionType::Effect => {
 			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, None)?.0;
-			// 入力に ^* を使うと、ここで定義するトラックも含まれるので現状使い物にならない。^* は使えないものとする
-			let source_tracks = evaluate_and_perform_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc, imports, None/*Some(declared_tracks)*/)?.0;
+			let source_tracks = evaluate_and_perform_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc, imports, Some(pctx))?.0;
 			let source_loc = &args[1].1;
 			// TODO source_tracks の各々が未定義ならエラーにする（循環が生じないように）
 
@@ -129,8 +105,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, None)?.0;
 			if tracks.len() != 1 { return Err(error(ErrorType::GrooveControllerTrackMustBeSingle, args[0].1.clone())); }
 			let control_track = &tracks[0];
-			// 入力に ^* を使うと、ここで定義するトラックも含まれるので現状使い物にならない。^* は使えないものとする
-			let target_tracks = evaluate_and_perform_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc, imports, None/*Some(declared_tracks)*/)?.0;
+			let target_tracks = evaluate_and_perform_arg_as_track_set(&args, 1, &pctx.vars, stmt_loc, imports, Some(pctx))?.0;
 			let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 			pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 			// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
@@ -186,11 +161,11 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			(*pctx).ticks_per_bar = 4 * value as i32;
 		}
 		ConstructionType::Mute => {
-			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, Some(declared_tracks))?.0;
+			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, Some(pctx))?.0;
 			set_mute_solo(MuteSolo::Mute, &tracks, pctx);
 		}
 		ConstructionType::Solo => {
-			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, Some(declared_tracks))?.0;
+			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, Some(pctx))?.0;
 			set_mute_solo(MuteSolo::Solo, &tracks, pctx);
 		}
 		ConstructionType::Export => {
@@ -300,11 +275,11 @@ fn is_track_wildcard(tracks: &Vec<String>) -> bool {
 }
 
 fn evaluate_and_perform_arg_as_track_set(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache,
-		declared_tracks: Option<&Vec<String>>) -> ModdlResult<(Vec<String>, Location)> {
+		pctx: Option<&PlayerContext>) -> ModdlResult<(Vec<String>, Location)> {
 	let (tracks, loc) = evaluate_and_perform_arg(args, index, vars, stmt_loc, imports)?.as_track_set() ?;
 	if is_track_wildcard(&tracks) {
-		let declared_tracks = declared_tracks.ok_or_else(|| error(ErrorType::BadTrackWildcard, loc.clone())) ?;
-		Ok((declared_tracks.iter().map(|t| t.clone()).collect(), loc))
+		let pctx = pctx.ok_or_else(|| error(ErrorType::BadTrackWildcard, loc.clone())) ?;
+		Ok((pctx.defined_track_names(), loc))
 	} else {
 		Ok((tracks, loc))
 	}

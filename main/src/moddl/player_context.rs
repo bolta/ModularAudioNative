@@ -77,6 +77,9 @@ impl PlayerContext {
 			}
 		}
 	}
+	pub fn defined_track_names(&self) -> Vec<String> {
+		self.track_defs.iter().map(|(name, _, _)| name.clone()).collect()
+	}
 }
 
 #[derive(PartialEq)]
