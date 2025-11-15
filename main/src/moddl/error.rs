@@ -27,6 +27,7 @@ pub enum ErrorType {
 	ConstructionArgNotFound,
 	TrackDefNotFound { track: String },
 	TrackDefDuplicate { track: String, existing_def_loc: Location }, // TODO ここだけ msg を自前で持つのは変かも…全体でしくみを考える
+	BadTrackWildcard,
 	VarNotFound { var: String },
 	NodeDefNotFound, // TODO 発生条件確認
 	// TODO 「ModuleDef ModuleDef に変換できない値が出てきた」は何エラーにしよう…ここまでのどれかに含めれるか？
@@ -66,6 +67,7 @@ impl Display for ErrorType {
 			Self::TrackDefNotFound { track } => write!(f, "MML is given for track ^{} but track definition is missing.", track),
 			Self::TrackDefDuplicate { track, existing_def_loc }
 					=> write!(f, "Definition for track ^{} is duplicate: definition already exists at {}.", track, existing_def_loc),
+			Self::BadTrackWildcard => write!(f, "Track wildcard ^* is not allowed in track declaration."),
 			Self::VarNotFound { var } => write!(f, "Variable `{}` not found.", var),
 			// NodeDefNotFound,
 			// ChannelMismatch,

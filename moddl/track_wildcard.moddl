@@ -1,0 +1,12 @@
+@tempo 120
+
+@instrument ^abc, sineOsc * adsrEnv
+@effect ^e, ^abc, ((a + b + c) * 3) | limit { -1, 1 }
+@groove ^g, ^abc, swing(384 / 4, 2 / 3)~toModuleDef()
+
+// 上記いずれのトラックセットも ^* を使うとエラー
+
+* o4l4q2v15
+a >>r6
+b > r12
+* cdefg
