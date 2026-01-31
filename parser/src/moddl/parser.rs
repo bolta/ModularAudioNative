@@ -39,8 +39,16 @@ parser![float_literal, Box<Expr>, {
 }];
 
 parser![track_set, Vec<String>, {
-	map_res(many1(re_find(re(r"[a-zA-Z0-9_]"))),
-			|tracks| { ok(tracks.iter().map(|t| t.to_string()).collect()) })
+	alt((
+		map_res(
+			many1(re_find(re(r"[a-zA-Z0-9_]"))),
+			|tracks| { ok(tracks.iter().map(|t| t.to_string()).collect()) },
+		),
+		map_res(
+			char('*'),
+			|_| { ok(vec!["*".to_string()]) },
+		),
+	))
 }];
 parser![track_set_literal, Box<Expr>, {
 	map_res(preceded(si!(char('^')), loc(track_set())),

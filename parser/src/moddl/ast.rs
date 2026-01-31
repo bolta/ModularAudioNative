@@ -77,6 +77,8 @@ pub enum ExprBody {
 	NodeWithArgs { node_def: Box<Expr>, args: Args },
 
 	Number(f32),
+	// 「全てのトラック」を表す * は、とりあえずそのまま文字列 "*" として持つことにする。
+	// 構文上 "*" は必ず唯一の要素となる（^*ab のような記述は許されない）
 	TrackSet(Vec<String>),
 	QuotedIdentifier(String),
 	String(String),
