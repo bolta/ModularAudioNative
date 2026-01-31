@@ -20,6 +20,7 @@ pub fn resolve_path(moddl_path: &Path, base_moddl_path: &Path) -> PathBuf {
 			joined
 			// Ok(Path::new(base_moddl_path).parent().unwrap().join(moddl_path))//.canonicalize().map_err(Error::File)
 		} else {
+			// TODO ちゃんとしたエラーにする
 			unimplemented!("relative path must start with ./ or ../ so far")
 		}
 	}
