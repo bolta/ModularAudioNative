@@ -279,6 +279,7 @@ fn push(stack: &mut Stack) {
 /// スタックのトップで設定したパラメータについて以前の値を復元する instrc 列を生成しつつ、
 /// スタックを pop する
 fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
+println!("pop_and_restore_params");
 	let names_to_restore = stack.params().keys();
 	let restore_instrcs: Vec<_> = names_to_restore.map(|sig @ (name, key)| {
 		// 現在の（これから pop する）フレームは除き、それ以前で設定された値を探す

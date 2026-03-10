@@ -106,6 +106,7 @@ impl Context {
 
 				// シーケンスの終わりに達した
 				if self.stack.is_bottom() {
+println!("👻 {}", self.name);
 					env.broadcast_event(context.elapsed_samples(), Box::new(JobEvent::ended(self.name.clone())));
 					break; // 曲が終わった。次回の tick からは何もしない
 				} else {
