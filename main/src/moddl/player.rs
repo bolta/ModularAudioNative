@@ -47,6 +47,12 @@ use std::{
 
 const TAG_SEQUENCER: &str = "seq";
 
+const TAG_FREQ: &str = "#freq";
+
+fn qualify_tag(track: &str, tag: &str) -> String {
+	format!("{}.{}", track, tag)
+}
+
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = Path::new(&options.moddl_path);
 	let moddl = read_file(moddl_path) ?;
@@ -257,7 +263,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new_extra(mml, moddl_path_rc.clone()))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
-	let freq_tag = format!("{}_freq", track);
+	let freq_qual_tag = qualify_tag(track, TAG_FREQ);
 
 	// #22 generate_sequences() に各 Var の初期値が必要になったので、
 	// build_instrument() で初期値が判明した後で行うことにしたが、一方 build_instrument() の入力ノードは
@@ -273,7 +279,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 
 	let mut input = match override_input {
 		Some(input) => input,
-		None => nodes.add_node_with_tag(submachine_idx, freq_tag.clone(), Box::new(Var::new(0f32))),
+		None => nodes.add_node_with_tag(submachine_idx, freq_qual_tag.clone(), Box::new(Var::new(0f32))),
 	};
 	if features.contains(&Feature::Detune) {
 		// セント単位のデチューン
@@ -295,15 +301,14 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 		(("#tempo".to_string(), VAR_DEFAULT_KEY.to_string()), tempo),
 	].into_iter().collect();
 	let mut label_defaults: HashMap<String, String> = inits.iter().map(|((label, key), _)| (label.clone(), key.clone())).into_iter().collect();
-	// TODO DRY
-	label_defaults.insert(format!("{}_freq", track), VAR_DEFAULT_KEY.to_string());
+	label_defaults.insert(qualify_tag(track, TAG_FREQ), VAR_DEFAULT_KEY.to_string());
 	/* let label_defaults =  */collect_label_defaults(instrm_def, track, use_default_labels, &mut label_defaults);
 	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, use_default_labels, &mut inits) ?;
 
 	// let label_defaults = collect_label_defaults(instrm_def, track);
 
 	let tag_set = TagSet {
-		freq: freq_tag.clone(),
+		freq: freq_qual_tag.clone(),
 		note: track.to_string(),
 	};
 	let mut evaluate_expr = |expr_str: &str| {
@@ -364,14 +369,12 @@ fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_label
 					}
 				}
 				if let (Some(label), Some(default_key)) = (label, factory.default_prop_key()) {
-					// TODO ラベル名をトラック名で修飾する処理は共通化する
-					result.insert(format!("{}.{}", track, label.0), default_key.clone());
+					result.insert(qualify_tag(track, label.0.as_str()), default_key.clone());
 				}
 				// 互換性対応：全て Var と見なす
 				if use_default_labels {
 					for arg_spec in factory.node_arg_specs() {
-						// TODO ラベル名をトラック名で修飾する処理は共通化する
-						result.insert(format!("{}.{}", track, arg_spec.name), VAR_DEFAULT_KEY.to_string());
+						result.insert(qualify_tag(track, arg_spec.name.as_str()), VAR_DEFAULT_KEY.to_string());
 					}
 				}
 			},
@@ -392,9 +395,8 @@ fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_label
 			},
 			ModuleDef::Constant { label, .. } => {
 				if let Some(label) = label {
-					// TODO ラベル名をトラック名で修飾する処理は共通化する
 					// TODO VarFactory から取った方が統一感ある
-					result.insert(format!("{}.{}", track, label.0), VAR_DEFAULT_KEY.to_string());
+					result.insert(qualify_tag(track, label.0.as_str()), VAR_DEFAULT_KEY.to_string());
 				}
 			},
 			ModuleDef::Placeholder { .. } => { },
@@ -540,8 +542,7 @@ fn build_instrument(
 				} else {
 					label.as_ref().or(default_tag.as_ref())
 				};
-				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
+				let full_tag = local_tag.map(|tag| qualify_tag(track, tag.0.as_str()));
 				if let Some(tag) = &full_tag {
 					for (key, value) in factory.initial_values() {
 						inits.insert((tag.clone(), key), value);
@@ -558,8 +559,7 @@ fn build_instrument(
 				} else {
 					label.as_ref().or(default_tag.as_ref())
 				};
-				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
+				let full_tag = local_tag.map(|tag| qualify_tag(track, tag.0.as_str()));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
 					Some(tag) => {
