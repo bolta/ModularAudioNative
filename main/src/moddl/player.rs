@@ -18,13 +18,7 @@ use crate::{
 		sequence_generator::*,
 	},
 	node::{
-		audio::*,
-		cond::*,
-		prim::*,
-		stereo::*,
-		system::*,
-		util::*,
-		var::*,
+		audio::*, cond::*, ipc::MessageReceiver, prim::*, stereo::*, system::*, util::*, var::*
 	},
 	seq::{
 		sequencer::*,
@@ -33,14 +27,15 @@ use crate::{
 	vis::visualizer::*, wave::waveform_host::WaveformHost,
 };
 extern crate parser;
+use ipc::{Client, Response, Server, Set, channel_name_c2p, channel_name_p2c};
 use parser::{
 	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
 };
 
 use std::{
 	borrow::Borrow, cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc, sync::{
-		mpsc, Arc
-	}, thread
+		Arc, mpsc
+	}, thread, time::Duration
 };
 
 // TODO エラー処理を全体的にちゃんとする
@@ -78,6 +73,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let even_tag = make_seq_tag(None, &mut pctx.seq_tags);
 	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(
 			timer.node(MACHINE_MAIN).as_mono(), pctx.groove_cycle, even_tag.clone())));
+
+	nodes.add_node(MACHINE_MAIN, Box::new(MessageReceiver::new(channel_name_c2p())));
 
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
@@ -151,6 +148,9 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let machine_out = nodes.add_submachine("out".to_string());
 	let master_node = ensure_on_machine(&mut nodes, master, machine_out);
 
+	let all_keys: Vec<&String> = nodes.machines.iter().flat_map(|m| m.nodes.tags().keys()).collect();
+	dbg!(&all_keys);
+
 	match &options.output {
 		PlayerOutput::Audio => {
 			nodes.add_node(machine_out,
@@ -201,6 +201,22 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
 	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
 
+	let bound = 0usize; // TODO これでいいか？
+	let (p2c_sender, p2c_receiver) = sync_channel::<Vec<u8>>(bound);
+	// let p2c_client
+	thread::spawn(move || {
+		let p2c_client = Client::new(channel_name_p2c(), Duration::from_millis(500)).unwrap();
+		loop {
+			match p2c_receiver.recv() {
+				Ok(request_bytes) => {
+					p2c_client.send_request(& request_bytes).unwrap();
+				}
+				// TODO ちゃんとエラー処理
+				Err(e) => todo!(),
+			}
+		}
+	});
+
 	// デバッグ用機能なのでとりあえず蓋をしておく
 	// TODO コマンドオプションで指定されたときだけ出力する
 	// output_structure(&nodes_result, &sends_to_receives);
@@ -211,12 +227,13 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			.map(|(mut machine_spec, broadcast_receiver)| {
 		let waveforms = Arc::clone(&waveforms);
 		let broadcaster_ = broadcaster.clone();
+		let p2c_sender_ = p2c_sender.clone();
 		thread::spawn(move || {
 			// TODO skip_mode_events が供給できていない
 			let mut machine = Machine::new(machine_spec.name);
 
 			machine.play(&mut Context::new(sample_rate), &mut machine_spec.nodes, &waveforms,
-					broadcaster_, broadcast_receiver, None);
+					broadcaster_, broadcast_receiver, None, p2c_sender_);
 		})
 	}).collect();
 	for j in joins {

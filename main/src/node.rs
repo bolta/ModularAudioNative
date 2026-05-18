@@ -9,6 +9,7 @@ pub mod prev;
 pub mod file;
 pub mod filter;
 pub mod freq;
+pub mod ipc;
 pub mod lofi;
 pub mod noise;
 pub mod osc;

@@ -9,11 +9,13 @@ edition = "2018"
 [dependencies]
 node_macro = { path = "../node_macro" }
 parser = { path = "../parser" }
+bson = { version = "3.1.0", features = ["serde"] }
+ipc = { path = "../ipc" }
 
 itertools = "0.10.3"
 mopa = "*"
 portaudio = "*"
-rand = "*"
+rand = "0.8"
 regex = "^1"
 ringbuf = "*"
 wav = "*"
