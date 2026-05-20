@@ -10,7 +10,7 @@ pub struct Server {
 	response_notifier: Notifier<Service>,
 }
 
-impl Server/* : Send */ {
+impl Server {
 	// TODO エラーはもう少し丁寧に扱うかも
 	pub fn new(channel_name: &str) -> anyhow::Result<Self> {
 		let node = NodeBuilder::new().create::<Service>() ?;
