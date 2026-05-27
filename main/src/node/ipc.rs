@@ -70,7 +70,7 @@ impl Node for MessageReceiver {
 								"set" => {
 									let msg: Set = bson::deserialize_from_document(doc).unwrap();
 									// print!("set: "); dbg!(&msg);
-									let event = SetEvent::new(EventTarget::Tag(msg.target), msg.key, msg.value);
+									let event = SetEvent::new(EventTarget::Tag(msg.path), msg.key, msg.value);
 									println!("?????????? {}", context.elapsed_samples());
 									// main マシンでの elapsed_samples の流れ方は実時間と同じではない（速い）。
 									// 一方各トラックのマシンではほぼ実時間に近い（AudioOut 律速のため）。

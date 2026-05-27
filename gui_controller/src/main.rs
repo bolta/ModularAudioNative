@@ -1,7 +1,8 @@
 use std::{process::Command, rc::Rc, thread, time::Duration};
 
+use bson::Document;
 use dioxus::{logger::tracing, prelude::*};
-use ipc::{Client, Response, Server, Set, channel_name_c2p, channel_name_p2c};
+use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c};
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -27,45 +28,6 @@ fn main() -> anyhow::Result<()> {
 	/* .chain */(std::env::args().skip(1));
 	cmd.args(args);
 	let _player = cmd.spawn() ?;
-	// thread::sleep(Duration::from_secs(3));
-
-	// TODO 別の場所に移した方がよさそう
-	thread::spawn(|| {
-		// TODO ちゃんとエラー処理
-		let p2c_server = Server::new(channel_name_p2c()).unwrap();
-		loop {
-			p2c_server.wait_for_request(|request_bytes| {
-				match bson::Document::from_reader(request_bytes) {
-					Ok(doc) => {
-						println!("controller received {}", &doc);
-						match doc.get_str("type") {
-							Ok(tipe) => {
-								match tipe {
-									"ping" => {
-										let response = Response {
-											status: "ok".into(),
-											text: "pong".into(),
-										};
-										Ok(bson::serialize_to_vec(&response).unwrap())
-									}
-									_ => {
-										// TODO エラーにすべきかもしれない。ちゃんと処理
-										let response = Response {
-											status: "ok".into(),
-											text: "hello".into(),
-										};
-										Ok(bson::serialize_to_vec(&response).unwrap())
-									}
-								}
-							}
-							Err(e) => todo!()
-						}
-					}
-					Err(e) => todo!()
-				}
-			}).unwrap_or_else(|e| println!("{}", e));
-		}
-	});
 
 	main_orig();
 	Ok(())
@@ -75,14 +37,96 @@ fn main_orig() {
     dioxus::launch(App);
 }
 
+type RegisterSpec = (String, String, f32, f32, f32);
+
 #[component]
 fn App() -> Element {
-    rsx! {
-        document::Link { rel: "icon", href: FAVICON }
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
-        ControlPanel {}
+	let mut registers: Signal<Vec<RegisterSpec>> = use_signal(|| vec![]);
+	use_context_provider(|| registers);
 
-    }
+	// let mut registers_ = registers.clone();
+
+	use_future(move || async move {
+		let (tx, rx) = std::sync::mpsc::channel::<bson::Document>();
+		thread::spawn(move || {
+			// TODO ちゃんとエラー処理
+			let p2c_server = Server::new(channel_name_p2c()).unwrap();
+			loop {
+				p2c_server.wait_for_request(|request_bytes| {
+					match bson::Document::from_reader(request_bytes) {
+						Ok(doc) => {
+							// println!("controller received {}", &doc);
+							println!("received a message");
+							// tx.send(doc);
+							match doc.get_str("type") {
+								Ok(tipe) => {
+									println!("************************************ {}", tipe);
+									match tipe {
+										"ping" => {
+											let response = Response {
+												status: "ok".into(),
+												text: "pong".into(),
+											};
+											Ok(bson::serialize_to_vec(&response).unwrap())
+										},
+										"registerSettings" => {
+											// TODO エラー処理
+											tx.send(doc.clone());
+											let response = Response {
+												status: "ok".into(),
+												text: "received".into(),
+											};
+											Ok(bson::serialize_to_vec(&response).unwrap())
+										},
+										_ => {
+											// TODO エラーにすべきかもしれない。ちゃんと処理
+											let response = Response {
+												status: "ok".into(),
+												text: "hello".into(),
+											};
+											Ok(bson::serialize_to_vec(&response).unwrap())
+										},
+									}
+									// TODO tx.send(doc) はここで一括で行う？
+								}
+								Err(e) => todo!()
+							}
+						}
+						Err(e) => todo!()
+					}
+				}).unwrap_or_else(|e| println!("{}", e));
+			}
+		});
+
+		loop {
+			if let Ok(doc) = rx.try_recv() {
+				// TODO 判定が送信側と重複している
+				match doc.get_str("type") {
+					Ok(tipe) => {
+						match tipe {
+							"registerSettings" => {
+								let msg: RegisterSettings = bson::deserialize_from_document(doc).unwrap();
+								let ctrls: Vec<RegisterSpec> = msg.items.iter().map(
+										|RegisterSettingsItem { path, key, initial, original }| (path.clone(), key.clone(), *initial, initial / 4f32, initial * 4f32)).collect();
+								registers.clear();
+								registers.extend(ctrls);
+								
+							},
+							_ => { },
+						}
+					}
+					Err(e) => todo!()
+				}
+			}
+			tokio::time::sleep(Duration::from_millis(100)).await;
+		}
+	});
+
+	rsx! {
+		document::Link { rel: "icon", href: FAVICON }
+		document::Link { rel: "stylesheet", href: MAIN_CSS }
+		ControlPanel {}
+	}
 }
 
 // component に渡す値は PartialEq でないとだめだというので、
@@ -107,7 +151,7 @@ fn RegisterControl(name: String, keey: String, init: f32, min: f32, max: f32, c2
 			*value.write() = v;
 			tracing::info!("value has been set to {}", v);
 			let msg = Set {
-				target: target.clone(),
+				path: target.clone(),
 				key: key.clone(),
 				value: v,
 			};
@@ -128,6 +172,7 @@ fn RegisterControl(name: String, keey: String, init: f32, min: f32, max: f32, c2
 				r#type: "range",
 				min,
 				max,
+				step: (max - min) / 1000f32,
 				value: value,
 				oninput: set_value(),
 			}
@@ -145,15 +190,7 @@ pub fn ControlPanel() -> Element {
 	// TODO エラー処理
 	let c2p_client = ClientWrapper(Rc::new(Client::new(channel_name_c2p(), Duration::from_millis(500)).unwrap()));
 
-	// 順不同にならないよう Vec を使う
-	let mut registers = use_signal(|| vec![
-		("a.cutoff".to_string(), "value".to_string(), 1000f32, 30f32, 10000f32),
-		("a.q".to_string(), "value".to_string(), 10f32, 1f32, 50f32),
-		// ("c.baz".to_string(), -10f32),
-	]);
-	// signal は変更が追跡され、再描画のトリガーになったりするので、
-	// 単なる内部状態としてはオーバースペックの感がある	
-	// let mut count = use_signal(|| 0);
+	let registers = use_context::<Signal<Vec<RegisterSpec>>>();
 
 	rsx! {
 		div {

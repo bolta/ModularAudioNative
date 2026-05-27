@@ -2,9 +2,7 @@ use super::{
 	builtin::builtin_vars, common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, import::ImportCache, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
 };
 use crate::{
-	calc::*,
-	common::stack::*,
-	core::{
+	calc::*, common::stack::*, core::{
 		common::*,
 		context::*,
 		event::*,
@@ -12,22 +10,18 @@ use crate::{
 		node::*,
 		node_factory::*,
 		node_host::*,
-	},
-	mml::default::{
+	}, mml::default::{
 		feature::Feature,
 		sequence_generator::*,
-	},
-	node::{
+	}, moddl::player_context::PlayerContext, node::{
 		audio::*, cond::*, ipc::MessageReceiver, prim::*, stereo::*, system::*, util::*, var::*
-	},
-	seq::{
+	}, seq::{
 		sequencer::*,
 		tick::*,
-	},
-	vis::visualizer::*, wave::waveform_host::WaveformHost,
+	}, vis::visualizer::*, wave::waveform_host::WaveformHost
 };
 extern crate parser;
-use ipc::{Client, Response, Server, Set, channel_name_c2p, channel_name_p2c};
+use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c};
 use parser::{
 	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
 };
@@ -44,8 +38,22 @@ const TAG_SEQUENCER: &str = "seq";
 
 const TAG_FREQ: &str = "#freq";
 
+type RegisterInits = Vec<(String, f32)>;
+
 fn qualify_tag(track: &str, tag: &str) -> String {
 	format!("{}.{}", track, tag)
+}
+
+fn add_register(reg_inits: &mut RegisterInits, nodes: &mut AllNodes, machine: MachineIndex, tag: String, value: f32) -> NodeId {
+	reg_inits.push((tag.clone(), value));
+
+	nodes.add_node_with_tag(machine, tag, Box::new(Var::new(value)))
+}
+
+fn add_registers(reg_inits: &mut RegisterInits, nodes: &mut AllNodes, machine: MachineIndex, tags: Vec<String>, value: f32) -> NodeId {
+	reg_inits.extend(tags.iter().cloned().map(|tag| (tag, value)));
+
+	nodes.add_node_with_tags(machine, tags, Box::new(Var::new(value)))
 }
 
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
@@ -56,6 +64,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut imports = ImportCache::new(&mut waveforms, options.dump_ast);
 	let root_vars = Scope::root(builtin_vars(sample_rate, &mut imports) ?);
 	let mut pctx = process_statements(moddl.as_str(), root_vars, moddl_path, &mut imports) ?;
+	let mut reg_inits = vec![];
 
 	if let Some(asts) = imports.asts() {
 		println!("{}", serde_json::to_string(asts).unwrap());
@@ -65,7 +74,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut nodes = AllNodes::new(false);
 
 	// TODO タグ名を sequence_generator と共通化
-	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
+	let tempo = add_register(&mut reg_inits, &mut nodes, MACHINE_MAIN, "#tempo".to_string(), pctx.tempo);
 	let timer = nodes.add_node(MACHINE_MAIN, Box::new(TickTimer::new(
 			tempo.node(MACHINE_MAIN).as_mono(), pctx.ticks_per_bar, pctx.groove_cycle)))/* .as_mono() */;
 
@@ -93,20 +102,20 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				};
 				match spec {
 					TrackDef::Instrument(structure) => {
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, submachine_idx,
+								&mut PlaceholderStack::init(HashMap::new()), None, &mut imports, &mut reg_inits) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, submachine_idx,
+								&mut placeholders, None, &mut imports, &mut reg_inits) ?)
 					}
 					TrackDef::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports)
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, MACHINE_MAIN,
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), &mut imports, &mut reg_inits)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -148,8 +157,7 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let machine_out = nodes.add_submachine("out".to_string());
 	let master_node = ensure_on_machine(&mut nodes, master, machine_out);
 
-	let all_keys: Vec<&String> = nodes.machines.iter().flat_map(|m| m.nodes.tags().keys()).collect();
-	dbg!(&all_keys);
+	dbg!(&reg_inits);
 
 	match &options.output {
 		PlayerOutput::Audio => {
@@ -217,6 +225,23 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 		}
 	});
 
+	// reg_inits をコントローラに送信
+	// 1 回 clone してから使う？
+	let msg = RegisterSettings {
+		items: reg_inits.into_iter().map(|r| RegisterSettingsItem {
+			path: r.0,
+			// TODO Var 以外も適切なキーとともに収集する
+			key: "value".to_string(),
+			// TODO player 側でのオーバーライドに対応
+			initial: r.1,
+			original: r.1,
+		}).collect(),
+	};
+	let mut b = bson::serialize_to_document(&msg).unwrap();
+	// TODO うまく書ける方法を確立したい
+	b.insert("type", "registerSettings");
+	p2c_sender.send(b.to_vec().unwrap()).unwrap_or_else(|x| {dbg!(&x);});
+
 	// デバッグ用機能なのでとりあえず蓋をしておく
 	// TODO コマンドオプションで指定されたときだけ出力する
 	// output_structure(&nodes_result, &sends_to_receives);
@@ -273,11 +298,10 @@ impl Iterator for EventIter {
 
 const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこから取るようにする
 
-// TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
-		tempo: f32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, pctx: &PlayerContext, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+		imports: &mut ImportCache, reg_inits: &mut RegisterInits)
 		-> ModdlResult<NodeId> {
-	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
+	let moddl_path_rc = Rc::new(pctx.moddl_path.to_path_buf());
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new_extra(mml, moddl_path_rc.clone()))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
 	let freq_qual_tag = qualify_tag(track, TAG_FREQ);
@@ -296,13 +320,13 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 
 	let mut input = match override_input {
 		Some(input) => input,
-		None => nodes.add_node_with_tag(submachine_idx, freq_qual_tag.clone(), Box::new(Var::new(0f32))),
+		None => add_register(reg_inits, nodes, submachine_idx, freq_qual_tag.clone(), 0f32),
 	};
 	if features.contains(&Feature::Detune) {
 		// セント単位のデチューン
 		// freq_detuned = freq * 2 ^ (detune / 1200)
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(DETUNE_INIT)));
+		let detune = add_register(reg_inits, nodes, submachine_idx, format!("{}.#detune", &track), DETUNE_INIT);
 		let cents_per_oct = nodes.add_node(submachine_idx, Box::new(Constant::new(1200f32)));
 		let detune_oct = divide(Some(track), nodes, submachine_idx, detune, cents_per_oct) ?; // 必ず成功するはず
 		let const_2 = nodes.add_node(submachine_idx, Box::new(Constant::new(2f32)));
@@ -315,12 +339,12 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 		((format!("{}.#velocity", &track), VAR_DEFAULT_KEY.to_string()), VELOCITY_INIT),
 		((format!("{}.#volume", &track), VAR_DEFAULT_KEY.to_string()), VOLUME_INIT),
 		((format!("{}.#detune", &track), VAR_DEFAULT_KEY.to_string()), DETUNE_INIT),
-		(("#tempo".to_string(), VAR_DEFAULT_KEY.to_string()), tempo),
+		(("#tempo".to_string(), VAR_DEFAULT_KEY.to_string()), pctx.tempo),
 	].into_iter().collect();
 	let mut label_defaults: HashMap<String, String> = inits.iter().map(|((label, key), _)| (label.clone(), key.clone())).into_iter().collect();
 	label_defaults.insert(qualify_tag(track, TAG_FREQ), VAR_DEFAULT_KEY.to_string());
-	/* let label_defaults =  */collect_label_defaults(instrm_def, track, use_default_labels, &mut label_defaults);
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, use_default_labels, &mut inits) ?;
+	/* let label_defaults =  */collect_label_defaults(instrm_def, track, pctx.use_default_labels, &mut label_defaults);
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, pctx.use_default_labels, &mut inits, reg_inits) ?;
 
 	// let label_defaults = collect_label_defaults(instrm_def, track);
 
@@ -336,7 +360,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 			
 		// }
 		// TODO evaluate_and_perform_arg と共通化
-		let mut value = evaluate(&*expr, vars, imports) ?;
+		let mut value = evaluate(&*expr, &pctx.vars, imports) ?;
 		while value.as_io().is_ok() {
 			let (io, loc) = value.as_io().unwrap();
 			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
@@ -353,19 +377,19 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 		}
 	};
 
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &mut evaluate_expr) ?;
+	let seqs = generate_sequences(&ast, pctx.ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &mut evaluate_expr) ?;
 	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(track.to_string(), seqs)));
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(VELOCITY_INIT)));
+		let vel = add_register(reg_inits, nodes, submachine_idx, format!("{}.#velocity", &track), VELOCITY_INIT);
 		let output_vel = multiply(Some(track), nodes, submachine_idx, output, vel) ?; // 必ず成功するはず
 		output = output_vel;
 	}
 	if features.contains(&Feature::Volume) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(VOLUME_INIT)));
+		let vol = add_register(reg_inits, nodes, submachine_idx, format!("{}.#volume", &track), VOLUME_INIT);
 		let output_vol = multiply(Some(track), nodes, submachine_idx, output, vol) ?; // 必ず成功するはず
 		output = output_vol;
 	}
@@ -441,6 +465,7 @@ fn build_instrument(
 	label_defaults: &HashMap<String, String>,
 	use_default_labels: bool,
 	inits: &mut HashMap<ParamSignature, f32>,
+	reg_inits: &mut RegisterInits,
 ) -> ModdlResult<NodeId> {
 	fn visit_struct(
 		track: &str,
@@ -453,13 +478,14 @@ fn build_instrument(
 		label_defaults: &HashMap<String, String>,
 		use_default_labels: bool,
 		inits: &mut HashMap<ParamSignature, f32>,
+		reg_inits: &mut RegisterInits,
 		inside_label_guard: bool,
 	) -> ModdlResult<NodeId> {
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $inside_label_guard: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
-			($strukt: expr, $input: expr, $inside_label_guard: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits, reg_inits, $inside_label_guard) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits, reg_inits, $inside_label_guard) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -570,7 +596,6 @@ fn build_instrument(
 			}
 			// TODO Constant は、NodeCreation で VarFactory を使ったのと同じにできるはず。共通化する
 			ModuleDef::Constant { value, label } => {
-				let node = Box::new(Var::new(*value));
 				let local_tag = if inside_label_guard {
 					None
 				} else {
@@ -583,9 +608,11 @@ fn build_instrument(
 						// TODO ここで label_defaults から見つからないことはありえないはずだが、補足できるエラー（内部エラー的な）として軟着陸させた方がよさそう
 						let default = label_defaults.get(&tag).unwrap();
 						inits.insert((tag.clone(), default.clone()), *value);
-						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
+						// #56 トラック名を tag として登録するのは何か意味があったのだろうか？
+						// UI を作る上で不都合なので登録しないようにする
+						Ok(add_registers(reg_inits, nodes, submachine_idx, vec![/* track.to_string(), */ tag], *value))
 					},
-					None => add_node!(node),
+					None => add_node!(Box::new(Var::new(*value))),
 				}
 				
 			},
@@ -599,7 +626,7 @@ fn build_instrument(
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits, false)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits, reg_inits, false)
 }
 
 // fn create_node_by_factory(factory: &Rc<dyn NodeDef>, args: &HashMap<String, Value>) {

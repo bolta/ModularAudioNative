@@ -1,4 +1,4 @@
-use crate::{common::util::ignore_errors, node::event_scheduler::EventScheduler};
+use crate::{common::util::ignore_errors, node::{event_scheduler::EventScheduler, var::{EVENT_TYPE_SET, SetEvent}}};
 
 use super::{
 	common::*,
@@ -14,15 +14,13 @@ use crate::{
 };
 
 use std::{
-	collections::hash_map::HashMap,
-	collections::hash_set::HashSet,
-	sync::{
+	collections::{hash_map::HashMap, hash_set::HashSet}, ops::DerefMut, sync::{
 		Arc,
-		mpsc::Receiver
-	},
-	ops::DerefMut,
+		mpsc::{Receiver, SyncSender}
+	}
 };
 
+use ipc::Log;
 use itertools::Itertools; // for into_group_map_by
 
 use ringbuf::{
@@ -66,6 +64,7 @@ impl Machine {
 		broadcaster: Broadcaster,
 		broadcast_receiver: Receiver<GlobalEvent>,
 		skip_mode_events: Option<Box<dyn Fn () -> Vec<Box<dyn Event>>>>,
+		p2c_sender: SyncSender<Vec<u8>>,
 	) {
 		// ここで追加したノードは Graphviz では出力されない（Graphviz 出力の方が先だから）
 		// TODO Player 側で追加した方がいいかも

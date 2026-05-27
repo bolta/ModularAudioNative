@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
 		let mut cutoff = 1000;
 		loop {
 			let msg = Set {
-				target: "a.cutoff".to_string(),
+				path: "a.cutoff".to_string(),
 				key: "value".to_string(),
 				value: cutoff as f32,
 			};
