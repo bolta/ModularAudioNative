@@ -4,13 +4,12 @@ fn main() {
 			.exec()
 			.expect("Failed to get cargo metadata");
 
+	// .exe がつかないが Windows でも問題なく起動できる
 	let target = metadata.packages
 			.iter()
 			.filter(|package| package.name == "moddl")
 			.flat_map(|package| package.targets.iter())
 			.find(|target| target.kind.iter().any(|k| k == "bin"))
 			.expect("Failed to find moddl binary target");
-	let bin_path = metadata.target_directory.join("debug").join(format!("{}.exe", target.name));
-	println!("cargo:rustc-env=MODDL_BIN_PATH={}", bin_path);
 	println!("cargo:rustc-env=MODDL_BIN_NAME={}", target.name);
 }

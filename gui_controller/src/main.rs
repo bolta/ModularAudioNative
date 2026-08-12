@@ -1,4 +1,4 @@
-use std::{process::Command, rc::Rc, thread, time::Duration};
+use std::{env::current_exe, path::PathBuf, process::Command, rc::Rc, thread, time::Duration};
 
 use dioxus::{logger::tracing, prelude::*};
 use ipc::{Client, DomainHint, RegisterSettings, Response, Server, Set, channel_name_c2p, channel_name_p2c, decode, to_bson};
@@ -11,16 +11,20 @@ const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
-fn main() -> anyhow::Result<()> {
-	// build.rs で設定された環境変数からバイナリパスを取得
-	let bin_path = env!("MODDL_BIN_PATH");
+fn get_player_path() -> anyhow::Result<PathBuf> {
+	// build.rs で設定された環境変数からファイル名を取得
 	let bin_name = env!("MODDL_BIN_NAME");
-	
-	println!("Executing: {} ({})", bin_name, bin_path);
-	
-	
+	let controller_path: PathBuf = current_exe() ?;
+	controller_path.parent().map(|dir| dir.join(bin_name))
+			.ok_or(anyhow::Error::msg("cannot locate player executable"))
+}
+
+fn main() -> anyhow::Result<()> {
+	let player_path = get_player_path() ?;
+	println!("Executing {}", player_path.to_str().unwrap_or("(path not displayable)"));
+
 	// main プロジェクトのバイナリを実行
-	let mut cmd = Command::new(bin_path);
+	let mut cmd = Command::new(player_path);
 	
 	// コマンドライン引数をそのまま渡す場合
 	// TODO チャンネル名を可変にするためコマンド引数で渡す
