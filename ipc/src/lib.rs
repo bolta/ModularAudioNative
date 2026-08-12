@@ -7,6 +7,9 @@ pub use common::{
 mod client;
 pub use client::Client;
 
+mod codec;
+pub use codec::*;
+
 mod message;
 pub use message::*;
 

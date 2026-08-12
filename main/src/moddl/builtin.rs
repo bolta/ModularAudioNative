@@ -63,9 +63,12 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 		}
 	}
 	macro_rules! add_node_def_by_factory {
-		($name: expr, $fact: expr) => {
-			result.insert($name.to_string(), (ValueBody::NodeDef(Rc::new($fact)), Location::dummy()));
-		}
+		($name: expr, $node: expr) => {
+			result.insert($name.to_string(), (ValueBody::NodeDef(NodeDef::without_domain(Rc::new($node))), Location::dummy()));
+		};
+		($name: expr, $node: expr, $domains: expr) => {
+			result.insert($name.to_string(), (ValueBody::NodeDef(NodeDef { node: Rc::new($node), domains: $domains }), Location::dummy()));
+		};
 	}
 	macro_rules! add_function {
 		($name: expr, $fact: expr) => {
@@ -86,17 +89,34 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_node_def_by_factory!("sineOsc", SineOscFactory { });
 	add_node_def_by_factory!("triangleOsc", TriangleOscFactory { });
 	add_node_def_by_factory!("sawOsc", SawOscFactory { });
-	add_node_def_by_factory!("pulseOsc", PulseOscFactory { });
+	add_node_def_by_factory!("pulseOsc", PulseOscFactory { }, HashMap::from([
+		("duty".to_string(), DomainHint::range_including_both_ends(0f32, 1f32)),
+	]));
 	add_node_def_by_factory!("uniformNoise", UniformNoiseFactory { });
-	add_node_def_by_factory!("expEnv", ExpEnvFactory { });
-	add_node_def_by_factory!("adsrEnv", AdsrEnvFactory { });
+	add_node_def_by_factory!("expEnv", ExpEnvFactory { }, HashMap::from([
+		("ratioPerSec".to_string(), DomainHint::range_including_both_ends(0f32, 1f32)),
+	]));
+	add_node_def_by_factory!("adsrEnv", AdsrEnvFactory { }, HashMap::from([
+		("attack".to_string(), DomainHint::range_including_both_ends(0f32, 5f32)),
+		("decay".to_string(), DomainHint::range_including_both_ends(0f32, 5f32)),
+		("sustain".to_string(), DomainHint::range_including_both_ends(0f32, 1f32)),
+		("release".to_string(), DomainHint::range_including_both_ends(0f32, 5f32)),
+		("initial".to_string(), DomainHint::range_including_both_ends(0f32, 1f32)),
+	]));
 	add_node_def_by_factory!("limit", LimitFactory { });
-	add_node_def_by_factory!("lpf", LowPassFilterFactory { });
-	add_node_def_by_factory!("hpf", HighPassFilterFactory { });
-	add_node_def_by_factory!("bpf", BandPassFilterFactory { });
+
+	let filter_controls = || HashMap::from([
+		("freq".to_string(), DomainHint::range_including_both_ends(0f32, (sample_rate / 2) as f32)),
+		("q".to_string(), DomainHint::range_including_both_ends(0f32, 50f32)),
+	]);
+	add_node_def_by_factory!("lpf", LowPassFilterFactory { }, filter_controls());
+	add_node_def_by_factory!("hpf", HighPassFilterFactory { }, filter_controls());
+	add_node_def_by_factory!("bpf", BandPassFilterFactory { }, filter_controls());
 	add_node_def_by_factory!("quantCrush", QuantCrushFactory { });
 	add_node_def_by_factory!("sampleCrush", SampleCrushFactory::new(sample_rate));
-	add_node_def_by_factory!("pan", PanFactory { });
+	add_node_def_by_factory!("pan", PanFactory { }, HashMap::from([
+		("pos".to_string(), DomainHint::range_including_both_ends(-1f32, 1f32)),
+	]));
 	add_node_def_by_factory!("glide", GlideFactory { });
 	add_function!("waveformPlayer", WaveformPlayer { });
 	add_function!("nesFreq", NesFreq { });
@@ -175,7 +195,7 @@ impl Function for Phase {
 		};
 		let result = Rc::new(PhaseFactory::new(initial));
 
-		Ok((ValueBody::NodeDef(result), call_loc))
+		Ok((ValueBody::NodeDef(NodeDef::without_domain(result)), call_loc))
 	}
 }
 
@@ -189,7 +209,7 @@ impl Function for WaveformPlayer {
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Waveform }, wave_loc.clone())) ?;
 		let result = Rc::new(WaveformPlayerFactory::new(wave));
 
-		Ok((ValueBody::NodeDef(result), call_loc))
+		Ok((ValueBody::NodeDef(NodeDef::without_domain(result)), call_loc))
 	}
 }
 
@@ -203,7 +223,7 @@ impl Function for NesFreq {
 		};
 		let result = Rc::new(NesFreqFactory::new(triangle));
 
-		Ok((ValueBody::NodeDef(result), call_loc))
+		Ok((ValueBody::NodeDef(NodeDef::without_domain(result)), call_loc))
 	}
 }
 
@@ -221,7 +241,7 @@ impl Function for Delay {
 				.ok_or_else(|| error(ErrorType::TypeMismatch { expected: ValueType::Number }, max_time_loc.clone())) ?;
 		let result = Rc::new(DelayFactory::new(max_time, self.sample_rate));
 
-		Ok((ValueBody::NodeDef(result), call_loc))
+		Ok((ValueBody::NodeDef(NodeDef::without_domain(result)), call_loc))
 	}
 }
 

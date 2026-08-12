@@ -602,14 +602,12 @@ parser![label_filter_spec, LabelFilterSpec, {
 
 parser![qualified_label, QualifiedLabel, {
 	map_res(
-		separated_list0(char('.'), identifier()),
-		|labels| ok({
-			let mut result = String::new();
-			labels.iter().enumerate().for_each(|(i, label)| {
-				if i > 0 { result.push('.'); }
-				result.push_str(label);
-			});
-			QualifiedLabel(result)
+		tuple((
+			many0(terminated(identifier(), char('.'))),
+			identifier(),
+		)),
+		|(qualifiers, local)| ok({
+			QualifiedLabel::new(qualifiers, local)
 		})
 	)
 }];

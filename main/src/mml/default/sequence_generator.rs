@@ -5,17 +5,26 @@ use crate::{
 	}
 };
 extern crate parser;
-use parser::{common::Location, mml::ast::*};
+use parser::{common::Location, mml::ast::*, moddl::ast::QualifiedLabel};
 
-use std::collections::{
+use std::{collections::{
 	hash_map::HashMap,
 	hash_set::HashSet,
-};
+}, unreachable};
 
-/// (qname, key)
-pub type ParamSignature = (String, String);
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct ParamSignature {
+	label: QualifiedLabel,
+	key: String,
+}
+impl ParamSignature {
+	pub fn new(label: QualifiedLabel, key: impl Into<String>) -> Self {
+		Self { label, key: key.into() }
+	}
+}
+
 pub struct TagSet {
-	pub freq: String,
+	pub freq: QualifiedLabel, // String,
 	pub note: String,
 }
 
@@ -63,7 +72,7 @@ pub fn generate_sequences(
 	tag_set: &TagSet,
 	param_prefix: &str,
 	param_initials: &HashMap<ParamSignature, f32>,
-	param_default_keys: &HashMap<String, String>,
+	param_default_keys: &HashMap<QualifiedLabel, String>,
 	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
 ) -> ModdlResult<HashMap<String, Sequence>> {
 	let mut stack = init_stack(param_initials);
@@ -98,7 +107,7 @@ fn generate_sequence(
 	sequences: &mut HashMap<String, Sequence>,
 	used_skip: &mut bool,
 	param_prefix: &str,
-	param_default_keys: &HashMap<String, String>,
+	param_default_keys: &HashMap<QualifiedLabel, String>,
 	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
 ) -> ModdlResult<()> {
 	let mut seq = vec![];
@@ -120,7 +129,7 @@ fn generate_sequence(
 				// TODO ちゃんとエラー処理
 				let key = param_default_keys.get(&tag_set.freq).unwrap();
 				// TODO タグは intern したい
-				seq.push(Instruction::Value { tag: tag_set.freq.clone(), key: key.clone(), value: freq });
+				seq.push(Instruction::Value { tag: tag_set.freq.to_string(), key: key.clone(), value: freq });
 				if ! stack.mml_state().slur {
 					seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: true });
 				}
@@ -280,14 +289,14 @@ fn push(stack: &mut Stack) {
 /// スタックを pop する
 fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
 	let names_to_restore = stack.params().keys();
-	let restore_instrcs: Vec<_> = names_to_restore.map(|sig @ (name, key)| {
+	let restore_instrcs: Vec<_> = names_to_restore.map(|sig @ ParamSignature { label, key }| {
 		// 現在の（これから pop する）フレームは除き、それ以前で設定された値を探す
 		let prev_value = stack.iter_frames().skip(1).find_map(|frame| frame.params.get(sig));
 		if prev_value.is_none() {
-			warn(format!("Could not find the previous value of {}:{} (maybe a bug)", name, key));
+			warn(format!("Could not find the previous value of {}:{} (maybe a bug)", label, key));
 		}
 
-		prev_value.map(|value| Instruction::Value { tag: name.clone(), key: key.clone(), value: *value })
+		prev_value.map(|value| Instruction::Value { tag: label.to_string()/* name.clone() */, key: key.clone(), value: *value })
 	}).filter(|i| i.is_some())
 			.map(|i| i.unwrap())
 			.collect();
@@ -298,16 +307,25 @@ fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
 }
 
 fn qualified_param_name(prefix: &str, name: &str) -> String {
+	// ここで prefix は トラック名 + '.' であり、name と直結することで QLabel の絶対表記となる
+	// TODO 最初から QLabel でここまで流すようにする
 	format!("{}{}", prefix, name)
 }
 
-fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_default_keys: &HashMap<String, String>, param_prefix: &str, name: &str, key: &Option<String>, value: f32) {
+fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_default_keys: &HashMap<QualifiedLabel, String>, param_prefix: &str, name: &str, key: &Option<String>, value: f32) {
+	// TODO name を最初から QLabel にする
 	let param_name = qualified_param_name(param_prefix, name);
-	let key = key.as_ref().or_else(|| param_default_keys.get(&param_name));
+	let param_name_elems = param_name.split('.').collect::<Vec<_>>();
+	if param_name_elems.len() == 0 { unreachable!() }; // TODO そもそも QLabel で渡るようになれば不要なチェック
+	let param_name_qlabel = QualifiedLabel::new(
+		param_name_elems[0 .. param_name_elems.len() - 1].iter().map(|q| q.to_string()).collect(),
+		param_name_elems[param_name_elems.len() - 1],
+	);
+	let key = key.as_ref().or_else(|| param_default_keys.get(&param_name_qlabel));
 	match key {
 		Some(key) => {
 			seq.push(Instruction::Value { tag: param_name.clone(), key: key.clone(), value });
-			stack.params_mut().insert((param_name, key.clone()), value);
+			stack.params_mut().insert(ParamSignature { label: param_name_qlabel, key: key.clone() }, value);
 		},
 		None => {
 			warn(format!("default key for param {} not found (maybe due to wrong param name)", param_name));

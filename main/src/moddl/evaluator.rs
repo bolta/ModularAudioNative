@@ -117,7 +117,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
 			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_def() ?;
 
-			let arg_names = factory.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
+			let arg_names = factory.node.node_arg_specs().iter().map(|spec| spec.name.clone()).collect();
 			let resolved_args = resolve_args(&arg_names, args, &expr_loc) ?;
 
 			// TODO map() を使いたいがクロージャで ? を使っているとうまくいかず。いい書き方があれば修正
@@ -136,7 +136,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 		ExprBody::Labeled { label, inner } => {
 			let (inner_val, _) = evaluate(inner, vars, imports) ?;
 
-			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", &label.0, &expr_loc));
+			let warn_ineffective_label = || warn(format!("ineffective label \"{}\" ignored at {}", label, &expr_loc));
 
 			// ラベルをつけれる対象は、数値定数、引数なしの NodeDef、引数ありの NodeDef（NodeCreation）の 3 つ。
 			// 上記の値にラベルをつけると、結果は必ず ModuleDef になる。
@@ -178,7 +178,7 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 		ExprBody::LabelPrefix { strukt, prefix } => {
 			let (struct_val, struct_loc) = evaluate(strukt, vars, imports)?.as_module_def() ?;
 
-			Ok(ValueBody::ModuleDef(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix.0.as_str()) ?))
+			Ok(ValueBody::ModuleDef(add_prefix_to_labels(unguard_labels(&struct_val), &struct_loc, prefix) ?))
 		},
 	} ?;
 	Ok((body, expr_loc.clone()))
@@ -208,10 +208,10 @@ fn filter_labels(strukt: &ModuleDef, loc: &Location, filter: &LabelFilter) -> Mo
 	transform_labels(strukt, loc, &transform_label)
 }
 
-fn add_prefix_to_labels(strukt: &ModuleDef, loc: &Location, prefix: &str) -> ModdlResult<ModuleDef> {
+fn add_prefix_to_labels(strukt: &ModuleDef, loc: &Location, prefix: &QualifiedLabel) -> ModdlResult<ModuleDef> {
 	let transform_label = |label: &Option<QualifiedLabel>| match label {
 		None => None,
-		Some(label) => { Some(QualifiedLabel(format!("{}.{}", prefix, label.0))) },
+		Some(label) => { Some(prefix.join(label)) },
 	};
 
 	transform_labels(strukt, loc, &transform_label)

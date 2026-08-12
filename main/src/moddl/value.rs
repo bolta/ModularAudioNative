@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use parser::common::Location;
 use parser::moddl::ast::QualifiedLabel;
+use serde::{Deserialize, Serialize};
 
 use super::error::{ModdlResult, error, ErrorType};
 use super::io::Io;
@@ -12,7 +13,10 @@ use crate::{
 use enum_display::EnumDisplay;
 use std::cell::RefCell;
 use std::{
-	collections::HashMap,
+	collections::{
+		HashMap,
+		BTreeMap,
+	},
 	rc::Rc,
 };
 
@@ -44,6 +48,56 @@ impl <C: 'static + Calc> CalcNodeFactoryTrait for CalcNodeFactory<C> {
 	}
 }
 
+#[derive(Clone)]
+pub struct NodeDef {
+	pub node: Rc<dyn NodeFactory>,
+
+	// 検討メモ：定義域の情報は NodeFactory に持たせるのが筋かもしれない。
+	// ただ、PulseOsc::duty とかは 0 <= x <= 1 で誰も異論はなさそうだが、
+	// adsrEnv::attack なんかだと 0 <= x は確実としても、上限はモデル的には存在しないので、NodeFactory に置くのは難しそう。
+	// 一方、UI 的には何かしらの上限を決めないといけない。ということは UI に置くべきだとなるが、
+	// 0 <= x はモデルに置くのが妥当そうでもある…
+	// とりあえずは全て UI に置いて進める
+	// pub ui: Option<UiDef>,
+	// pub controls: Vec<ControlDef>,
+	pub domains: HashMap<String, DomainHint>,
+}
+impl NodeDef {
+	pub fn without_domain(node: Rc<dyn NodeFactory>) -> Self {
+		Self { node, domains: HashMap::from([]) }
+	}
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum DomainHint {
+	Range {
+		min: f32,
+		includes_min: bool,
+		max: f32,
+		includes_max: bool,
+	},
+	Enum {
+		items: Vec<EnumItem>,
+	},
+}
+impl DomainHint {
+	pub fn range_including_no_ends(min: f32, max: f32) -> Self {
+		Self::Range { min, max, includes_min: false, includes_max: false }
+	}
+	pub fn range_including_min_end(min: f32, max: f32) -> Self {
+		Self::Range { min, max, includes_min: true, includes_max: false }
+	}
+	pub fn range_including_max_end(min: f32, max: f32) -> Self {
+		Self::Range { min, max, includes_min: false, includes_max: true }
+	}
+	pub fn range_including_both_ends(min: f32, max: f32) -> Self {
+		Self::Range { min, max, includes_min: true, includes_max: true }
+	}
+}
+
+#[derive(Clone, Deserialize, Debug, Serialize)]
+pub struct EnumItem { pub value: f32, pub name: String }
+
 /// 生成すべき Node の構造を表現する型。
 /// Value から直接 Node を生成すると問題が多いので、一旦この形式を挟む
 #[derive(Clone)]
@@ -53,7 +107,7 @@ pub enum ModuleDef {
 	Condition { cond: Box<ModuleDef>, then: Box<ModuleDef>, els: Box<ModuleDef> },
 	Lambda { input_param: String, body: Box<ModuleDef> },
 	NodeCreation {
-		factory: Rc<dyn NodeFactory>,
+		factory: NodeDef,
 		args: HashMap<String, Value>,
 		label: Option<QualifiedLabel>,
 	},
@@ -101,13 +155,13 @@ impl ModuleDef {
 				};
 				let label_str = match label {
 					None => "".to_string(),
-					Some(label) => format!("@{}", label.0),
+					Some(label) => format!("@{}", label),
 				};
 				format!("{}{}{}", factory_str, args_str, label_str)
 			},
 			Self::Constant { value, label } => match label {
 				None => value.to_string(),
-				Some(label) => format!("{}@{}", value, label.0),
+				Some(label) => format!("{}@{}", value, label),
 			},
 			Self::Placeholder { name } => format!("Placeholder({})", name),
 			Self::LabelGuard(content) => format!("LabelGuard({})", content.to_string()),
@@ -127,7 +181,7 @@ pub trait ValueExtraction {
 	fn as_array(&self) -> ModdlResult<(&Vec<Value>, Location)>;
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)>;
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)>;
-	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)>;
+	fn as_node_def(&self) -> ModdlResult<(NodeDef, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
 }
@@ -154,7 +208,7 @@ impl ValueExtraction for Value {
 	fn as_assoc(&self) -> ModdlResult<(&HashMap<String, Value>, Location)> { extract(self.0.as_assoc() , &self.1, ValueType::Assoc) }
 	fn as_module_def(&self) -> ModdlResult<(ModuleDef, Location)> { extract_any(self.0.as_module_def() , &self.1,
 			vec![ValueType::ModuleDef, ValueType::Number, ValueType::NodeDef]) }
-	fn as_node_def(&self) -> ModdlResult<(Rc<dyn NodeFactory>, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
+	fn as_node_def(&self) -> ModdlResult<(NodeDef, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
 }
@@ -171,7 +225,7 @@ pub enum ValueBody {
 	/// ノードの構造に関するツリー表現
 	ModuleDef(ModuleDef),
 	/// 引数を受け取ってノードを生成する関数
-	NodeDef(Rc<dyn NodeFactory>),
+	NodeDef(NodeDef),
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
 }
@@ -244,7 +298,7 @@ impl ValueBody {
 			_ => None,
 		}
 	}
-	pub fn as_node_factory(&self) -> Option<Rc<dyn NodeFactory>> {
+	pub fn as_node_factory(&self) -> Option<NodeDef> {
 		match self {
 			Self::NodeDef(fact) => Some(fact.clone()),
 			_ => None,

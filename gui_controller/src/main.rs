@@ -1,8 +1,11 @@
 use std::{process::Command, rc::Rc, thread, time::Duration};
 
-use bson::Document;
 use dioxus::{logger::tracing, prelude::*};
-use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c};
+use ipc::{Client, DomainHint, RegisterSettings, Response, Server, Set, channel_name_c2p, channel_name_p2c, decode, to_bson};
+
+use crate::view_model::{RegisterSettingsItemStore, RegisterSettingsItemStoreStoreExt, RegisterSettingsItemsStore, RegisterSettingsStore, RegisterSettingsStoreStoreExt};
+
+mod view_model;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
@@ -37,14 +40,11 @@ fn main_orig() {
     dioxus::launch(App);
 }
 
-type RegisterSpec = (String, String, f32, f32, f32);
-
 #[component]
 fn App() -> Element {
-	let mut registers: Signal<Vec<RegisterSpec>> = use_signal(|| vec![]);
-	use_context_provider(|| registers);
-
-	// let mut registers_ = registers.clone();
+	let registers: Store<RegisterSettingsStore> = use_store(|| RegisterSettingsStore {
+		items: Default::default(),
+	});
 
 	use_future(move || async move {
 		let (tx, rx) = std::sync::mpsc::channel::<bson::Document>();
@@ -53,47 +53,66 @@ fn App() -> Element {
 			let p2c_server = Server::new(channel_name_p2c()).unwrap();
 			loop {
 				p2c_server.wait_for_request(|request_bytes| {
-					match bson::Document::from_reader(request_bytes) {
-						Ok(doc) => {
-							// println!("controller received {}", &doc);
-							println!("received a message");
-							// tx.send(doc);
-							match doc.get_str("type") {
-								Ok(tipe) => {
-									println!("************************************ {}", tipe);
-									match tipe {
-										"ping" => {
-											let response = Response {
-												status: "ok".into(),
-												text: "pong".into(),
-											};
-											Ok(bson::serialize_to_vec(&response).unwrap())
-										},
-										"registerSettings" => {
-											// TODO エラー処理
-											tx.send(doc.clone());
-											let response = Response {
-												status: "ok".into(),
-												text: "received".into(),
-											};
-											Ok(bson::serialize_to_vec(&response).unwrap())
-										},
-										_ => {
-											// TODO エラーにすべきかもしれない。ちゃんと処理
-											let response = Response {
-												status: "ok".into(),
-												text: "hello".into(),
-											};
-											Ok(bson::serialize_to_vec(&response).unwrap())
-										},
-									}
-									// TODO tx.send(doc) はここで一括で行う？
-								}
-								Err(e) => todo!()
-							}
-						}
-						Err(e) => todo!()
+					// let b = bson::Document::from_reader(request_bytes);
+					let bson = to_bson(request_bytes) ?;
+					if let Some(settings) = decode::<RegisterSettings>(&bson) {
+						// TODO エラー処理
+						tx.send(bson.clone()) ?;
+						let response = Response {
+							status: "ok".into(),
+							text: "received".into(),
+						};
+						Ok(bson::serialize_to_vec(&response).unwrap())
+					}else {
+						let response = Response {
+							status: "ok".into(),
+							text: "hoge".into(),
+						};
+						Ok(bson::serialize_to_vec(&response).unwrap())
 					}
+					// TODO 復活させる
+
+					// match bson::Document::from_reader(request_bytes) {
+					// 	Ok(doc) => {
+					// 		println!("controller received {}", &doc);
+					// 		println!("received a message");
+					// 		// tx.send(doc);
+					// 		match doc.get_str("type") {
+					// 			Ok(tipe) => {
+					// 				println!("************************************ {}", tipe);
+					// 				match tipe {
+					// 					"ping" => {
+					// 						let response = Response {
+					// 							status: "ok".into(),
+					// 							text: "pong".into(),
+					// 						};
+					// 						Ok(bson::serialize_to_vec(&response).unwrap())
+					// 					},
+					// 					"registerSettings" => {
+					// 						// TODO エラー処理
+					// 						tx.send(doc.clone());
+					// 						let response = Response {
+					// 							status: "ok".into(),
+					// 							text: "received".into(),
+					// 						};
+					// 						Ok(bson::serialize_to_vec(&response).unwrap())
+					// 					},
+					// 					_ => {
+					// 						// TODO エラーにすべきかもしれない。ちゃんと処理
+					// 						let response = Response {
+					// 							status: "ok".into(),
+					// 							text: "hello".into(),
+					// 						};
+					// 						Ok(bson::serialize_to_vec(&response).unwrap())
+					// 					},
+					// 				}
+					// 				// TODO tx.send(doc) はここで一括で行う？
+					// 			}
+					// 			Err(e) => todo!()
+					// 		}
+					// 	}
+					// 	Err(e) => todo!()
+					// }
 				}).unwrap_or_else(|e| println!("{}", e));
 			}
 		});
@@ -104,13 +123,15 @@ fn App() -> Element {
 				match doc.get_str("type") {
 					Ok(tipe) => {
 						match tipe {
-							"registerSettings" => {
+							"RegisterSettings" => {
 								let msg: RegisterSettings = bson::deserialize_from_document(doc).unwrap();
-								let ctrls: Vec<RegisterSpec> = msg.items.iter().map(
-										|RegisterSettingsItem { path, key, initial, original }| (path.clone(), key.clone(), *initial, initial / 4f32, initial * 4f32)).collect();
-								registers.clear();
-								registers.extend(ctrls);
-								
+								dbg!(&msg);
+								let store = RegisterSettingsStore::from(msg);
+								let mut items_ = registers.items();
+								let mut items = items_.write();
+								items.clear();
+								items.extend(store.items);
+
 							},
 							_ => { },
 						}
@@ -125,7 +146,7 @@ fn App() -> Element {
 	rsx! {
 		document::Link { rel: "icon", href: FAVICON }
 		document::Link { rel: "stylesheet", href: MAIN_CSS }
-		ControlPanel {}
+		ControlPanel { registers }
 	}
 }
 
@@ -186,18 +207,78 @@ fn RegisterControl(name: String, keey: String, init: f32, min: f32, max: f32, c2
 }
 
 #[component]
-pub fn ControlPanel() -> Element {
+fn Item(item: Store<RegisterSettingsItemStore>, name: String, path: String, c2p_client: ClientWrapper) -> Element {
+	let is_settings = matches!(&*item.read(), RegisterSettingsItemStore::Settings { .. });
+	if is_settings {
+		let (key, initial, min, max) = {
+			let item = item.read();
+			match &*item {
+				RegisterSettingsItemStore::Settings { key, initial, domain, .. } => {
+					let (min, max) = domain.as_ref().map(|domain| match domain {
+						// TODO 端点を含まない対応
+						DomainHint::Range { min, max, .. } => (*min, *max),
+						// TODO Enum 対応
+						DomainHint::Enum { .. } => (-5000f32, 5000f32),
+					// TODO 定義域がない場合の対応
+					}).unwrap_or((-5000f32, 5000f32));
+					(key.clone(), *initial, min, max)
+				},
+				RegisterSettingsItemStore::Group(_) => unreachable!(),
+			}
+		};
+
+		rsx! {
+			RegisterControl {
+				name: path,
+				keey: key,
+				init: initial,
+				min, max,
+				c2p_client,
+			}
+		}
+	} else if let Some(group) = item.group() {
+			rsx! {
+				fieldset {
+					legend { "{name}" }
+					ItemList {
+						items: group,
+						path,
+						c2p_client,
+					}
+				}
+			}
+	} else {
+		rsx! {}
+	}
+}
+
+#[component]
+fn ItemList(items: Store<RegisterSettingsItemsStore>, path: String, c2p_client: ClientWrapper) -> Element {
+	rsx! {
+		for (name, item) in items.iter() {
+			Item {
+				item,
+				name: name.clone(),
+				path: if path.len() > 0 { format!("{}.{}", &path, &name) } else { name.clone() },
+				c2p_client: c2p_client.clone(),
+			}
+		}
+	}
+}
+
+#[component]
+pub fn ControlPanel(registers: Store<RegisterSettingsStore>) -> Element {
 	// TODO エラー処理
 	let c2p_client = ClientWrapper(Rc::new(Client::new(channel_name_c2p(), Duration::from_millis(500)).unwrap()));
-
-	let registers = use_context::<Signal<Vec<RegisterSpec>>>();
 
 	rsx! {
 		div {
 			id: "control_panel",
 			div {
-				for (name, key, init, min, max) in registers.read().iter() {
-					RegisterControl { name: name.clone(), keey: key.clone(), init: *init, min: *min, max: *max, c2p_client: c2p_client.clone() }
+				ItemList {
+					items: registers.items(),
+					path: "",
+					c2p_client,
 				}
 			}
 		}
