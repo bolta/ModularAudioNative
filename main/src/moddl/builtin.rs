@@ -106,8 +106,8 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_node_def_by_factory!("limit", LimitFactory { });
 
 	let filter_controls = || HashMap::from([
-		("freq".to_string(), DomainHint::range_including_both_ends(0f32, (sample_rate / 2) as f32)),
-		("q".to_string(), DomainHint::range_including_both_ends(0f32, 50f32)),
+		("freq".to_string(), DomainHint::range_including_max_end(0f32, (sample_rate / 2) as f32)),
+		("q".to_string(), DomainHint::range_including_max_end(0f32, 50f32)),
 	]);
 	add_node_def_by_factory!("lpf", LowPassFilterFactory { }, filter_controls());
 	add_node_def_by_factory!("hpf", HighPassFilterFactory { }, filter_controls());

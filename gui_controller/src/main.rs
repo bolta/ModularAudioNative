@@ -215,12 +215,18 @@ fn Item(item: Store<RegisterSettingsItemStore>, name: String, path: String, c2p_
 			match &*item {
 				RegisterSettingsItemStore::Settings { key, initial, domain, .. } => {
 					let (min, max) = domain.as_ref().map(|domain| match domain {
-						// TODO 端点を含まない対応
-						DomainHint::Range { min, max, .. } => (*min, *max),
-						// TODO Enum 対応
-						DomainHint::Enum { .. } => (-5000f32, 5000f32),
+						DomainHint::Range { min, includes_min, max, includes_max } => {
+							let (min, max) = if min <= max { (*min, *max) } else { (*max, *min) };
+							let delta = 0.1f32.min((max - min) * 0.001f32);
+							let min = if *includes_min { min } else { min + delta };
+							let max = if *includes_max { max } else { max - delta };
+
+							(min, max)
+						},
+							// TODO Enum 対応
+						DomainHint::Enum { .. } => (-100f32, 100f32),
 					// TODO 定義域がない場合の対応
-					}).unwrap_or((-5000f32, 5000f32));
+					}).unwrap_or((-100f32, 100f32));
 					(key.clone(), *initial, min, max)
 				},
 				RegisterSettingsItemStore::Group(_) => unreachable!(),
