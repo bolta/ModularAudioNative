@@ -165,13 +165,13 @@ impl PartialEq for ClientWrapper {
 }
 
 #[component]
-fn RegisterControl(name: String, keey: String, init: f32, min: f32, max: f32, c2p_client: ClientWrapper) -> Element {
+fn RegisterControl(path: String, keey: String, init: f32, min: f32, max: f32, label: String, c2p_client: ClientWrapper) -> Element {
 	let mut value = use_signal(|| init);
 
 	let set_value = || {
-		let c2p_client = (&c2p_client).clone();
-		let target = (&name).clone();
-		let key = (&keey).clone();
+		let c2p_client = c2p_client.clone();
+		let target = path.clone();
+		let key = keey.clone();
 		move |e: Event<FormData>| if let Ok(v) = e.value().parse::<f32>() {
 			*value.write() = v;
 			tracing::info!("value has been set to {}", v);
@@ -192,7 +192,7 @@ fn RegisterControl(name: String, keey: String, init: f32, min: f32, max: f32, c2
 
 	rsx! {
 		div {
-			label { "{name}" }
+			label { "{label}" }
 			input {
 				r#type: "range",
 				min,
@@ -239,10 +239,11 @@ fn Item(item: Store<RegisterSettingsItemStore>, name: String, path: String, c2p_
 
 		rsx! {
 			RegisterControl {
-				name: path,
+				path,
 				keey: key,
 				init: initial,
 				min, max,
+				label: name,
 				c2p_client,
 			}
 		}
