@@ -218,8 +218,8 @@ fn Item(item: Store<RegisterSettingsItemStore>, name: String, path: String, c2p_
 			let item = item.read();
 			match &*item {
 				RegisterSettingsItemStore::Settings { key, initial, domain, .. } => {
-					let (min, max) = domain.as_ref().map(|domain| match domain {
-						DomainHint::Range { min, includes_min, max, includes_max } => {
+					let (min, max) = match domain {
+						Some(DomainHint::Range { min, includes_min, max, includes_max }) => {
 							let (min, max) = if min <= max { (*min, *max) } else { (*max, *min) };
 							let delta = 0.1f32.min((max - min) * 0.001f32);
 							let min = if *includes_min { min } else { min + delta };
@@ -227,10 +227,13 @@ fn Item(item: Store<RegisterSettingsItemStore>, name: String, path: String, c2p_
 
 							(min, max)
 						},
-							// TODO Enum 対応
-						DomainHint::Enum { .. } => (-100f32, 100f32),
-					// TODO 定義域がない場合の対応
-					}).unwrap_or((-100f32, 100f32));
+
+						// TODO Enum 対応
+						Some(DomainHint::Enum { .. }) => (-100f32, 100f32),
+
+						// TODO 定義域がない場合にちゃんと対応（いっそスライダーを出さないとか？）
+						None => (-100f32, 100f32),
+					};
 					(key.clone(), *initial, min, max)
 				},
 				RegisterSettingsItemStore::Group(_) => unreachable!(),
