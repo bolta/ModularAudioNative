@@ -27,5 +27,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: moddl
-        path: dist/
+        path: dist/release/
 

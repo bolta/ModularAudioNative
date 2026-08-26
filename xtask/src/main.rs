@@ -16,6 +16,10 @@ fn main() -> ExitCode {
 struct Args {
 	profile: String,
 	out_dir: PathBuf,
+	// --out-dir が明示されていない（= dist/<profile> という既定値の）場合だけ true。
+	// 素性の分からないユーザー指定ディレクトリを無条件に削除するのは危険なため、
+	// まるごと削除してよいのはビルドツールが自分で作る既定の出力先だけに限る。
+	clean_out_dir: bool,
 }
 
 fn run() -> Result<(), String> {
@@ -24,6 +28,14 @@ fn run() -> Result<(), String> {
 
 	build_main(&root, &args.profile)?;
 	build_gui(&root, &args.profile)?;
+
+	// 古い成果物が混ざらないよう、既定の出力先（dist/<profile>）の場合だけ
+	// まるごと削除してから作り直す（他の profile の出力先や、--out-dir で明示された
+	// 既存ディレクトリの中身には触れない）
+	if args.clean_out_dir && args.out_dir.exists() {
+		fs::remove_dir_all(&args.out_dir)
+			.map_err(|e| format!("failed to remove existing output dir {}: {e}", args.out_dir.display()))?;
+	}
 
 	fs::create_dir_all(&args.out_dir)
 		.map_err(|e| format!("failed to create output dir {}: {e}", args.out_dir.display()))?;
@@ -59,7 +71,7 @@ fn workspace_root() -> PathBuf {
 
 fn parse_args(root: &Path) -> Result<Args, String> {
 	let mut profile = "release".to_string();
-	let mut out_dir = root.join("dist");
+	let mut out_dir: Option<PathBuf> = None;
 
 	let mut iter = env::args().skip(1).peekable();
 	// Allow (and ignore) a leading task name, e.g. `cargo xtask build`.
@@ -76,7 +88,7 @@ fn parse_args(root: &Path) -> Result<Args, String> {
 			}
 			"--out-dir" => {
 				let value = iter.next().ok_or("--out-dir requires a path")?;
-				out_dir = PathBuf::from(value);
+				out_dir = Some(PathBuf::from(value));
 			}
 			other => return Err(format!("unknown argument: {other}")),
 		}
@@ -86,7 +98,13 @@ fn parse_args(root: &Path) -> Result<Args, String> {
 		return Err(format!("--profile must be 'debug' or 'release', got '{profile}'"));
 	}
 
-	Ok(Args { profile, out_dir })
+	// デバッグビルドとリリースビルドの成果物を取り違えないよう、既定の出力先は
+	// profile ごとのサブディレクトリに分ける。--out-dir を明示した場合は、
+	// profile のサブディレクトリを挟まずそのディレクトリに直接出力する。
+	let clean_out_dir = out_dir.is_none();
+	let out_dir = out_dir.unwrap_or_else(|| root.join("dist").join(&profile));
+
+	Ok(Args { profile, out_dir, clean_out_dir })
 }
 
 fn build_main(root: &Path, profile: &str) -> Result<(), String> {
