@@ -1,4 +1,4 @@
-use std::{env::current_exe, path::PathBuf, process::Command, rc::Rc, thread, time::Duration};
+use std::{path::PathBuf, process::Command, rc::Rc, thread, time::Duration};
 
 use dioxus::{logger::tracing, prelude::*};
 use ipc::{Client, DomainHint, RegisterSettings, Response, Server, Set, channel_name_c2p, channel_name_p2c, decode, to_bson};
@@ -12,11 +12,24 @@ const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
 fn get_player_path() -> anyhow::Result<PathBuf> {
-	// build.rs で設定された環境変数からファイル名を取得
+	// dx serve のように gui_controller.exe が moddl と別ディレクトリにバンドルされる
+	// 開発時は、環境変数 MODDL_EXE_PATH で moddl の実行ファイルの場所を明示できる
+	// （VSCode の launch.json/tasks.json の env で開発者ごとに設定する想定）。
+	// ビルド時に絶対パスを埋め込むと開発機固有の情報が配布物に残ってしまうため、
+	// あくまで実行時にのみ参照する。
+	if let Ok(path) = std::env::var("MODDL_EXE_PATH") {
+		return Ok(PathBuf::from(path));
+	}
+
+	// 指定がなければ、配布用の zip 一式と同様に gui_controller.exe 自身と同じ
+	// ディレクトリを探す。portaudio_x64.dll や builtins/root.moddl も moddl と
+	// 同じディレクトリから探されるため、その一式が揃っている前提。
 	let bin_name = env!("MODDL_BIN_NAME");
-	let controller_path: PathBuf = current_exe() ?;
-	controller_path.parent().map(|dir| dir.join(bin_name))
-			.ok_or(anyhow::Error::msg("cannot locate player executable"))
+	let exe_name = format!("{}{}", bin_name, std::env::consts::EXE_SUFFIX);
+	let current_exe = std::env::current_exe()?;
+	current_exe.parent()
+			.map(|dir| dir.join(exe_name))
+			.ok_or_else(|| anyhow::Error::msg("cannot locate player executable"))
 }
 
 fn main() -> anyhow::Result<()> {
