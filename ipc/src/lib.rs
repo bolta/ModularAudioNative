@@ -16,4 +16,7 @@ pub use message::*;
 mod server;
 pub use server::Server;
 
+mod termination;
+pub use termination::TerminationWatcher;
+
 

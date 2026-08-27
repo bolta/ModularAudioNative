@@ -278,6 +278,24 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
 	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
 
+	// iceoryx2 は Node を作成すると SIGINT/SIGTERM のハンドリングを奪ってしまい、
+	// Ctrl+C を押しても OS 標準の即時終了が起きなくなる。
+	// そこで終了要求を自前で検知し、曲が終わったときと同じ経路（TerminateEvent の
+	// ブロードキャスト）で各マシンを終了させる。
+	{
+		let broadcaster_for_termination = broadcaster.clone();
+		thread::spawn(move || {
+			match ipc::TerminationWatcher::new() {
+				Ok(watcher) => {
+					watcher.block_until_termination_requested(Duration::from_millis(100));
+					broadcaster_for_termination.broadcast(GlobalEvent::new(0, Box::new(TerminateEvent {})));
+				}
+				// TODO エラー処理
+				Err(e) => { dbg!(&e); }
+			}
+		});
+	}
+
 	let bound = 0usize; // TODO これでいいか？
 	let (p2c_sender, p2c_receiver) = sync_channel::<Vec<u8>>(bound);
 	// let p2c_client
