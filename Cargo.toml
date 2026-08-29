@@ -8,3 +8,13 @@ members = [
 	"ipc",
 	"xtask",
 ]
+
+# dx serve (gui_controller のデスクトップビルド) が使うプロファイル。
+# この環境の lldb は Rust 言語プラグインを持たず、複雑なジェネリック型（Dioxus の
+# Signal<T> や generational-box の内部型など）のローカル変数を含む型情報があると、
+# デバッガが変数パネルの内容を取得しようとして応答しなくなることがあるため、
+# 行情報のみ（ブレークポイント・ステップ実行に必要な最小限）に絞ってデバッガの
+# 安定性を優先する。この設定では変数の中身は表示できなくなる。
+[profile.desktop-dev]
+inherits = "dev"
+debug = "line-tables-only"
