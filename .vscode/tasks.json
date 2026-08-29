@@ -1,0 +1,97 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cargo",
+			"command": "build",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"label": "Rust: cargo build - ModularAudioNative"
+		},
+		{
+			"type": "shell",
+			"command": "dx",
+			"args": [
+				"serve",
+				"--package",
+				"gui_controller",
+				"--platform",
+				"desktop",
+				"--interactive",
+				"false",
+				"--args",
+				// TODO パスは適当に書き換えること
+				"D:/Dropbox/songs/erhu/everything_obbligato.20240506.moddl"
+			],
+			"options": {
+				// dx serve は gui_controller.exe を moddl とは別ディレクトリにバンドルするため、
+				// moddl の実行ファイルの場所をここで明示する（未設定なら gui_controller.exe と
+				// 同じディレクトリを探しにいく実装なので、配布物ではこの環境変数は不要）
+				"env": {
+					"MODDL_EXE_PATH": "${workspaceFolder}/target/debug/moddl.exe"
+				}
+			},
+			"isBackground": true,
+			"problemMatcher": {
+				"base": "$rustc",
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".*Serving your app.*",
+					"endsPattern": "(launching app!|exited with error|error\\[)"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"label": "dioxus: serve gui_controller (debug)"
+		},
+		{
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}/.vscode/copy_gui_controller_pdb.ps1",
+				"-RepoRoot",
+				"${workspaceFolder}"
+			],
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^.*$",
+					"file": 1,
+					"location": 1,
+					"message": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "^\\[copy-pdb\\] watching",
+					"endsPattern": "^\\[copy-pdb\\] watching"
+				}
+			},
+			"presentation": {
+				"reveal": "silent",
+				"panel": "dedicated"
+			},
+			"label": "dioxus: copy gui_controller debug symbols (watch)"
+		},
+		{
+			"dependsOrder": "parallel",
+			"dependsOn": [
+				"dioxus: serve gui_controller (debug)",
+				"dioxus: copy gui_controller debug symbols (watch)"
+			],
+			"label": "dioxus: serve gui_controller with debug symbols",
+			"problemMatcher": []
+		}
+	]
+}
