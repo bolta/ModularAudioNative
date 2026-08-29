@@ -2,9 +2,7 @@ use super::{
 	builtin::builtin_vars, common::{make_seq_tag, read_file}, error::*, evaluator::*, executor::process_statements, import::ImportCache, io::Io, player_context::{MuteSolo, TrackDef}, player_option::*, scope::*, value::*
 };
 use crate::{
-	calc::*,
-	common::stack::*,
-	core::{
+	calc::*, common::stack::*, core::{
 		common::*,
 		context::*,
 		event::*,
@@ -12,40 +10,115 @@ use crate::{
 		node::*,
 		node_factory::*,
 		node_host::*,
-	},
-	mml::default::{
+	}, mml::default::{
 		feature::Feature,
 		sequence_generator::*,
-	},
-	node::{
-		audio::*,
-		cond::*,
-		prim::*,
-		stereo::*,
-		system::*,
-		util::*,
-		var::*,
-	},
-	seq::{
+	}, moddl::player_context::PlayerContext, node::{
+		audio::*, cond::*, ipc::MessageReceiver, prim::*, stereo::*, system::*, util::*, var::*
+	}, seq::{
 		sequencer::*,
 		tick::*,
-	},
-	vis::visualizer::*, wave::waveform_host::WaveformHost,
+	}, vis::visualizer::*, wave::waveform_host::WaveformHost
 };
 extern crate parser;
+use bson::Document;
+use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c, to_bson};
+use itertools::Itertools;
 use parser::{
 	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
 };
+use serde::{Deserialize, Serialize};
 
 use std::{
-	borrow::Borrow, cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc, sync::{
-		mpsc, Arc
-	}, thread
+	borrow::Borrow, cell::RefCell, collections::{BTreeMap, hash_map::HashMap}, mem::uninitialized, path::Path, rc::Rc, sync::{
+		Arc, mpsc::{self, SyncSender}
+	}, thread, time::Duration
 };
+
+// TODO コード整理
 
 // TODO エラー処理を全体的にちゃんとする
 
 const TAG_SEQUENCER: &str = "seq";
+
+const TAG_FREQ: &str = "#freq";
+
+// type RegisterInits = Vec<(String, f32)>;
+type RegisterSettingsSubtree = BTreeMap<String, RegisterSettingsTreeNode>;
+#[derive(Debug, Serialize, Deserialize)]
+struct RegisterSettingsTree(pub RegisterSettingsSubtree);
+#[derive(Debug, Serialize, Deserialize)]
+enum RegisterSettingsTreeNode {
+	Settings {
+		// 今のところ複数のキーの初期値を持つことはない。
+		// 複数組持つ必要がある場合は key と init を HashMap<String, f32> などで持つようにすれば問題ないはず
+		reg_key: String,
+		init: f32,
+		domain: Option<DomainHint>,
+	},
+	Group(RegisterSettingsSubtree),
+}
+impl RegisterSettingsTree {
+	pub fn new() -> Self { Self(BTreeMap::new()) }
+	pub fn add_settings(&mut self, path: &QualifiedLabel/* name: &str */, reg_key: impl Into<String>, init: f32, domain: Option<DomainHint>) /* -> &mut Self */ {
+		// self
+		// let iter = path.0.split(".");
+		let path_elems: Vec<&str> = path.elems().collect();
+		/* self. */Self::add_settings_iter(&mut self.0, &path_elems, reg_key.into(), init, domain);
+	}
+	fn add_settings_iter(tree: &mut RegisterSettingsSubtree, path: &[&str], reg_key: String, init: f32, domain: Option<DomainHint>) {
+		match path.len() {
+			0 => {
+				unreachable!();
+			},
+			1 => {
+				let key = path[0].to_string();
+				tree.insert(key, RegisterSettingsTreeNode::Settings { reg_key, init, domain });
+			}, 
+			_ => {
+				let key = path[0].to_string();
+				match tree.get_mut(&key) {
+					None => {
+						let mut subtree = RegisterSettingsSubtree::new();
+						Self::add_settings_iter(&mut subtree, &path[1 ..], reg_key, init, domain);
+						tree.insert(key, RegisterSettingsTreeNode::Group(subtree));
+					},
+					Some(RegisterSettingsTreeNode::Settings { .. }) => {
+						// TODO エラーにする
+						println!("(x_x)");
+					},
+					Some(RegisterSettingsTreeNode::Group(subtree)) => {
+						Self::add_settings_iter(subtree, &path[1 ..], reg_key, init, domain);
+					},
+				}
+			}
+		}
+	}
+}
+
+fn qualify_tag(track: &str, tag: &str) -> QualifiedLabel {
+	// format!("{}.{}", track, tag)
+	QualifiedLabel::new(vec![track], tag)
+}
+
+// fn add_register(reg_inits: &mut RegisterInits, nodes: &mut AllNodes, machine: MachineIndex, tag: String, value: f32, domain_hint: Option<DomainHint>) -> NodeId {
+// 	reg_inits.push((tag.clone(), value));
+
+// 	nodes.add_node_with_tag(machine, tag, Box::new(Var::new(value)))
+// }
+fn add_register(reg_inits: &mut RegisterSettingsTree, nodes: &mut AllNodes, machine: MachineIndex, path: QualifiedLabel, reg_key: impl Into<String>, value: f32, domain_hint: Option<DomainHint>) -> NodeId {
+	// reg_inits.push((tag.clone(), value));
+	reg_inits.add_settings(&path, reg_key, value, domain_hint);
+
+	// TODO QLabel をどこまで QLabel のまま持っていくか？ とりあえずここで String に変換しておくが
+	nodes.add_node_with_tag(machine, path.to_string(), Box::new(Var::new(value)))
+}
+
+// fn add_registers(reg_inits: &mut RegisterInits, nodes: &mut AllNodes, machine: MachineIndex, tags: Vec<String>, value: f32) -> NodeId {
+// 	reg_inits.extend(tags.iter().cloned().map(|tag| (tag, value)));
+
+// 	nodes.add_node_with_tags(machine, tags, Box::new(Var::new(value)))
+// }
 
 pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let moddl_path = Path::new(&options.moddl_path);
@@ -55,6 +128,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut imports = ImportCache::new(&mut waveforms, options.dump_ast);
 	let root_vars = Scope::root(builtin_vars(sample_rate, &mut imports) ?);
 	let mut pctx = process_statements(moddl.as_str(), root_vars, moddl_path, &mut imports) ?;
+	// let mut reg_inits = vec![];
+	let mut reg_inits = RegisterSettingsTree::new();
 
 	if let Some(asts) = imports.asts() {
 		println!("{}", serde_json::to_string(asts).unwrap());
@@ -64,7 +139,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let mut nodes = AllNodes::new(false);
 
 	// TODO タグ名を sequence_generator と共通化
-	let tempo = nodes.add_node_with_tag(MACHINE_MAIN, "#tempo".to_string(), Box::new(Var::new(pctx.tempo)));
+	let tempo = add_register(&mut reg_inits, &mut nodes, MACHINE_MAIN, QualifiedLabel::local("#tempo"), VAR_DEFAULT_KEY, pctx.tempo,
+			Some(DomainHint::range_including_both_ends(20f32, 300f32)));
 	let timer = nodes.add_node(MACHINE_MAIN, Box::new(TickTimer::new(
 			tempo.node(MACHINE_MAIN).as_mono(), pctx.ticks_per_bar, pctx.groove_cycle)))/* .as_mono() */;
 
@@ -72,6 +148,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let even_tag = make_seq_tag(None, &mut pctx.seq_tags);
 	nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(
 			timer.node(MACHINE_MAIN).as_mono(), pctx.groove_cycle, even_tag.clone())));
+
+	nodes.add_node(MACHINE_MAIN, Box::new(MessageReceiver::new(channel_name_c2p())));
 
 	let mut output_nodes = HashMap::<String, NodeId>::new();
 
@@ -90,20 +168,20 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 				};
 				match spec {
 					TrackDef::Instrument(structure) => {
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut PlaceholderStack::init(HashMap::new()), None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, submachine_idx,
+								&mut PlaceholderStack::init(HashMap::new()), None, &mut imports, &mut reg_inits) ?)
 					}
 					TrackDef::Effect(source_tracks, structure) => {
 						let mut placeholders = PlaceholderStack::init(HashMap::new());
 						source_tracks.iter().for_each(|track| {
 							placeholders.top_mut().insert(track.clone(), output_nodes[track]);
 						});
-						Some(build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, submachine_idx,
-								&mut placeholders, None, pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports) ?)
+						Some(build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, submachine_idx,
+								&mut placeholders, None, &mut imports, &mut reg_inits) ?)
 					}
 					TrackDef::Groove(structure) => {
-						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, pctx.moddl_path.as_path(), pctx.ticks_per_bar, &seq_tag, &mut nodes, MACHINE_MAIN,
-								&mut PlaceholderStack::init(HashMap::new()), Some(timer), pctx.tempo, pctx.use_default_labels, &pctx.vars, &mut imports)
+						let groovy_timer = build_nodes_by_mml(track.as_str(), structure, mml, &pctx, &seq_tag, &mut nodes, MACHINE_MAIN,
+								&mut PlaceholderStack::init(HashMap::new()), Some(timer), &mut imports, &mut reg_inits)
 								?.node(MACHINE_MAIN).as_mono();
 						nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(groovy_timer, pctx.groove_cycle, seq_tag.clone())));
 
@@ -117,6 +195,10 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			None => { },
 		};
 	}
+
+// 	let domain_hints = collect_domain_hints(& pctx.track_defs);
+// dbg!(&domain_hints);return Ok(());
+	// ipc::codec::encode(&domain_hints);
 
 	if options.no_play { return Ok(()); }
 
@@ -144,6 +226,8 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	let machine_out = nodes.add_submachine("out".to_string());
 	let master_node = ensure_on_machine(&mut nodes, master, machine_out);
+
+	dbg!(&reg_inits);
 
 	match &options.output {
 		PlayerOutput::Audio => {
@@ -195,6 +279,49 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 	let broadcast_pairs = make_broadcast_pairs(nodes_result.len());
 	let broadcaster = Broadcaster::new(broadcast_pairs.senders);
 
+	// iceoryx2 は Node を作成すると SIGINT/SIGTERM のハンドリングを奪ってしまい、
+	// Ctrl+C を押しても OS 標準の即時終了が起きなくなる。
+	// そこで終了要求を自前で検知し、曲が終わったときと同じ経路（TerminateEvent の
+	// ブロードキャスト）で各マシンを終了させる。
+	{
+		let broadcaster_for_termination = broadcaster.clone();
+		thread::spawn(move || {
+			match ipc::TerminationWatcher::new() {
+				Ok(watcher) => {
+					watcher.block_until_termination_requested(Duration::from_millis(100));
+					broadcaster_for_termination.broadcast(GlobalEvent::new(0, Box::new(TerminateEvent {})));
+				}
+				// TODO エラー処理
+				Err(e) => { dbg!(&e); }
+			}
+		});
+	}
+
+	let bound = 0usize; // TODO これでいいか？
+	let (p2c_sender, p2c_receiver) = sync_channel::<Vec<u8>>(bound);
+	thread::spawn(move || {
+		let p2c_client = Client::new(channel_name_p2c(), Duration::from_millis(500)).unwrap();
+		loop {
+			match p2c_receiver.recv() {
+				Ok(request_bytes) => {
+					match p2c_client.send_request(& request_bytes) {
+						Ok(response) => {
+							println!("received response: {}", to_bson(&response).map(|doc| doc.to_string()).unwrap_or_else(|_| "<error parsing bson>".into()));
+						},
+						Err(e) => {
+							println!("error sending request: {}", &e);
+						},
+					}
+				}
+				// TODO ちゃんとエラー処理
+				Err(e) => todo!(),
+			}
+		}
+	});
+
+	let msg = make_register_settings_message(&reg_inits);
+	send_message(&p2c_sender, &msg);
+
 	// デバッグ用機能なのでとりあえず蓋をしておく
 	// TODO コマンドオプションで指定されたときだけ出力する
 	// output_structure(&nodes_result, &sends_to_receives);
@@ -205,12 +332,13 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 			.map(|(mut machine_spec, broadcast_receiver)| {
 		let waveforms = Arc::clone(&waveforms);
 		let broadcaster_ = broadcaster.clone();
+		let p2c_sender_ = p2c_sender.clone();
 		thread::spawn(move || {
 			// TODO skip_mode_events が供給できていない
 			let mut machine = Machine::new(machine_spec.name);
 
 			machine.play(&mut Context::new(sample_rate), &mut machine_spec.nodes, &waveforms,
-					broadcaster_, broadcast_receiver, None);
+					broadcaster_, broadcast_receiver, None, p2c_sender_);
 		})
 	}).collect();
 	for j in joins {
@@ -220,6 +348,112 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	Ok(())
 }
+
+fn make_register_settings_message(reg_inits: &RegisterSettingsTree) -> ipc::RegisterSettings {
+	fn transform_subtree(subtree: &RegisterSettingsSubtree) -> BTreeMap<String, ipc::RegisterSettingsItem> {
+		subtree.iter().map(|(name, node)| {
+			let ipc_node = match node {
+				RegisterSettingsTreeNode::Settings { reg_key, init, domain } => {
+					ipc::RegisterSettingsItem::Settings {
+						key: reg_key.clone(),
+						initial: *init,
+						// TODO controller によるオーバーライドを反映
+						original: *init,
+						domain: domain.as_ref().map(|domain| match domain {
+							DomainHint::Range { min, includes_min, max, includes_max } => {
+								ipc::DomainHint::Range {
+									min: *min,
+									includes_min: *includes_min,
+									max: *max,
+									includes_max: *includes_max,
+								}
+							},
+							DomainHint::Enum { items } => {
+								ipc::DomainHint::Enum {
+									items: items.iter().map(|EnumItem { value, name }| ipc::EnumItem {
+										value: *value,
+										name: name.clone(),
+									}).collect(),
+								}
+							}
+						}),
+					}
+				},
+				RegisterSettingsTreeNode::Group(subtree) => {
+					ipc::RegisterSettingsItem::Group(transform_subtree(subtree))
+				}
+			};
+			(name.clone(), ipc_node)
+		}).collect()
+	};
+
+	ipc::RegisterSettings {
+		items: transform_subtree(&reg_inits.0),
+	}
+}
+
+fn send_message(p2c_sender: &SyncSender<Vec<u8>>,  message: &impl ipc::Message) {
+	p2c_sender.send(ipc::encode(message)).unwrap_or_else(|x| {dbg!(&x);});
+	// TODO エラー処理？
+}
+
+// fn collect_domain_hints(track_defs: &Vec<(String, TrackDef, Location)>) -> DomainTree {
+// 	track_defs.iter().map(|(track, track_def, _)| {
+// 		let def = match track_def {
+// 			TrackDef::Instrument(def) => def,
+// 			TrackDef::Effect(_, def) => def,
+// 			TrackDef::Groove(def) => def,
+// 		};
+// 		(QualifiedLabel(track.clone()), DomainTreeNode::Group(collect_domain_hints_(def, None)))
+// 	}).collect()
+// }
+
+// fn collect_domain_hints_(def: &ModuleDef, domain: Option<&DomainHint>) -> DomainTree {
+// 	macro_rules! collect_without_domain_and_merge {
+// 		($coll: expr) => {
+// 			$coll.iter().map(|arg| collect_domain_hints_(&*arg, None)).fold(
+// 				DomainTree::new(),
+// 				|mut accum, result| { accum.extend(result.into_iter()); accum },
+// 			)
+// 		};
+// 	}
+// 	match def {
+// 		ModuleDef::Calc { args, .. } => {
+// 			collect_without_domain_and_merge!(args)
+// 		},
+// 		ModuleDef::Condition { cond, then, els } => {
+// 			collect_without_domain_and_merge!([cond, then, els])
+// 		},
+// 		ModuleDef::Connect(lhs, rhs) => {
+// 			collect_without_domain_and_merge!([lhs, rhs])
+// 		},
+// 		ModuleDef::Constant { value, label } => {
+// 			// この値に label がついており、かつモジュールのパラメータに直結されていれば、定義域をパラメータから取得する
+// 			let mut result = DomainTree::new();
+// 			if let (Some(label), Some(domain)) = (label, domain) {
+// 				result.insert(label.clone(), DomainTreeNode::Domain(domain.clone()));
+// 			}
+// 			result
+// 		},
+// 		ModuleDef::NodeCreation { factory, args, label } => {
+// 			args.iter().map(|(arg_name, arg_value)| {
+// 				// パラメータ名に割り当たった定義域ヒント（ないかもしれない）
+// 				let domain = factory.domains.get(arg_name);
+// 				// パラメータの値は必ず ModuleDef のはず
+// 				arg_value.as_module_def().map_or(DomainTree::new(),
+// 						|(arg_value, _)| collect_domain_hints_(&arg_value, domain))
+// 			}).fold(
+// 				DomainTree::new(),
+// 				|mut accum, result| { accum.extend(result.into_iter()); accum },
+// 			)
+// 		},
+// 		ModuleDef::LabelGuard(_) => { DomainTree::new() },
+// 		ModuleDef::Lambda { input_param, body } => {
+// 			collect_without_domain_and_merge!([body])
+// 		},
+// 		ModuleDef::Placeholder { name } => { DomainTree::new() },
+// 	}
+// }
 
 struct BroadcastPairs {
 	senders: Vec<mpsc::Sender<GlobalEvent>>,
@@ -250,14 +484,14 @@ impl Iterator for EventIter {
 
 const VAR_DEFAULT_KEY: &str = "value"; // TODO VarFactory を設けてそこから取るようにする
 
-// TODO 引数を整理できるか
-fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, moddl_path: &Path, ticks_per_bar: i32, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
-		tempo: f32, use_default_labels: bool, vars: &Rc<RefCell<Scope>>, imports: &mut ImportCache)
+fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, pctx: &PlayerContext, seq_tag: &String, nodes: &mut AllNodes, submachine_idx: MachineIndex, placeholders: &mut PlaceholderStack, override_input: Option<NodeId>,
+		imports: &mut ImportCache, reg_inits: &mut RegisterSettingsTree)
 		-> ModdlResult<NodeId> {
-	let moddl_path_rc = Rc::new(moddl_path.to_path_buf());
+	let moddl_path_rc = Rc::new(pctx.moddl_path.to_path_buf());
 	let (_, ast) = default_mml_parser::compilation_unit()(Span::new_extra(mml, moddl_path_rc.clone()))
 	.map_err(|e| error(ErrorType::MmlSyntax(nom_error_to_owned(e)), Location::dummy())) ?;
-	let freq_tag = format!("{}_freq", track);
+	// let freq_qual_tag = qualify_tag(track, TAG_FREQ);
+	let freq_qual_tag = QualifiedLabel::new(vec![track], TAG_FREQ);
 
 	// #22 generate_sequences() に各 Var の初期値が必要になったので、
 	// build_instrument() で初期値が判明した後で行うことにしたが、一方 build_instrument() の入力ノードは
@@ -273,13 +507,16 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 
 	let mut input = match override_input {
 		Some(input) => input,
-		None => nodes.add_node_with_tag(submachine_idx, freq_tag.clone(), Box::new(Var::new(0f32))),
+		None => add_register(reg_inits, nodes, submachine_idx, freq_qual_tag.clone(), VAR_DEFAULT_KEY, 0f32, None),
 	};
 	if features.contains(&Feature::Detune) {
 		// セント単位のデチューン
 		// freq_detuned = freq * 2 ^ (detune / 1200)
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let detune = nodes.add_node_with_tag(submachine_idx, format!("{}.#detune", &track), Box::new(Var::new(DETUNE_INIT)));
+		// let detune = add_register(reg_inits, nodes, submachine_idx, QualifiedLabel(format!("{}.#detune", &track)), DETUNE_INIT,
+		// 		Some(DomainHint::range_including_both_ends(-100f32, 100f32)));
+		let detune = add_register(reg_inits, nodes, submachine_idx, QualifiedLabel::new(vec![track.to_string()], "#detune".to_string()), VAR_DEFAULT_KEY, DETUNE_INIT,
+				Some(DomainHint::range_including_both_ends(-100f32, 100f32)));
 		let cents_per_oct = nodes.add_node(submachine_idx, Box::new(Constant::new(1200f32)));
 		let detune_oct = divide(Some(track), nodes, submachine_idx, detune, cents_per_oct) ?; // 必ず成功するはず
 		let const_2 = nodes.add_node(submachine_idx, Box::new(Constant::new(2f32)));
@@ -288,22 +525,21 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 		input = freq_detuned;
 	}
 
-	let mut inits: HashMap<(String, String), Sample> = vec![
-		((format!("{}.#velocity", &track), VAR_DEFAULT_KEY.to_string()), VELOCITY_INIT),
-		((format!("{}.#volume", &track), VAR_DEFAULT_KEY.to_string()), VOLUME_INIT),
-		((format!("{}.#detune", &track), VAR_DEFAULT_KEY.to_string()), DETUNE_INIT),
-		(("#tempo".to_string(), VAR_DEFAULT_KEY.to_string()), tempo),
+	let mut label_defaults: HashMap<QualifiedLabel, String> = vec![
+		(qualify_tag(&track, "#velocity"), VAR_DEFAULT_KEY.to_string()),
+		(qualify_tag(&track, "#volume"), VAR_DEFAULT_KEY.to_string()),
+		(qualify_tag(&track, "#detune"), VAR_DEFAULT_KEY.to_string()),
+		(qualify_tag(&track, TAG_FREQ), VAR_DEFAULT_KEY.to_string()),
+		(QualifiedLabel::local("#tempo"), VAR_DEFAULT_KEY.to_string()),
 	].into_iter().collect();
-	let mut label_defaults: HashMap<String, String> = inits.iter().map(|((label, key), _)| (label.clone(), key.clone())).into_iter().collect();
-	// TODO DRY
-	label_defaults.insert(format!("{}_freq", track), VAR_DEFAULT_KEY.to_string());
-	/* let label_defaults =  */collect_label_defaults(instrm_def, track, use_default_labels, &mut label_defaults);
-	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, use_default_labels, &mut inits) ?;
+	collect_label_defaults(instrm_def, track, pctx.use_default_labels, &mut label_defaults);
+	let instrm = build_instrument(track, instrm_def, nodes, submachine_idx, input, placeholders, &label_defaults, pctx.use_default_labels, /* &mut inits, */ reg_inits) ?;
 
 	// let label_defaults = collect_label_defaults(instrm_def, track);
 
 	let tag_set = TagSet {
-		freq: freq_tag.clone(),
+		// TODO シーケンスも QLabel で書き直した方がいいかも
+		freq: freq_qual_tag,
 		note: track.to_string(),
 	};
 	let mut evaluate_expr = |expr_str: &str| {
@@ -314,7 +550,7 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 			
 		// }
 		// TODO evaluate_and_perform_arg と共通化
-		let mut value = evaluate(&*expr, vars, imports) ?;
+		let mut value = evaluate(&*expr, &pctx.vars, imports) ?;
 		while value.as_io().is_ok() {
 			let (io, loc) = value.as_io().unwrap();
 			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
@@ -331,19 +567,24 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 		}
 	};
 
-	let seqs = generate_sequences(&ast, ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &mut evaluate_expr) ?;
+	let inits = make_param_inits_for_seq_gen(&reg_inits);
+
+	// TODO 他のトラックにもイベントを送れるようにするには全てのトラックの初期値が必要になるはず
+	let seqs = generate_sequences(&ast, pctx.ticks_per_bar, &tag_set, format!("{}.", &track).as_str(), &inits, &label_defaults, &mut evaluate_expr) ?;
 	let _seqr = nodes.add_node_with_tag(MACHINE_MAIN, seq_tag.to_string(), Box::new(Sequencer::new(track.to_string(), seqs)));
 
 	let mut output = instrm;
 	if features.contains(&Feature::Velocity) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let vel = nodes.add_node_with_tag(submachine_idx, format!("{}.#velocity", &track), Box::new(Var::new(VELOCITY_INIT)));
+		let vel = add_register(reg_inits, nodes, submachine_idx, QualifiedLabel::new(vec![track], "#velocity"), VAR_DEFAULT_KEY, VELOCITY_INIT,
+				Some(DomainHint::range_including_both_ends(0f32, 2f32 * VELOCITY_INIT)));
 		let output_vel = multiply(Some(track), nodes, submachine_idx, output, vel) ?; // 必ず成功するはず
 		output = output_vel;
 	}
 	if features.contains(&Feature::Volume) {
 		// TODO タグ名は feature requirements として generate_sequences の際に受け取る
-		let vol = nodes.add_node_with_tag(submachine_idx, format!("{}.#volume", &track), Box::new(Var::new(VOLUME_INIT)));
+		let vol = add_register(reg_inits, nodes, submachine_idx, QualifiedLabel::new(vec![track], "#volume"), VAR_DEFAULT_KEY, VOLUME_INIT,
+				Some(DomainHint::range_including_both_ends(0f32, 2f32 * VOLUME_INIT)));
 		let output_vol = multiply(Some(track), nodes, submachine_idx, output, vol) ?; // 必ず成功するはず
 		output = output_vol;
 	}
@@ -354,8 +595,29 @@ fn build_nodes_by_mml<'a>(track: &str, instrm_def: &ModuleDef, mml: &'a str, mod
 	Ok(output)
 }
 
-fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) /* -> HashMap<String, String> */ {
-	fn visit_struct(strukt: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<String, String>) {
+fn make_param_inits_for_seq_gen(tree: &RegisterSettingsTree) -> HashMap<ParamSignature, f32> {
+	fn rec(tree: &RegisterSettingsSubtree, path: Option<&QualifiedLabel>) -> Vec<(ParamSignature, f32)> {
+		let results = tree.iter().map(|(path_step, tree_node)| {
+			let new_path = match path {
+				Some(path) => path.append(path_step),
+				None => QualifiedLabel::local(path_step),
+			};
+			match tree_node {
+				RegisterSettingsTreeNode::Settings { reg_key, init, .. } => {
+					vec![(ParamSignature::new(new_path, reg_key), *init)]
+				},
+				RegisterSettingsTreeNode::Group(subtree) => {
+					rec(subtree, Some(&new_path))
+				},
+			}
+		});
+		results.concat()
+	}
+	rec(&tree.0, None).into_iter().collect()
+}
+
+fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<QualifiedLabel, String>) /* -> HashMap<String, String> */ {
+	fn visit_struct(strukt: &ModuleDef, track: &str, use_default_labels: bool, result: &mut HashMap<QualifiedLabel, String>) {
 		match strukt {
 			ModuleDef::NodeCreation { factory, args, label } => {
 				for (_, (arg, _)) in args {
@@ -363,15 +625,13 @@ fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_label
 						visit_struct(arg, track, use_default_labels, result);
 					}
 				}
-				if let (Some(label), Some(default_key)) = (label, factory.default_prop_key()) {
-					// TODO ラベル名をトラック名で修飾する処理は共通化する
-					result.insert(format!("{}.{}", track, label.0), default_key.clone());
+				if let (Some(label), Some(default_key)) = (label, factory.node.default_prop_key()) {
+					result.insert(label.prepend(track), default_key.clone());
 				}
 				// 互換性対応：全て Var と見なす
 				if use_default_labels {
-					for arg_spec in factory.node_arg_specs() {
-						// TODO ラベル名をトラック名で修飾する処理は共通化する
-						result.insert(format!("{}.{}", track, arg_spec.name), VAR_DEFAULT_KEY.to_string());
+					for arg_spec in factory.node.node_arg_specs() {
+						result.insert(qualify_tag(track, arg_spec.name.as_str()), VAR_DEFAULT_KEY.to_string());
 					}
 				}
 			},
@@ -392,9 +652,8 @@ fn collect_label_defaults(instrm_def: &ModuleDef, track: &str, use_default_label
 			},
 			ModuleDef::Constant { label, .. } => {
 				if let Some(label) = label {
-					// TODO ラベル名をトラック名で修飾する処理は共通化する
 					// TODO VarFactory から取った方が統一感ある
-					result.insert(format!("{}.{}", track, label.0), VAR_DEFAULT_KEY.to_string());
+					result.insert(label.prepend(track), VAR_DEFAULT_KEY.to_string());
 				}
 			},
 			ModuleDef::Placeholder { .. } => { },
@@ -419,9 +678,10 @@ fn build_instrument(
 	submachine_idx: MachineIndex,
 	freq: NodeId,
 	placeholders: &mut PlaceholderStack,
-	label_defaults: &HashMap<String, String>,
+	label_defaults: &HashMap<QualifiedLabel, String>,
 	use_default_labels: bool,
-	inits: &mut HashMap<ParamSignature, f32>,
+	// inits: &mut HashMap<ParamSignature, f32>,
+	reg_inits: &mut RegisterSettingsTree,
 ) -> ModdlResult<NodeId> {
 	fn visit_struct(
 		track: &str,
@@ -431,16 +691,20 @@ fn build_instrument(
 		input: NodeId,
 		default_tag: Option<QualifiedLabel>,
 		placeholders: &mut PlaceholderStack,
-		label_defaults: &HashMap<String, String>,
+		label_defaults: &HashMap<QualifiedLabel, String>,
 		use_default_labels: bool,
-		inits: &mut HashMap<ParamSignature, f32>,
+		// inits: &mut HashMap<ParamSignature, f32>,
+		reg_inits: &mut RegisterSettingsTree,
 		inside_label_guard: bool,
+		domain_hint: Option<&DomainHint>,
 	) -> ModdlResult<NodeId> {
+		struct Hoge(i32);
+
 		// 関数にするとライフタイム関係？のエラーが取れなかったので…
 		macro_rules! recurse {
 			// $const_tag は、直下が定数値（ノードの種類としては Var）であった場合に付与するタグ
-			($strukt: expr, $input: expr, $inside_label_guard: expr, $const_tag: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
-			($strukt: expr, $input: expr, $inside_label_guard: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, inits, $inside_label_guard) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr, $const_tag: expr, $domain_hint: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, /* Some( */$const_tag/* ) */, placeholders, label_defaults, use_default_labels, /* inits, */ reg_inits, $inside_label_guard, $domain_hint) };
+			($strukt: expr, $input: expr, $inside_label_guard: expr) => { visit_struct(track, $strukt, nodes, submachine_idx, $input, None, placeholders, label_defaults, use_default_labels, /* inits, */ reg_inits, $inside_label_guard, None) };
 		}
 		// 関数にすると（同上）
 		macro_rules! add_node {
@@ -449,9 +713,10 @@ fn build_instrument(
 		}
 
 		// ノードの引数をデフォルトを考慮して解決する
-		let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
+		// let mut make_node_args = |args: &HashMap<String, Value>, fact: &Rc<dyn NodeFactory>/* , label: String */|
+		let mut make_node_args = |args: &HashMap<String, Value>, def: &NodeDef/* , label: String */|
 				-> ModdlResult<NodeArgs> {
-			let specs = fact.node_arg_specs();
+			let specs = def.node.node_arg_specs();
 			let mut node_args = NodeArgs::new();
 			for NodeArgSpec { name, channels, default } in specs {
 				let arg_val = args.iter().find(|(n, _)| **n == *name );
@@ -463,15 +728,29 @@ fn build_instrument(
 					// 変更前のコード↑では NodeDefNotFound だが、変更後↓は TypeMismatch になる。TypeMismatch でよくない？
 					arg_val.1.as_module_def().map(|v| v.0)?
 				} else if let Some(default) = default {
+					// TODO ノードの引数で値を数値以外にすると panic する？　そうならそれは不適切で、エラーにすべき
 					ValueBody::Number(default).as_module_def().unwrap()
 				} else {
 					// 必要な引数が与えられていない
 					Err(error(ErrorType::NodeDefNotFound, Location::dummy())) ?
 				};
 				// ラベルが明示されていればそちらを使う
+				// 👻
 				let arg_name = arg_val.map(|(_, (value, _))| value.label()).flatten()
-						.or_else(|| if use_default_labels { Some(QualifiedLabel(name.clone())) } else { None })/* .unwrap_or(name.clone()) */;
-				let arg_node = recurse!(&strukt, input, inside_label_guard, arg_name) ?;
+						.or_else(|| if use_default_labels { Some(QualifiedLabel::local(&name)) } else { None })/* .unwrap_or(name.clone()) */;
+				/*_
+					ここで arg_name は QLabel で来る。
+					つまり @@ 演算子などで処理されることで修飾されてくるのか？
+					def.domains はそのような修飾を経ていないのでローカル名しか持っていない。
+					どうすればいいのか？
+					* def.domains を arg_name のローカル名で引いてしまう
+					  * いかにも乱暴だし、まずくなる場合がありそうだが…
+					* ここに至るまでの過程で args_name が修飾されるのと並行して def.domains も修飾するようにする
+					  * こっちが筋のような気がするが
+
+				 */
+				let arg_domain_hint = def.domains.get(&name);
+				let arg_node = recurse!(&strukt, input, inside_label_guard, arg_name, arg_domain_hint) ?;
 				let coerced_arg_node = match coerce_input(Some(track), nodes, submachine_idx, arg_node, channels) {
 					Some(result) => result,
 					// モノラルであるべき node_arg にステレオが与えられた場合、
@@ -533,42 +812,62 @@ fn build_instrument(
 			// 	apply_input(Some(track), nodes, fact, &ValueArgs::new(), &NodeArgs::new(), input)
 			// },
 			ModuleDef::NodeCreation { factory, args, label } => {
-				let node_args = make_node_args(args, factory) ?;
+				let node_args = make_node_args(args, &factory/* .node */) ?;
 
 				let local_tag = if inside_label_guard {
 					None
 				} else {
 					label.as_ref().or(default_tag.as_ref())
 				};
-				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
+				let full_tag = local_tag.map(|tag| tag.prepend(track));
 				if let Some(tag) = &full_tag {
-					for (key, value) in factory.initial_values() {
-						inits.insert((tag.clone(), key), value);
+					for (key, value) in factory.node.initial_values() {
+						// TODO ここで label_defaults から見つからないことはありえないはずだが、補足できるエラー（内部エラー的な）として軟着陸させた方がよさそう
+						let default = label_defaults.get(&tag).unwrap();
+						// inits.insert((tag.clone(), key), value);
+
+						// TODO DomainHint を factory.domains から引く？
+						let domain_hint = None;
+						reg_inits.add_settings(tag, default, value, domain_hint);
 					}
 				}
 
-				apply_input(Some(track), nodes, submachine_idx, factory, &node_args, full_tag,input)
+				apply_input(Some(track), nodes, submachine_idx, &factory.node, &node_args, full_tag, input)
 			}
 			// TODO Constant は、NodeCreation で VarFactory を使ったのと同じにできるはず。共通化する
 			ModuleDef::Constant { value, label } => {
-				let node = Box::new(Var::new(*value));
 				let local_tag = if inside_label_guard {
 					None
 				} else {
 					label.as_ref().or(default_tag.as_ref())
 				};
-				// TODO 共通化
-				let full_tag = local_tag.map(|tag| format!("{}.{}", track, tag.0));
+				// let full_tag = local_tag.map(|tag| qualify_tag(track, tag.0.as_str()));
+				let full_tag = local_tag.map(|tag| tag.prepend(track));
 				// dbg!(label, &default_tag, &local_tag, &full_tag);
 				match full_tag {
 					Some(tag) => {
 						// TODO ここで label_defaults から見つからないことはありえないはずだが、補足できるエラー（内部エラー的な）として軟着陸させた方がよさそう
 						let default = label_defaults.get(&tag).unwrap();
-						inits.insert((tag.clone(), default.clone()), *value);
-						Ok(nodes.add_node_with_tags(submachine_idx, vec![track.to_string(), tag], node))
+						// inits.insert((tag.clone(), default.clone()), *value);
+						// #56 トラック名を tag として登録するのは何か意味があったのだろうか？
+						// UI を作る上で不都合なので登録しないようにする
+						// Ok(add_registers(reg_inits, nodes, submachine_idx, vec![/* track.to_string(), */ tag], *value))
+
+						//_ TODO この定数が NodeDef のパラメータに単独で付与されたものである場合、そのパラメータの DomainHint を持ってくる
+						/*
+							↑ の詳細：
+							NodeCreation の処理から make_node_args の中で再帰を経てここへ流れてくると思われる。
+							make_node_args は factory の node だけ受け取っているが、domains も含めた factory ごと受け取るようにすれば、
+							各 arg の名前に応じた定義域を引いて再帰に渡すことができる。
+							ここでは定義域が渡されたら add_register にそのまま渡せばよい。
+							🐱🐱🐱🐱🐱🐱 次やるときはこの方針でやってみること 🐱🐱🐱🐱🐱🐱
+
+						*/
+						// TODO DomainHint を上流から受け取った factory.domains から引く
+						
+						Ok(add_register(reg_inits, nodes, submachine_idx, tag, default, *value, domain_hint.map(Clone::clone)))
 					},
-					None => add_node!(node),
+					None => add_node!(Box::new(Var::new(*value))),
 				}
 				
 			},
@@ -582,7 +881,7 @@ fn build_instrument(
 		}
 	}
 
-	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, inits, false)
+	visit_struct(track, instrm_def, nodes, submachine_idx, freq, None, placeholders, label_defaults, use_default_labels, /* inits, */ reg_inits, false, None)
 }
 
 // fn create_node_by_factory(factory: &Rc<dyn NodeDef>, args: &HashMap<String, Value>) {
@@ -638,7 +937,7 @@ fn apply_input(
 	submachine_idx: MachineIndex,
 	fact: &Rc<dyn NodeFactory>,
 	node_args: &NodeArgs,
-	label: Option<String>,
+	label: Option</* String */QualifiedLabel>,
 	input: NodeId,
 ) -> ModdlResult<NodeId> {
 	// TODO 共通化
@@ -646,13 +945,15 @@ fn apply_input(
 		// トラックに属する node は全てトラック名のタグをつける
 		($label: expr, $new_node: expr) => {
 			{
-				let label: &Option<String> = &$label;
+				let label: &Option<QualifiedLabel> = &$label;
 				// let mut add_node = |is_labeled_node, new_node| Ok::<NodeId, Error>({
-				let mut tags: Vec<String> = vec![];
+				let mut tags: Vec<QualifiedLabel> = vec![];
 				if let Some(full_tag) = label { tags.push(full_tag.clone()); }
-				if let Some(track) = track { tags.push(track.to_string()); }
+				// TODO これ必要なのだろうか？
+				if let Some(track) = track { tags.push(QualifiedLabel::local(track)/* track.to_string() */); }
 
-				Ok(nodes.add_node_with_tags(submachine_idx, tags, $new_node))
+				let tag_paths = tags.iter().map(QualifiedLabel::to_string).collect();
+				Ok(nodes.add_node_with_tags(submachine_idx, tag_paths, $new_node))
 			}
 		}
 	}

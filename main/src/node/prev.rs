@@ -3,7 +3,7 @@ use crate::{core::{
 	context::*,
 	machine::*,
 	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeFactory},
-}, moddl::{error::ModdlResult, import::ImportCache, io::Io, value::{Value, ValueBody}}};
+}, moddl::{error::ModdlResult, import::ImportCache, io::Io, value::{NodeDef, Value, ValueBody}}};
 use node_macro::node_impl;
 use parser::common::Location;
 
@@ -118,8 +118,8 @@ impl Io for PrevIo {
 		self.id.0 += 1;
 
 		Ok((ValueBody::Assoc(vec![
-			("in".to_string(), (ValueBody::NodeDef(Rc::new(PrevInFactory::new(id))), loc.clone())),
-			("out".to_string(), (ValueBody::NodeDef(Rc::new(PrevOutFactory::new(id))), loc.clone())),
+			("in".to_string(), (ValueBody::NodeDef(NodeDef::without_domain(Rc::new(PrevInFactory::new(id)))), loc.clone())),
+			("out".to_string(), (ValueBody::NodeDef(NodeDef::without_domain(Rc::new(PrevOutFactory::new(id)))), loc.clone())),
 		].into_iter().collect()), loc.clone()))
 	}
 }

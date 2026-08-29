@@ -17,16 +17,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --release --verbose
+    - name: Install dioxus-cli
+      run: cargo install dioxus-cli --version "0.7.10" --locked
     # - name: Run tests
     #   run: cargo test --verbose
-    - name: Upload 
+    - name: Build
+      run: cargo xtask build --profile release
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: moddl
-        path: |
-          target/release/moddl.exe
-          target/release/portaudio_x64.dll
-          target/release/builtins/
-          
+        path: dist/release/
+

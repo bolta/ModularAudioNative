@@ -1,0 +1,6 @@
+@instrument ^a, sawOsc | lpf { 1000@cutoff, 10@q } * adsrEnv { decay: 1, sustain: 0 }
+
+
+a o3l8v15
+// a cc
+a [0 cccccccc]

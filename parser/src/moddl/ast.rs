@@ -1,3 +1,6 @@
+use std::{fmt::Display, write};
+
+use itertools::Itertools;
 use serde::Serialize;
 
 use crate::common::Location;
@@ -36,9 +39,54 @@ pub struct FunctionParam {
 	pub default: Option<Box<Expr>>,
 }
 
-/// foo.bar.baz みたいな . でつながった識別子
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
-pub struct QualifiedLabel(pub String);
+/// foo.bar.baz みたいな . でつながった識別子（絶対パスとは限らない）
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct QualifiedLabel {
+	/// foo.bar.baz の場合 ["foo", "bar"]
+	qualifiers: Vec<String>,
+
+	/// foo.bar.baz の場合 "baz"
+	local: String,
+}
+impl QualifiedLabel {
+	pub fn new(qualifiers: Vec<impl Into<String>>, local: impl Into<String>) -> Self {
+		Self {
+			qualifiers: qualifiers.into_iter().map(Into::into).collect(),
+			local: local.into(),
+		}
+	}
+	pub fn local(local: impl Into<String>) -> Self {
+		Self { qualifiers: vec![], local: local.into() }
+	}
+
+	pub fn join(&self, descendant: &Self) -> Self {
+		Self {
+			qualifiers: self.elems().chain(descendant.qualifiers.iter().map(String::as_str)).map(&str::to_string).collect(),
+			local: descendant.local.clone(),
+		}
+	}
+
+	pub fn prepend(&self, parent: impl Into<String>) -> Self {
+		let mut result = self.clone();
+		result.qualifiers.insert(0, parent.into());
+		result
+	}
+
+	pub fn append(&self, child: impl Into<String>) -> Self {
+		Self::new(self.elems().map(&str::to_string).collect(), child)
+	}
+
+	pub fn elems(&self) -> impl Iterator<Item = &str> {
+		self.qualifiers.iter()
+				.chain(std::iter::once(&self.local))
+				.map(String::as_str)
+	} 
+}
+impl Display for QualifiedLabel {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.elems().join("."))
+	}
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub enum LabelFilterSpec {

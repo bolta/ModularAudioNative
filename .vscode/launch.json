@@ -1,0 +1,115 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			// ちゃんと動かないかも
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'gui_controller'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=gui_controller",
+					"--package=gui_controller",
+				],
+				"filter": {
+					"name": "gui_controller",
+					"kind": "bin"
+				}
+			},
+			// TODO パスは適当に書き換えること
+			"args": ["D:/Dropbox/songs/erhu/everything_obbligato.20240506.moddl"],
+			"cwd": "${workspaceFolder}",
+			"env": {
+				"RUST_BACKTRACE": "1"
+			},
+		},
+		{
+			// moddl.exe 単体をデバッグ実行
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'moddl'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=moddl",
+					"--package=moddl",
+				],
+				"filter": {
+					"name": "moddl",
+					"kind": "bin"
+				}
+			},
+			// TODO パスは適当に書き換えること
+			"args": ["H:/dev/ModularAudioNative.works/sketch/gui.20260812.moddl"],
+			"cwd": "${workspaceFolder}",
+			"env": {
+				"RUST_BACKTRACE": "1"
+			},
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug release-build executable 'moddl'",
+			"cargo": {
+				"args": [
+					"build",
+					"--release",
+					"--bin=moddl",
+					"--package=moddl",
+				],
+				"filter": {
+					"name": "moddl",
+					"kind": "bin"
+				}
+			},
+			// TODO パスは適当に書き換えること
+			"args": ["H:/dev/ModularAudioNative/moddl/song.20220813.moddl"],
+			"cwd": "${workspaceFolder}",
+			"env": {
+				"RUST_BACKTRACE": "1"
+			},
+		},
+		{
+			// 事前準備: 「Terminal > Run Task...」（または Ctrl+Shift+P > "Tasks: Run Task"）から
+			//   "dioxus: serve gui_controller with debug symbols" を実行し、
+			//   ログに "launching app!" が出てウィンドウが表示されるまで待っておくこと。
+			//   （preLaunchTask で自動起動させると、ビルド完了を待たずに次のプロセス選択に
+			//    進んでしまい exe が一覧に出てこないことがあるため、あえて手動起動にしている）
+			//   このタスクは dx serve 本体に加えて、dx がバンドル先にコピーし忘れる
+			//   gui_controller.pdb を裏で補ってくれる常駐タスクも一緒に起動する
+			//   （dx serve 単体のタスクだけを起動した場合、exe は見つかっても
+			//   ブレークポイントが「pending」のまま止まらないことがある）。
+			// 1. 上記タスクが起動しウィンドウが表示された状態でこの構成を実行（F5）する
+			// 2. プロセス選択ダイアログが出るので、"gui_controller-xxxxxxxx.exe" という
+			//    名前の（ハッシュ付きの）プロセスを選ぶ
+			// 3. lldb がアタッチしてブレークポイントが使えるようになる
+			// ※ RSX（マークアップ）の変更はプロセスを再起動せずホットリロードされるため
+			//   アタッチしたままデバッグを続けられるが、Rust ロジックの変更は
+			//   dx serve がプロセスを再ビルド・再起動するためアタッチが切れる。
+			//   その場合はもう一度この構成を実行し、新しいプロセスを選び直す。
+			"type": "lldb",
+			"request": "attach",
+			"name": "Attach to 'gui_controller' (Dioxus hot reload)",
+			"pid": "${command:pickMyProcess}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in executable 'modular_audio'",
+			"cargo": {
+				"args": [
+					"test",
+					// "--no-run",
+					"--bin=modular_audio",
+					"--package=modular_audio"
+				],
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}
