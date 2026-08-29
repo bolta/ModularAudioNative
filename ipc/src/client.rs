@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use iceoryx2::{node::{Node, NodeBuilder}, port::{client::Client as Iox2Client, listener::Listener, notifier::Notifier}, prelude::ZeroCopySend, service::ipc::Service};
 use std::{fmt::Debug, time::{Duration, Instant}};
 
-use crate::common::{IpcError, request_event_name, response_event_name};
+use crate::common::{IpcError, request_event_name, response_event_name, retry_on_transient_error};
 
 pub struct Client {
 	node: Node<Service>,
@@ -13,8 +13,12 @@ pub struct Client {
 }
 
 impl Client {
+	pub fn new(channel_name: &str, request_timeout: Duration) -> anyhow::Result<Self> {
+		retry_on_transient_error(|| Self::new_impl(channel_name, request_timeout))
+	}
+
 	// TODO エラーはもう少し丁寧に扱うかも
-	pub fn new(channel_name: &str, request_timeout: Duration) -> anyhow::Result<Self>
+	fn new_impl(channel_name: &str, request_timeout: Duration) -> anyhow::Result<Self>
 	{
 		let node = NodeBuilder::new().create::<Service>() ?;
 		let client = {

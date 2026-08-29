@@ -1,7 +1,7 @@
 use iceoryx2::{node::{Node, NodeBuilder}, port::{listener::Listener, notifier::Notifier, server::Server as Iox2Server}, service::ipc::Service};
 use std::time::Duration;
 
-use crate::common::{request_event_name, response_event_name};
+use crate::common::{request_event_name, response_event_name, retry_on_transient_error};
 
 pub struct Server {
 	node: Node<Service>,
@@ -11,8 +11,12 @@ pub struct Server {
 }
 
 impl Server {
-	// TODO エラーはもう少し丁寧に扱うかも
 	pub fn new(channel_name: &str) -> anyhow::Result<Self> {
+		retry_on_transient_error(|| Self::new_impl(channel_name))
+	}
+
+	// TODO エラーはもう少し丁寧に扱うかも
+	fn new_impl(channel_name: &str) -> anyhow::Result<Self> {
 		let node = NodeBuilder::new().create::<Service>() ?;
 		let server = {
 			let factory = node

@@ -21,7 +21,8 @@ use crate::{
 	}, vis::visualizer::*, wave::waveform_host::WaveformHost
 };
 extern crate parser;
-use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c};
+use bson::Document;
+use ipc::{Client, RegisterSettings, RegisterSettingsItem, Response, Server, Set, channel_name_c2p, channel_name_p2c, to_bson};
 use itertools::Itertools;
 use parser::{
 	common::{Location, Span}, mml::default_mml_parser, moddl::{ast::QualifiedLabel, parser::expr}
@@ -298,13 +299,19 @@ pub fn play(options: &PlayerOptions) -> ModdlResult<()> {
 
 	let bound = 0usize; // TODO これでいいか？
 	let (p2c_sender, p2c_receiver) = sync_channel::<Vec<u8>>(bound);
-	// let p2c_client
 	thread::spawn(move || {
 		let p2c_client = Client::new(channel_name_p2c(), Duration::from_millis(500)).unwrap();
 		loop {
 			match p2c_receiver.recv() {
 				Ok(request_bytes) => {
-					p2c_client.send_request(& request_bytes).unwrap();
+					match p2c_client.send_request(& request_bytes) {
+						Ok(response) => {
+							println!("received response: {}", to_bson(&response).map(|doc| doc.to_string()).unwrap_or_else(|_| "<error parsing bson>".into()));
+						},
+						Err(e) => {
+							println!("error sending request: {}", &e);
+						},
+					}
 				}
 				// TODO ちゃんとエラー処理
 				Err(e) => todo!(),
