@@ -4,7 +4,6 @@ members = [
 	"parser",
 	"node_macro",
 	"node_macro_impl",
-	"controller",
 	"gui_controller",
 	"ipc",
 	"xtask",
