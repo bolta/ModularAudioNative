@@ -11,6 +11,10 @@ const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
+// IPC スレッドが UI スレッドでの処理完了を待つ上限。
+// UI スレッドが固まっていても IPC スレッドが永久にブロックしないようにするための保険。
+const UI_REPLY_TIMEOUT: Duration = Duration::from_millis(500);
+
 fn get_player_path() -> anyhow::Result<PathBuf> {
 	// dx serve のように gui_controller.exe が moddl と別ディレクトリにバンドルされる
 	// 開発時は、環境変数 MODDL_EXE_PATH で moddl の実行ファイルの場所を明示できる
@@ -64,99 +68,50 @@ fn App() -> Element {
 	});
 
 	use_future(move || async move {
-		let (tx, rx) = std::sync::mpsc::channel::<bson::Document>();
+		// IPC スレッドから UI スレッドへメッセージを転送するチャネル。
+		// IPC スレッドが処理結果を反映したレスポンスを返せるよう、メッセージには
+		// UI スレッドでの処理結果を送り返すための reply チャネルを同梱する。
+		// UI スレッド側は async に recv() で待つのでポーリング不要（IPC スレッドからの
+		// send は同期呼び出しなので、送信側を async 化する必要はない）。
+		let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(bson::Document, std::sync::mpsc::Sender<Response>)>();
 		thread::spawn(move || {
 			// TODO ちゃんとエラー処理
 			let p2c_server = Server::new(channel_name_p2c()).unwrap();
 			loop {
 				p2c_server.wait_for_request(|request_bytes| {
-					// let b = bson::Document::from_reader(request_bytes);
 					let bson = to_bson(request_bytes) ?;
-					if let Some(settings) = decode::<RegisterSettings>(&bson) {
-						// TODO エラー処理
-						tx.send(bson.clone()) ?;
-						let response = Response {
-							status: "ok".into(),
-							text: "received".into(),
-						};
-						Ok(bson::serialize_to_vec(&response).unwrap())
-					}else {
-						let response = Response {
-							status: "ok".into(),
-							text: "hoge".into(),
-						};
-						Ok(bson::serialize_to_vec(&response).unwrap())
-					}
-					// TODO 復活させる
-
-					// match bson::Document::from_reader(request_bytes) {
-					// 	Ok(doc) => {
-					// 		println!("controller received {}", &doc);
-					// 		println!("received a message");
-					// 		// tx.send(doc);
-					// 		match doc.get_str("type") {
-					// 			Ok(tipe) => {
-					// 				println!("************************************ {}", tipe);
-					// 				match tipe {
-					// 					"ping" => {
-					// 						let response = Response {
-					// 							status: "ok".into(),
-					// 							text: "pong".into(),
-					// 						};
-					// 						Ok(bson::serialize_to_vec(&response).unwrap())
-					// 					},
-					// 					"registerSettings" => {
-					// 						// TODO エラー処理
-					// 						tx.send(doc.clone());
-					// 						let response = Response {
-					// 							status: "ok".into(),
-					// 							text: "received".into(),
-					// 						};
-					// 						Ok(bson::serialize_to_vec(&response).unwrap())
-					// 					},
-					// 					_ => {
-					// 						// TODO エラーにすべきかもしれない。ちゃんと処理
-					// 						let response = Response {
-					// 							status: "ok".into(),
-					// 							text: "hello".into(),
-					// 						};
-					// 						Ok(bson::serialize_to_vec(&response).unwrap())
-					// 					},
-					// 				}
-					// 				// TODO tx.send(doc) はここで一括で行う？
-					// 			}
-					// 			Err(e) => todo!()
-					// 		}
-					// 	}
-					// 	Err(e) => todo!()
-					// }
+					let (reply_tx, reply_rx) = std::sync::mpsc::channel::<Response>();
+					tx.send((bson, reply_tx)) ?;
+					// UI スレッドでの処理完了（＝reply_tx への送信）を待ち、
+					// その結果をそのままレスポンスとして返す。
+					let response = reply_rx.recv_timeout(UI_REPLY_TIMEOUT).unwrap_or_else(|_| Response {
+						status: "error".into(),
+						text: "timed out waiting for UI thread".into(),
+					});
+					Ok(bson::serialize_to_vec(&response).unwrap())
 				}).unwrap_or_else(|e| println!("{}", e));
 			}
 		});
 
-		loop {
-			if let Ok(doc) = rx.try_recv() {
-				// TODO 判定が送信側と重複している
-				match doc.get_str("type") {
-					Ok(tipe) => {
-						match tipe {
-							"RegisterSettings" => {
-								let msg: RegisterSettings = bson::deserialize_from_document(doc).unwrap();
-								dbg!(&msg);
-								let store = RegisterSettingsStore::from(msg);
-								let mut items_ = registers.items();
-								let mut items = items_.write();
-								items.clear();
-								items.extend(store.items);
+		while let Some((bson, reply_tx)) = rx.recv().await {
+			let response = if let Some(settings) = decode::<RegisterSettings>(&bson) {
+				dbg!(&settings);
+				let store = RegisterSettingsStore::from(settings);
+				let mut items_ = registers.items();
+				let mut items = items_.write();
+				items.clear();
+				items.extend(store.items);
 
-							},
-							_ => { },
-						}
-					}
-					Err(e) => todo!()
-				}
-			}
-			tokio::time::sleep(Duration::from_millis(100)).await;
+				Response { status: "ok".into(), text: "applied".into() }
+			// 種別が増えたら分岐を追加
+			// } else if let Some(<message>) = decode::<<MessageType>>(&bson) {
+			} else {
+				Response { status: "error".into(), text: format!("unsupported message: {}", &bson) }
+			};
+
+			// IPC スレッドが待ちきれずタイムアウトした後は受け手がいなくなるので、
+			// 送信失敗は無視してよい
+			let _ = reply_tx.send(response);
 		}
 	});
 
