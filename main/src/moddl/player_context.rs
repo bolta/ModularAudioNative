@@ -1,3 +1,5 @@
+use crate::moddl::module_def::ModuleDef;
+
 use super::{
 	error::*, scope::*, value::*,
 };

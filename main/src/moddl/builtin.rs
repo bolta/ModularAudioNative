@@ -5,20 +5,8 @@ use super::{
 	error::*, function::*, import::ImportCache, io::*, scope::*, value::*
 };
 use crate::{
-	core::{
-		node_factory::*,
-	},
-	node::{
-		arith::*,
-		envelope::*,
-		delay::*,
-		filter::*,
-		freq::*,
-		lofi::*,
-		noise::*,
-		osc::*,
-		transit::*,
-		wave::*, prev::PrevIo,
+	core::node_factory::*, moddl::domain::DomainHint, moddl::module_def::{ModuleDef, NodeDef, CalcNodeFactory}, node::{
+		arith::*, delay::*, envelope::*, filter::*, freq::*, lofi::*, noise::*, osc::*, prev::PrevIo, transit::*, wave::*,
 	},
 };
 

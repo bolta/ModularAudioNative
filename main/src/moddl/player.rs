@@ -7,7 +7,7 @@ use crate::{
 		context::*,
 		event::*,
 		machine::*,
-	}, moddl::{graph_builder::GraphBuilder, player_context::PlayerContext, register_settings::{RegisterSettingsSubtree, RegisterSettingsTree, RegisterSettingsTreeNode}}, vis::visualizer::*, wave::waveform_host::WaveformHost
+	}, moddl::{domain::{DomainHint, EnumItem}, graph_builder::GraphBuilder, player_context::PlayerContext, register_settings::{RegisterSettingsSubtree, RegisterSettingsTree, RegisterSettingsTreeNode}}, vis::visualizer::*, wave::waveform_host::WaveformHost
 };
 extern crate parser;
 use ipc::{Client, channel_name_p2c, to_bson};

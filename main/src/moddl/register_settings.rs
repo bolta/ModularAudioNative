@@ -1,5 +1,7 @@
 // レジスタの初期設定を収集するためのデータ構造を提供するモジュール
 
+use crate::moddl::domain::DomainHint;
+
 use super::value::*;
 extern crate parser;
 use parser::moddl::ast::QualifiedLabel;

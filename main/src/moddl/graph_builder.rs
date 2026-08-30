@@ -11,7 +11,7 @@ use crate::{
 	}, mml::default::{
 		feature::Feature,
 		sequence_generator::*,
-	}, moddl::{multi_machine::{AllNodes, ensure_on_machine}, player_context::PlayerContext, register_settings::{RegisterSettingsSubtree, RegisterSettingsTree, RegisterSettingsTreeNode}}, node::{
+	}, moddl::{domain::DomainHint, module_def::{CalcNodeFactory, CalcNodeFactoryTrait, ModuleDef, NodeDef}, multi_machine::{AllNodes, ensure_on_machine}, player_context::PlayerContext, register_settings::{RegisterSettingsSubtree, RegisterSettingsTree, RegisterSettingsTreeNode}}, node::{
 		audio::*, cond::*, ipc::MessageReceiver, prim::*, stereo::*, system::*, util::*, var::*
 	}, seq::{
 		sequencer::*,

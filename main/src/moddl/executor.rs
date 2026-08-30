@@ -2,8 +2,7 @@ use super::{
 	common::make_seq_tag, console::*, error::*, evaluator::*, import::ImportCache, io::Io, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
 };
 use crate::{
-	moddl::construction_type::ConstructionType,
-	wave::{wav_reader::*, waveform::Waveform},
+	moddl::{construction_type::ConstructionType, module_def::ModuleDef}, wave::{wav_reader::*, waveform::Waveform},
 };
 extern crate parser;
 use parser::{
@@ -11,7 +10,7 @@ use parser::{
 };
 
 use std::{
-	cell::RefCell, collections::{HashSet, hash_map::HashMap}, convert::TryFrom, path::{Path, PathBuf}, rc::Rc
+	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
 pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
