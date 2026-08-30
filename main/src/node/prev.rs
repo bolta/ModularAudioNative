@@ -3,7 +3,7 @@ use crate::{core::{
 	context::*,
 	machine::*,
 	node::*, node_factory::{NodeArgSpec, NodeArgs, NodeFactory},
-}, moddl::{error::ModdlResult, import::ImportCache, io::Io, value::{NodeDef, Value, ValueBody}}};
+}, moddl::{error::ModdlResult, module_def::NodeDef, import::ImportCache, io::Io, value::{Value, ValueBody}}};
 use node_macro::node_impl;
 use parser::common::Location;
 

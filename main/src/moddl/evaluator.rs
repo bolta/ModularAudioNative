@@ -6,7 +6,7 @@ extern crate parser;
 use parser::{moddl::ast::*, common::Location};
 
 use crate::{
-	calc::*,
+	calc::*, moddl::module_def::{CalcNodeFactory, ModuleDef},
 };
 
 use std::{

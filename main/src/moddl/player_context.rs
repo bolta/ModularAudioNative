@@ -1,3 +1,5 @@
+use crate::moddl::module_def::ModuleDef;
+
 use super::{
 	error::*, scope::*, value::*,
 };
@@ -11,6 +13,7 @@ use std::{
 	rc::Rc,
 };
 
+// TODO 定義フェーズの結果なので、それらしい名前に変える
 pub struct PlayerContext {
 	pub moddl_path: PathBuf,
 	pub tempo: f32,

@@ -13,12 +13,17 @@ pub fn read_file(path: &Path) -> ModdlResult<String> {
 }
 
 /// シーケンサのタグ名を生成する。また生成したタグ名を記録する
-pub fn make_seq_tag(track: Option<&String>, tags: &mut HashSet<String>) -> String {
+// TODO 生成したタグ名を tags に収集しているのは、skip 時の tick 供給先のセットを作るため。
+// 現状は skip が機能していないので、収集結果は使われていない。
+// #48 のリファクタリングに伴って収集が面倒な場面が生じたのでとりあえず tags を Option にしたが、
+// 本当は skip を復活させるなら Option はだめ、復活させないならこの処理自体廃止、があるべき姿なので、
+// 現状はどっちつかず
+pub fn make_seq_tag(track: Option<&String>, tags: Option<&mut HashSet<String>>) -> String {
 	let tag = match track {
 		None => "#seq".to_string(),
 		Some(track) => format!("#seq_{}", track),
 	};
-	tags.insert(tag.clone());
+	tags.map(|tags| tags.insert(tag.clone()));
 
 	tag
 }

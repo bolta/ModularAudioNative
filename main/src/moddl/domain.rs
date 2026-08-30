@@ -1,4 +1,6 @@
-#[derive(Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DomainHint {
 	Range {
 		min: f32,
@@ -25,5 +27,5 @@ impl DomainHint {
 	}
 }
 
-#[derive(Clone)]
-pub struct EnumItem { value: f32, name: String }
+#[derive(Clone, Deserialize, Debug, Serialize)]
+pub struct EnumItem { pub value: f32, pub name: String }

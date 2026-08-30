@@ -2,9 +2,9 @@ use std::{cell::RefCell, collections::HashMap, path::{Path, PathBuf}, rc::Rc};
 
 use parser::{common::Location, moddl::ast::CompilationUnit};
 
-use crate::wave::waveform_host::WaveformHost;
+use crate::{moddl::module_def::ModuleDef, wave::waveform_host::WaveformHost};
 
-use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor::process_statements, path::resolve_path, scope::Scope, value::{ModuleDef, Value, ValueBody}};
+use super::{common::read_file, error::{error, ErrorType, ModdlResult}, executor::process_statements, path::resolve_path, scope::Scope, value::{Value, ValueBody}};
 
 pub struct ImportCache<'a> {
 	imports: HashMap<PathBuf, Value>,

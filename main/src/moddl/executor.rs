@@ -2,8 +2,7 @@ use super::{
 	common::make_seq_tag, console::*, error::*, evaluator::*, import::ImportCache, io::Io, player_context::{MuteSolo, PlayerContext, TrackDef}, scope::*, value::*
 };
 use crate::{
-	moddl::construction_type::ConstructionType,
-	wave::{wav_reader::*, waveform::Waveform},
+	moddl::{construction_type::ConstructionType, module_def::ModuleDef}, wave::{wav_reader::*, waveform::Waveform},
 };
 extern crate parser;
 use parser::{
@@ -11,7 +10,7 @@ use parser::{
 };
 
 use std::{
-	cell::RefCell, collections::{HashSet, hash_map::HashMap}, convert::TryFrom, path::{Path, PathBuf}, rc::Rc
+	cell::RefCell, collections::hash_map::HashMap, path::Path, rc::Rc
 };
 
 pub fn process_statements(moddl: &str, root_scope: Rc<RefCell<Scope>>, moddl_path: &Path, imports: &mut ImportCache) -> ModdlResult<PlayerContext> {
@@ -109,7 +108,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 			pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 			// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-			pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
+			pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), Some(&mut pctx.seq_tags)), args[1].1.clone()));
 			for track in &target_tracks {
 				if let Some((_, existing_assign_loc)) = pctx.grooves.get(track) {
 					return Err(error(ErrorType::GrooveTargetDuplicate {
@@ -117,7 +116,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 						existing_assign_loc: existing_assign_loc.clone(),
 						}, stmt_loc.clone()));
 				}
-				pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
+				pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), Some(&mut pctx.seq_tags)), args[1].1.clone()));
 			}
 		}
 		ConstructionType::Let => {
