@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[derive(Debug)]
 pub struct PlayerOptions {
 	pub moddl_path: PathBuf,
 	pub dump_ast: bool,
@@ -7,6 +8,7 @@ pub struct PlayerOptions {
 	pub output: PlayerOutput,
 }
 
+#[derive(Clone, Debug)]
 pub enum PlayerOutput {
 	Audio,
 	Wav { path: PathBuf },

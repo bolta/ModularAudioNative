@@ -109,7 +109,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			let body = evaluate_and_perform_arg(&args, 2, &pctx.vars, stmt_loc, imports)?.as_module_def()?.0;
 			pctx.add_track_def(control_track, TrackDef::Groove(body), stmt_loc) ?;
 			// groove トラック自体の制御もそれ自体の groove の上で行う（even で行うことも可能だが）
-			pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
+			pctx.grooves.insert(control_track.clone(), (make_seq_tag(Some(&control_track), Some(&mut pctx.seq_tags)), args[1].1.clone()));
 			for track in &target_tracks {
 				if let Some((_, existing_assign_loc)) = pctx.grooves.get(track) {
 					return Err(error(ErrorType::GrooveTargetDuplicate {
@@ -117,7 +117,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 						existing_assign_loc: existing_assign_loc.clone(),
 						}, stmt_loc.clone()));
 				}
-				pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), &mut pctx.seq_tags), args[1].1.clone()));
+				pctx.grooves.insert(track.clone(), (make_seq_tag(Some(&control_track), Some(&mut pctx.seq_tags)), args[1].1.clone()));
 			}
 		}
 		ConstructionType::Let => {
