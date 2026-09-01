@@ -422,11 +422,11 @@ fn overload_add(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBod
 }
 
 fn overload_eq(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
+	let evaluate_to_bool = |value: bool| Some(Ok(ValueBody::Number(bool_to_sample(value))));
 	match (lhs, rhs) {
 		// 他にもあれば追加する。ただし必ず boolean の Number 値を返すこと
-		(ValueBody::String(lhs), ValueBody::String(rhs)) => {
-			Some(Ok(ValueBody::Number(bool_to_sample(lhs == rhs))))
-		},
+		(ValueBody::String(lhs), ValueBody::String(rhs)) => evaluate_to_bool(lhs == rhs),
+		(ValueBody::Null, ValueBody::Null) => evaluate_to_bool(true),
 		_ => None,
 	}
 }

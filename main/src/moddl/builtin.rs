@@ -71,6 +71,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	result.insert("false".to_string(), false_value());
 	result.insert("true".to_string(), true_value());
+	result.insert("null".to_string(), (ValueBody::Null, Location::dummy()));
 
 	// musical
 	add_function!("phase", Phase { });
@@ -461,6 +462,7 @@ impl Function for Type {
 			ValueBody::NodeDef(_) => "NodeDef",
 			ValueBody::Function(_) => "Function",
 			ValueBody::Io(_) => "Io",
+			ValueBody::Null => "Null",
 		};
 
 		Ok((ValueBody::String(type_id.to_string()), call_loc))

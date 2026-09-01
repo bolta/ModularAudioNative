@@ -29,6 +29,8 @@ pub trait ValueExtraction {
 	fn as_node_def(&self) -> ModdlResult<(NodeDef, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
+	// 必要性がなさそうなので省略
+	// fn as_null(&self) -> ModdlResult<((), Location)>;
 }
 fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
 	match val {
@@ -73,6 +75,7 @@ pub enum ValueBody {
 	NodeDef(NodeDef),
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
+	Null,
 }
 
 impl ValueBody {
@@ -164,6 +167,9 @@ impl ValueBody {
 		}
 	}
 
+	// 必要性がなさそうなので省略
+	// pub fn as_null(&self) -> Option<()>;
+
 	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
 			Self::ModuleDef(strukt) => strukt.label(),
@@ -207,6 +213,7 @@ impl ValueBody {
 			Self::NodeDef(_fact) => "(NodeDef)".to_string(),
 			Self::Function(_func) => "(Function)".to_string(),
 			Self::Io(_io) => "(Io)".to_string(),
+			Self::Null => "null".to_string(),
 		}
 	}
 
@@ -225,6 +232,7 @@ pub enum ValueType {
 	NodeDef,
 	Function,
 	Io,
+	Null,
 }
 
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
