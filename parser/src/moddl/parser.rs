@@ -393,7 +393,8 @@ parser![postfix_expr, Box<Expr>, {
 			for p in postfixes {
 				let loc = p.1;
 				result = Box::new(match p.0 {
-					Postfix::PropertyAccess { name } => (ExprBody::PropertyAccess { assoc: result, name }, loc),
+					Postfix::PropertyAccess { assoc_loose, prop_loose, name } =>
+							(ExprBody::PropertyAccess { assoc: result, assoc_loose, prop_loose, name }, loc),
 					Postfix::FunctionCall(args) => (ExprBody::FunctionCall { function: result, args }, loc),
 					// receiver->method(arg0, arg1, ...) は method(receiver, arg0, arg1, ...) と等価。
 					// 糖衣構文として、このレイヤーで吸収してしまう
@@ -418,7 +419,7 @@ parser![postfix_expr, Box<Expr>, {
 }];
 
 enum Postfix {
-	PropertyAccess { name: String },
+	PropertyAccess { assoc_loose: bool, prop_loose: bool, name: String },
 	FunctionCall(Args),
 	MethodCall { name: String, args: Args },
 	NodeArgs(Args),
@@ -454,14 +455,19 @@ parser![node_with_args_expr, Box<Expr>, {
 
 */
 parser![postfix, Postfix, {
-	alt((
-		map_res(
-			preceded(
-				ss!(char('.')),
-				identifier(),
-			),
-			|name| ok(Postfix::PropertyAccess { name: name.to_string() }),
+	let property_access = |oper: &'static str, assoc_loose: bool, prop_loose: bool| map_res(
+		preceded(
+			ss!(tag(oper)),
+			identifier(),
 		),
+		move |name| ok(Postfix::PropertyAccess { assoc_loose, prop_loose, name: name.to_string() }),
+	);
+
+	alt((
+		property_access(".", false, false),
+		property_access(".?", false, true),
+		property_access("?.", true, false),
+		property_access("?.?", true, true),
 		map_res(
 			delimited(
 				ss!(char('(')),

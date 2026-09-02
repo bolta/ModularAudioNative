@@ -1,0 +1,22 @@
+@let :_,
+	let _ = print({ k: 42 }.k); // ==> 42
+	// let _ = print({ k: 42 }.l); // error: EntryNotFound
+	// let _ = print(null.k); // error: TypeMismatch
+
+	let _ = print({ k: 42 }.?k); // ==> 42
+	let _ = print({ k: 42 }.?l); // ==> null
+	// let _ = print(null.?k); // error: TypeMismatch
+
+	let _ = print({ k: 42 }?.k); // ==> 42
+	// let _ = print({ k: 42 }?.l); // error: EntryNotFound
+	let _ = print(null?.k); // ==> null
+
+	let _ = print({ k: 42 }?.?k); // ==> 42
+	let _ = print({ k: 42 }?.?l); // ==> null
+	let _ = print(null?.?k); // ==> null
+
+	null
+
+// dummy
+@instrument ^a, 0
+a c4

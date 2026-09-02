@@ -121,7 +121,7 @@ pub enum ExprBody {
 	Identifier(String),
 	Condition { cond: Box<Expr>, then: Box<Expr>, els: Box<Expr> },
 	FunctionCall { function: Box<Expr>, args: Args },
-	PropertyAccess { assoc: Box<Expr>, name: String },
+	PropertyAccess { assoc: Box<Expr>, assoc_loose: bool, prop_loose: bool, name: String },
 	NodeWithArgs { node_def: Box<Expr>, args: Args },
 
 	Number(f32),

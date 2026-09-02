@@ -108,11 +108,22 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 
 			function.call(&value_args, &vars, expr_loc.clone(), imports).map(|(v, _)| v)
 		},
-		ExprBody::PropertyAccess { assoc, name } => {
+		ExprBody::PropertyAccess { assoc, assoc_loose, prop_loose, name } => {
 			let assoc_val = evaluate(assoc, vars, imports) ?;
-			let (assoc, _) = assoc_val.as_assoc() ?;
-			let val = assoc.get(name);
-			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr_loc.clone()))?.clone())
+			if *assoc_loose && assoc_val.as_null().is_ok() {
+				Ok(ValueBody::Null)
+			} else {
+				let (assoc, _) = assoc_val.as_assoc() ?;
+				let val = assoc.get(name);
+				match val {
+					Some((val, _)) => Ok(val.clone()),
+					None => if *prop_loose {
+						Ok(ValueBody::Null)
+					} else {
+						Err(error(ErrorType::EntryNotFound { name: name.clone() }, expr_loc.clone()))
+					},
+				}
+			}
 		},
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
 			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_def() ?;

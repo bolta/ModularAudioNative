@@ -29,8 +29,7 @@ pub trait ValueExtraction {
 	fn as_node_def(&self) -> ModdlResult<(NodeDef, Location)>;
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
-	// 必要性がなさそうなので省略
-	// fn as_null(&self) -> ModdlResult<((), Location)>;
+	fn as_null(&self) -> ModdlResult<((), Location)>;
 }
 fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
 	match val {
@@ -58,6 +57,7 @@ impl ValueExtraction for Value {
 	fn as_node_def(&self) -> ModdlResult<(NodeDef, Location)> { extract(self.0.as_node_factory() , &self.1, ValueType::NodeDef) }
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
+	fn as_null(&self) -> ModdlResult<((), Location)> { extract(self.0.as_null() , &self.1, ValueType::Null) }
 }
 
 #[derive(Clone)]
@@ -167,8 +167,12 @@ impl ValueBody {
 		}
 	}
 
-	// 必要性がなさそうなので省略
-	// pub fn as_null(&self) -> Option<()>;
+	pub fn as_null(&self) -> Option<()> {
+		match self {
+			Self::Null => Some(()),
+			_ => None,
+		}
+	}
 
 	pub fn label(&self) -> Option<QualifiedLabel> {
 		match self {
