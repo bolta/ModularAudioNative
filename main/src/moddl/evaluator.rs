@@ -433,13 +433,25 @@ fn overload_add(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBod
 }
 
 fn overload_eq(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
+	// 値を返す場合は必ず boolean の Number 値を返すこと。
+	// また対称律（(lhs == rhs) === (rhs == lhs)）を満たすこと
+
 	let evaluate_to_bool = |value: bool| Some(Ok(ValueBody::Number(bool_to_sample(value))));
-	match (lhs, rhs) {
-		// 他にもあれば追加する。ただし必ず boolean の Number 値を返すこと
-		(ValueBody::String(lhs), ValueBody::String(rhs)) => evaluate_to_bool(lhs == rhs),
-		(ValueBody::Null, ValueBody::Null) => evaluate_to_bool(true),
-		_ => None,
-	}
+	let are_equal = |this: &ValueBody, that: &ValueBody| {
+		match this {
+			ValueBody::String(this) => evaluate_to_bool(match that {
+				ValueBody::String(that) if this == that => true,
+				_ => false,
+			}),
+			ValueBody::Null => evaluate_to_bool(matches!(that, ValueBody::Null)),
+
+			// TODO 他にもあるので追加
+
+			_ => None,
+		}
+	};
+
+	are_equal(lhs, rhs).or_else(|| are_equal(rhs, lhs))
 }
 fn overload_ne(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
 	// == のオーバーロードがある場合、常にその否定を返す

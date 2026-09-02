@@ -1,4 +1,18 @@
 @let :_,
+	let _ = print(null == null); // ==> true
+	let _ = print(null == 0); // ==> false
+	let _ = print(null == false); // ==> false
+	let _ = print(null == "0"); // ==> false
+	let _ = print(0 == null); // ==> false
+	let _ = print("0" == null); // ==> false
+
+	let _ = print(null != null); // ==> false
+	let _ = print(null != 0); // ==> true
+	let _ = print(null != false); // ==> true
+	let _ = print(null != "0"); // ==> true
+	let _ = print(0 != null); // ==> true
+	let _ = print("0" != null); // ==> true
+
 	let _ = print({ k: 42 }.k); // ==> 42
 	// let _ = print({ k: 42 }.l); // error: EntryNotFound
 	// let _ = print(null.k); // error: TypeMismatch
