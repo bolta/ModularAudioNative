@@ -71,6 +71,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 
 	result.insert("false".to_string(), false_value());
 	result.insert("true".to_string(), true_value());
+	result.insert("null".to_string(), (ValueBody::Null, Location::dummy()));
 
 	// musical
 	add_function!("phase", Phase { });
@@ -152,6 +153,7 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("map", Map { });
 	add_function!("filter", Filter { });
 	add_function!("reduce", Reduce { });
+	add_function!("find", Find { });
 
 	// io
 	add_function!("then", Then { });
@@ -375,6 +377,24 @@ impl Function for Reduce {
 	}
 }
 
+pub struct Find { }
+impl Function for Find {
+	fn signature(&self) -> FunctionSignature { vec!["source".to_string(), "predicate".to_string()] }
+	fn call(&self, args: &HashMap<String, Value>, vars: &Rc<RefCell<Scope>>, call_loc: Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+		let (source, _) = get_required_arg(args, "source", &call_loc)?.as_array() ?;
+		let (predicate, predicate_loc) = get_required_arg(args, "predicate", &call_loc)?.as_function() ?;
+
+		let sig = predicate.signature();
+		check_arity(&sig, 1, &predicate_loc) ?;
+
+		for elem in source {
+			let satisfied = predicate.call(& HashMap::from([(sig[0].clone(), elem.clone())]), vars, predicate_loc.clone(), imports)?.as_boolean()?.0;
+			if satisfied { return Ok(elem.clone()); }
+		}
+		Ok((ValueBody::Null, call_loc))
+	}
+}
+
 pub struct Count { }
 impl Function for Count {
 	fn signature(&self) -> FunctionSignature { vec!["collection".to_string()] }
@@ -461,6 +481,7 @@ impl Function for Type {
 			ValueBody::NodeDef(_) => "NodeDef",
 			ValueBody::Function(_) => "Function",
 			ValueBody::Io(_) => "Io",
+			ValueBody::Null => "Null",
 		};
 
 		Ok((ValueBody::String(type_id.to_string()), call_loc))

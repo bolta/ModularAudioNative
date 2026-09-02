@@ -13,6 +13,7 @@
 	nodeDef: "NodeDef",
 	function: "Function",
 	io: "Io",
+	null: "Null",
 }
 
 /**

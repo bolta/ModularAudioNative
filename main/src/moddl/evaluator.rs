@@ -108,11 +108,22 @@ pub fn evaluate((expr, expr_loc): &Expr, vars: &Rc<RefCell<Scope>>, imports: &mu
 
 			function.call(&value_args, &vars, expr_loc.clone(), imports).map(|(v, _)| v)
 		},
-		ExprBody::PropertyAccess { assoc, name } => {
+		ExprBody::PropertyAccess { assoc, assoc_loose, prop_loose, name } => {
 			let assoc_val = evaluate(assoc, vars, imports) ?;
-			let (assoc, _) = assoc_val.as_assoc() ?;
-			let val = assoc.get(name);
-			Ok(val.map(|(v, _)| v).ok_or_else(|| error(ErrorType::EntryNotFound { name: name.clone() }, expr_loc.clone()))?.clone())
+			if *assoc_loose && assoc_val.as_null().is_ok() {
+				Ok(ValueBody::Null)
+			} else {
+				let (assoc, _) = assoc_val.as_assoc() ?;
+				let val = assoc.get(name);
+				match val {
+					Some((val, _)) => Ok(val.clone()),
+					None => if *prop_loose {
+						Ok(ValueBody::Null)
+					} else {
+						Err(error(ErrorType::EntryNotFound { name: name.clone() }, expr_loc.clone()))
+					},
+				}
+			}
 		},
 		ExprBody::NodeWithArgs { node_def, /* label, */ args } => {
 			let (factory, _) = evaluate(node_def, vars, imports)?.as_node_def() ?;
@@ -422,13 +433,25 @@ fn overload_add(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBod
 }
 
 fn overload_eq(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
-	match (lhs, rhs) {
-		// 他にもあれば追加する。ただし必ず boolean の Number 値を返すこと
-		(ValueBody::String(lhs), ValueBody::String(rhs)) => {
-			Some(Ok(ValueBody::Number(bool_to_sample(lhs == rhs))))
-		},
-		_ => None,
-	}
+	// 値を返す場合は必ず boolean の Number 値を返すこと。
+	// また対称律（(lhs == rhs) === (rhs == lhs)）を満たすこと
+
+	let evaluate_to_bool = |value: bool| Some(Ok(ValueBody::Number(bool_to_sample(value))));
+	let are_equal = |this: &ValueBody, that: &ValueBody| {
+		match this {
+			ValueBody::String(this) => evaluate_to_bool(match that {
+				ValueBody::String(that) if this == that => true,
+				_ => false,
+			}),
+			ValueBody::Null => evaluate_to_bool(matches!(that, ValueBody::Null)),
+
+			// TODO 他にもあるので追加
+
+			_ => None,
+		}
+	};
+
+	are_equal(lhs, rhs).or_else(|| are_equal(rhs, lhs))
 }
 fn overload_ne(lhs: &ValueBody, rhs: &ValueBody) -> Option<ModdlResult<ValueBody>> {
 	// == のオーバーロードがある場合、常にその否定を返す
