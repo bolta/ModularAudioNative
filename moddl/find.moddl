@@ -1,0 +1,9 @@
+@let :_,
+	let source = [1, 1, 2, 3, 5, 8, 13];
+	let _ = print(source~find(x -> x % 2 == 0));
+	let _ = print(source~find(x -> x % 7 == 0));
+	null
+
+// dummy
+@instrument ^a, 0
+a c4
