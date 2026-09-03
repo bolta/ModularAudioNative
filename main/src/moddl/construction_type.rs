@@ -6,6 +6,8 @@ pub enum ConstructionType {
 	Groove,
 	Let,
 	LetAll,
+	Do,
+	// Dos も必要か？　使い方が思い浮かばないが、ありそうなら追加する
 	Waveform,
 	TicksPerBar,
 	TicksPerBeat,
@@ -25,6 +27,7 @@ impl ConstructionType {
 			"groove" => Some(ConstructionType::Groove),
 			"let" => Some(ConstructionType::Let),
 			"letAll" => Some(ConstructionType::LetAll),
+			"do" => Some(ConstructionType::Do),
 			"waveform" => Some(ConstructionType::Waveform),
 			"ticksPerBar" => Some(ConstructionType::TicksPerBar),
 			"ticksPerBeat" => Some(ConstructionType::TicksPerBeat),
