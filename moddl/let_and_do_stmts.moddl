@@ -1,0 +1,22 @@
+@let :l1, rand
+@let :l2, rand
+@let :l3, rand
+@do :d1, rand
+@do :d2, rand
+@do :d3, rand
+
+@let :print_, x -> print(x~type() + " " + x)
+
+@let :_,
+	let _ = print_(l1); // Io (Io)
+	let _ = print_(l2); // Io (Io)
+	let _ = print_(l3); // Io (Io)
+	let _ = print_(d1); // Number 0. ...
+	let _ = print_(d2); // Number 0. ...
+	let _ = print_(d3); // Number 0. ...
+
+	null
+
+// dummy
+@instrument ^a, 0
+a c4

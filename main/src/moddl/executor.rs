@@ -121,7 +121,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 		}
 		ConstructionType::Let => {
 			let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
-			let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
+			let value = evaluate_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
 			pctx.vars.borrow_mut().set(&name, value) ?;
 		}
 		ConstructionType::LetAll => {
@@ -130,6 +130,11 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			for (name, value) in vars {
 				pctx.vars.borrow_mut().set(&name, value.clone()) ?;
 			}
+		}
+		ConstructionType::Do => {
+			let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
+			let value = evaluate_and_perform_arg(&args, 1, &mut pctx.vars, stmt_loc, imports) ?;
+			pctx.vars.borrow_mut().set(&name, value) ?;
 		}
 		ConstructionType::Waveform => {
 			let name = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_quoted_identifier()?.0;
@@ -250,23 +255,26 @@ fn parse_waveform_spec(spec: &HashMap<String, Value>, loc: &Location) -> ModdlRe
 
 }
 
-fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+fn evaluate_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache) -> ModdlResult<Value> {
 	if index < args.len() {
-		let mut value = evaluate(&args[index], vars, imports) ?;
-		// while let (ValueBody::Io(io), loc) = value {
-		// 	value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
-		// }
-		// TODO ↑value が Labeled だったときに失敗する。↓汚いので書き直す
-		while value.as_io().is_ok() {
-			let (io, loc) = value.as_io().unwrap();
-			value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
-		}
-
-		Ok(value)
-
-} else {
+		evaluate(&args[index], vars, imports)
+	} else {
 		Err(error(ErrorType::ConstructionArgNotFound, stmt_loc.clone()))
 	}
+}
+
+fn evaluate_and_perform_arg(args: &Vec<Expr>, index: usize, vars: &Rc<RefCell<Scope>>, stmt_loc: &Location, imports: &mut ImportCache) -> ModdlResult<Value> {
+	let mut value = evaluate_arg(args, index, vars, stmt_loc, imports) ?;
+	// while let (ValueBody::Io(io), loc) = value {
+	// 	value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc) ?;
+	// }
+	// TODO ↑value が Labeled だったときに失敗する。↓汚いので書き直す
+	while value.as_io().is_ok() {
+		let (io, loc) = value.as_io().unwrap();
+		value = RefCell::<dyn Io>::borrow_mut(&io).perform(&loc, imports) ?;
+	}
+
+	Ok(value)
 }
 
 fn is_track_wildcard(tracks: &Vec<String>) -> bool {
