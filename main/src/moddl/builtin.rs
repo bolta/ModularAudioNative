@@ -77,7 +77,6 @@ fn native_builtins(sample_rate: i32) -> HashMap<String, Value> {
 	add_function!("phase", Phase { });
 	add_node_def_by_factory!("sineOsc", SineOscFactory { });
 	add_node_def_by_factory!("triangleOsc", TriangleOscFactory { });
-	add_node_def_by_factory!("sawOsc", SawOscFactory { });
 	add_node_def_by_factory!("pulseOsc", PulseOscFactory { }, HashMap::from([
 		("duty".to_string(), DomainHint::range_including_both_ends(0f32, 1f32)),
 	]));

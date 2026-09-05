@@ -1,0 +1,19 @@
+@instrument ^a, adsrEnv * Osc.Saw.naive // これだけナイーブ、あとは PolyBLEP
+@instrument ^b, adsrEnv * Osc.Saw.polyblep
+@instrument ^c, adsrEnv * Osc.saw
+@instrument ^d, adsrEnv * sawOsc
+
+@instrument ^e, adsrEnv * Osc.Pulse.naive { 0.125 }
+@instrument ^f, adsrEnv * Osc.Pulse.polyblep(0.125) // これだけ PolyBLEP、あとはナイーブ
+@instrument ^g, adsrEnv * Osc.pulse { 0.125 }
+@instrument ^h, adsrEnv * pulseOsc { 0.125 }
+
+abcdefgh o7l1q7
+a        c
+b [1 r1] c
+c [2 r1] c
+d [3 r1] c
+e [4 r1] c
+f [5 r1] c
+g [6 r1] c
+h [7 r1] c

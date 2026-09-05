@@ -45,8 +45,73 @@
  */
 @let :waveLoops, wave -> wave~filter(e -> e~type() == Type.array)
 
+// TODO 仮（#51）
+@let :smpRate, 44100
+
+// 位相は [0, 1) で考える
+@let :phase1, phase() / tau
+
+@let :naiveSaw, phase1 | =x=> 2 * x - 1
+
+@let :polyblepSaw, =f=> f | phase1 | =x=>
+	let naiveSaw = 2 * x - 1;
+	let delta = f / smpRate; // 1 サンプルの位相増分
+	let blepDiff =
+		if delta == 0 then 0
+		else if x < delta then
+			let t = x / delta;
+			(t - 1) ^ 2
+		else if 1 - delta < x then
+			let t = (x - 1) / delta;
+			- ((t + 1) ^ 2)
+		else
+			0;
+	naiveSaw + blepDiff
+
+@let :polyblepPulse, duty -> =f=> f | phase1 | =x=>
+	let naivePulse = if x < duty then 1 else -1;
+	let delta = f / smpRate;
+	let blepDiff =
+		if delta == 0 then 0
+		else if x < delta then
+			let t = x / delta;
+			- ((t - 1) ^ 2)
+		else if duty - delta <= x && x < duty then
+			let t = (x - duty) / delta;
+			- ((t + 1) ^ 2)
+		else if duty <= x && x < duty + delta then
+			let t = (x - duty) / delta;
+			(t - 1) ^ 2
+		else if 1 - delta < x then
+			let t = (x - 1) / delta;
+			(t + 1) ^ 2
+		else
+			0;
+	naivePulse + blepDiff
+
+@let :Osc, {
+	sine: __Native.sineOsc,
+
+	Saw: {
+		naive: naiveSaw,
+		polyblep: polyblepSaw,
+	},
+	saw: polyblepSaw,
+
+	Pulse: {
+		naive: __Native.pulseOsc,
+		polyblep: polyblepPulse,
+	},
+	pulse: __Native.pulseOsc,
+
+	triangle: __Native.triangleOsc,
+}
+
 // ひとまずネイティブ実装の値は全てグローバルに置く
 @export __Native + {
+	Osc: Osc,
+	sawOsc: polyblepSaw,
+
 	flatMap: (source, mapper) -> source~map(mapper)~flat(),
 	sum: source -> source~reduce(0, (acc, elem) -> acc + elem),
 
