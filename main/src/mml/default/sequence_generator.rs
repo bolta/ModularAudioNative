@@ -12,7 +12,7 @@ use std::{collections::{
 	hash_set::HashSet,
 }, unreachable};
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ParamSignature {
 	label: QualifiedLabel,
 	key: String,
@@ -80,9 +80,10 @@ pub fn generate_sequences(
 	let mut seq_seq = 0;
 	let mut sequences = HashMap::new();
 	let mut used_skip = false;
+	let mut param_changes_in_macros = HashMap::new();
 
 	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences,
-			&mut used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
+			&mut used_skip, &mut param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
 	if used_skip {
 		sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
 	}
@@ -106,6 +107,7 @@ fn generate_sequence(
 	seq_seq: &mut i32,
 	sequences: &mut HashMap<String, Sequence>,
 	used_skip: &mut bool,
+	param_changes_in_macros: &mut HashMap<String, HashSet<ParamSignature>>,
 	param_prefix: &str,
 	param_default_keys: &HashMap<QualifiedLabel, String>,
 	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
@@ -165,16 +167,19 @@ fn generate_sequence(
 				push_param_instrc(&mut seq, stack, param_default_keys, "" /* global */, PARAM_NAME_TEMPO, &None, evaluate(value, evaluate_expr) ?);
 			}
 			Command::MacroCall { name } => {
-				push(stack);
-				let seq_name = stack.macro_names().get(name);
-				match seq_name {
-					None => unimplemented!("macro not found"), // TODO エラーにする
-					Some(seq_name) => {
-						seq.push(Instruction::Call { seq_name: seq_name.clone() });
-					},
-				}
+				// TODO 位置情報対応
+				let seq_name = stack.macro_names().get(name).ok_or_else(|| error(
+						ErrorType::MacroNotFound { name: name.clone() }, Location::dummy())) ?;
 
-				pop_and_restore_params(stack, &mut seq);
+				seq.push(Instruction::Call { seq_name: seq_name.clone() });
+
+				let names_to_restore = param_changes_in_macros.get(seq_name).ok_or_else(|| error(
+					ErrorType::UnknownError { message: format!("cannot resolve macro information: {} ({})", name, &seq_name) },
+					Location::dummy(),
+				)) ?;
+				let restore_instrcs = param_restoration_instrcs(names_to_restore.iter(), stack, 0);
+
+				for i in restore_instrcs { seq.push(i) }
 			}
 			Command::Loop { times, content1, content2 } => {
 				/*
@@ -203,7 +208,7 @@ fn generate_sequence(
 				let loop_start = seq.len();
 				push(stack);
 				let content1_name = make_name("seq", seq_seq);
-				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
+				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
 				seq.push(Instruction::Call { seq_name: content1_name });
 
 				if let Some(content2) = content2 {
@@ -218,7 +223,7 @@ fn generate_sequence(
 
 					// content1 をコンパイルした続きの状態でコンパイルする
 					let content2_name = make_name("seq", seq_seq);
-					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
+					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
 					seq.push(Instruction::Call { seq_name: content2_name });
 				}
 				if let Some(var_name) = &var_name {
@@ -226,8 +231,6 @@ fn generate_sequence(
 						var: var_name.clone(),
 						then: Box::new(Instruction::JumpRel { offset: 3 }),
 					});
-				}
-				if let Some(var_name) = &var_name {
 					seq.push(Instruction::DecrVar { name: var_name.clone() });
 				}
 				let cur_idx = seq.len();
@@ -242,16 +245,18 @@ fn generate_sequence(
 				push(stack);
 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
 				let content_name = make_name("seq", seq_seq);
-				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
+				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
 				seq.push(Instruction::Call { seq_name: content_name });
 				pop_and_restore_params(stack, &mut seq)
 			}
 			Command::MacroDef { name, content } => {
 				push(stack);
 				let seq_name = make_name("seq", seq_seq);
-				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
+				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
 				// コンパイルするだけなので params の復元は不要
 				// pop_and_restore_params(stack, param_prefix, &mut seq);
+				// その代わり、いじったレジスタを記録しておく（呼び出し後の復元に使うため）
+				param_changes_in_macros.insert(seq_name.clone(), stack.params().keys().map(|p| p.clone()).collect());
 				stack.pop();
 				stack.macro_names_mut().insert(name.clone(), seq_name);
 			}
@@ -289,21 +294,25 @@ fn push(stack: &mut Stack) {
 /// スタックを pop する
 fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
 	let names_to_restore = stack.params().keys();
-	let restore_instrcs: Vec<_> = names_to_restore.map(|sig @ ParamSignature { label, key }| {
-		// 現在の（これから pop する）フレームは除き、それ以前で設定された値を探す
-		let prev_value = stack.iter_frames().skip(1).find_map(|frame| frame.params.get(sig));
-		if prev_value.is_none() {
-			warn(format!("Could not find the previous value of {}:{} (maybe a bug)", label, key));
-		}
-
-		prev_value.map(|value| Instruction::Value { tag: label.to_string()/* name.clone() */, key: key.clone(), value: *value })
-	}).filter(|i| i.is_some())
-			.map(|i| i.unwrap())
-			.collect();
+	let restore_instrcs = param_restoration_instrcs(names_to_restore, stack, 1);
 
 	stack.pop();
 
 	for i in restore_instrcs { seq.push(i) }
+}
+
+fn param_restoration_instrcs<'a>(reg_sigs: impl Iterator<Item = &'a ParamSignature>, stack: &Stack, skip_frames: usize) -> Vec<Instruction> {
+	reg_sigs.map(|sig @ ParamSignature { label, key }| {
+		// 直前で設定された値を探す。先頭フレームを飛ばす場合と飛ばさない場合があるため skip_frames を受け取る
+		let prev_value = stack.iter_frames().skip(skip_frames).find_map(|frame| frame.params.get(sig));
+		if prev_value.is_none() {
+			warn(format!("Could not find the previous value of {}:{} (maybe a bug)", label, key));
+		}
+
+		prev_value.map(|value| Instruction::Value { tag: label.to_string(), key: key.clone(), value: *value })
+	}).filter(|i| i.is_some())
+			.map(|i| i.unwrap())
+			.collect()
 }
 
 fn qualified_param_name(prefix: &str, name: &str) -> String {

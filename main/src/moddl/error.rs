@@ -50,6 +50,8 @@ pub enum ErrorType {
 	LabelTransformerInconsistent,
 	BadWaveform, // こういうの一つ一つ専用エラーにするのってどうなんだろう…
 
+	MacroNotFound { name: String },
+
 	TickUnderflow { length: Length },
 	// TODO イベントキューあふれとか、演奏時のエラーをラップする
 	Playing,
