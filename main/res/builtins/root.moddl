@@ -109,7 +109,7 @@
 
 // ひとまずネイティブ実装の値は全てグローバルに置く
 @export __Native + {
-	Osc: Osc,
+	Osc:,
 	sawOsc: polyblepSaw,
 
 	flatMap: (source, mapper) -> source~map(mapper)~flat(),
@@ -131,11 +131,11 @@
 
 	waveIsLooped: wave -> wave~waveLoops()~count() > 0,
 
-	Type: Type,
+	Type:,
 
-	repeatGroove: repeatGroove,
-	swing: swing,
-	toModuleDef: toModuleDef,
+	repeatGroove:,
+	swing:,
+	toModuleDef:,
 
 	dryWet: (effect, dry = 1, wet = 1) ->
 		=drySignal=>
