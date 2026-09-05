@@ -661,12 +661,15 @@ parser![named_entry, (String, Box<Expr>), {
 	map_res(
 		tuple((
 			terminated(
-				ss!(identifier()),
+				ss!(loc(identifier())),
 				ss!(char(':')),
 			),
-			ss!(expr()),
+			opt(ss!(expr())),
 		)),
-		|(id, expr)| ok((id.to_string(), expr))
+		|((id, loc), expr)| {
+			let expr = expr.unwrap_or_else(|| Box::new((ExprBody::Identifier(id.to_string()), loc)));
+			ok((id.to_string(), expr))
+		}
 	)
 }];
 

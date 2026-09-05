@@ -1,0 +1,12 @@
+@let :_,
+	let foo = 42;
+	let bar = 99;
+	let assoc = { foo:, bar:, };
+	print(assoc)
+
+@instrument ^a,
+	let duty = 0.3;
+	let attack = 0.5;
+	Osc.Pulse.polyblep(duty:) * adsrEnv { attack:, decay: 0.25 }
+
+a o5c2
