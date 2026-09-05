@@ -4,8 +4,8 @@ use std::process::Command;
 fn main() {
 	println!("cargo:rustc-link-search=native=lib");
 
-	// Re-runs script if any files in res are changed  
-	println!("cargo:rerun-if-changed=res/*");
+	// Re-runs script if any files in res are changed
+	println!("cargo:rerun-if-changed=res");
 
 	// println!("PROFILE: {}", &env::var("PROFILE").unwrap());
 	// println!("OUT_DIR: {}", &env::var("OUT_DIR").unwrap());
