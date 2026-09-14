@@ -140,5 +140,7 @@
 	dryWet: (effect, dry = 1, wet = 1) ->
 		=drySignal=>
 			let wetSignal = drySignal | effect;
-			dry * drySignal + wet * wetSignal
+			dry * drySignal + wet * wetSignal,
+
+	transpose: semi -> =f=> f * 2 ^ (semi / 12),
 }
