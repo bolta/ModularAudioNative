@@ -70,19 +70,11 @@ struct SequenceGeneratorSettings<'a> {
 	ticks_per_bar: i32,
 	tag_set: &'a TagSet,
 	param_prefix: &'a str,
-	// param_initials: &'a HashMap<QualifiedLabel, String>,
 	param_default_keys: &'a HashMap<QualifiedLabel, String>,
 }
 
 struct SequenceGenerator<'a> {
-	// ticks_per_bar: i32,
-	// tag_set: &'a TagSet,
-	// param_prefix: &'a str,
-	// // param_initials: &'a HashMap<QualifiedLabel, String>,
-	// param_default_keys: &'a HashMap<QualifiedLabel, String>,
-	// evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
 	settings: &'a SequenceGeneratorSettings<'a>,
-
 	stack: Stack,
 	var_seq: i32,
 	seq_seq: i32,
@@ -93,25 +85,12 @@ struct SequenceGenerator<'a> {
 }
 impl <'a> SequenceGenerator<'a> {
 	pub fn new(
-		// ticks_per_bar: i32,
-		// tag_set: &'a TagSet,
-		// param_prefix: &'a str,
-		// param_initials: &HashMap<ParamSignature, f32>,
-		// param_default_keys: &'a HashMap<QualifiedLabel, String>,
-		// evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
 		settings: &'a SequenceGeneratorSettings<'a>,
 		param_initials: &HashMap<ParamSignature, f32>,
 		evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
 	) -> Self {
 		Self {
-			// ticks_per_bar,
-			// tag_set,
-			// param_prefix,
-			// // param_initials,
-			// param_default_keys,
-			// evaluate_expr,
 			settings,
-
 			stack: init_stack(param_initials),
 			var_seq: 0,
 			seq_seq: 0,
@@ -131,23 +110,7 @@ impl <'a> SequenceGenerator<'a> {
 		Ok(self.sequences)
 	}
 
-	fn generate_sequence(
-		&mut self,
-		seq_name: &str,
-//		commands: &Vec<Command>,
-		commands: &[Command],
-		// ticks_per_bar: i32,
-		// tag_set: &TagSet,
-		// stack: &mut Stack,
-		// var_seq: &mut i32,
-		// seq_seq: &mut i32,
-		// sequences: &mut HashMap<String, Sequence>,
-		// used_skip: &mut bool,
-		// param_changes_in_macros: &mut HashMap<String, HashSet<ParamSignature>>,
-		// param_prefix: &str,
-		// param_default_keys: &HashMap<QualifiedLabel, String>,
-		// evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
-	) -> ModdlResult<()> {
+	fn generate_sequence(&mut self, seq_name: &str, commands: &[Command]) -> ModdlResult<()> {
 		let mut seq = vec![];
 		for command in commands {
 			match command {
@@ -400,38 +363,6 @@ impl <'a> SequenceGenerator<'a> {
 	}
 }
 
-
-
-// pub fn generate_sequences(
-// 	CompilationUnit { commands }: &CompilationUnit,
-// 	ticks_per_bar: i32,
-// 	tag_set: &TagSet,
-// 	param_prefix: &str,
-// 	param_initials: &HashMap<ParamSignature, f32>,
-// 	param_default_keys: &HashMap<QualifiedLabel, String>,
-// 	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
-// ) -> ModdlResult<HashMap<String, Sequence>> {
-// 	let mut stack = init_stack(param_initials);
-// 	let mut var_seq = 0;
-// 	let mut seq_seq = 0;
-// 	let mut sequences = HashMap::new();
-// 	let mut used_skip = false;
-// 	let mut param_changes_in_macros = HashMap::new();
-
-// 	generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences,
-// 			&mut used_skip, &mut param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
-// 	if used_skip {
-// 		sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
-// 	}
-
-// 	Ok(sequences)
-// }
-
-// fn make_name(prefix: &str, count: &mut i32) -> String {
-// 	let name = format!("#{}{}", prefix, count);
-// 	*count += 1;
-// 	name
-// }
 pub fn generate_sequences(
 	CompilationUnit { commands }: &CompilationUnit,
 	ticks_per_bar: i32,
@@ -448,266 +379,13 @@ pub fn generate_sequences(
 		param_default_keys,
 	};
 	SequenceGenerator::new(&settings, param_initials, evaluate_expr).generate_sequences(commands)
-
-	// let mut stack = init_stack(param_initials);
-	// let mut var_seq = 0;
-	// let mut seq_seq = 0;
-	// let mut sequences = HashMap::new();
-	// let mut used_skip = false;
-
-	// generate_sequence(SEQUENCE_NAME_MAIN, commands, ticks_per_bar, tag_set, &mut stack, &mut var_seq, &mut seq_seq, &mut sequences,
-	// 		&mut used_skip, param_prefix, param_default_keys, evaluate_expr) ?;
-	// if used_skip {
-	// 	sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
-	// }
-
-	// Ok(sequences)
 }
-
-// fn generate_sequence(
-// 	seq_name: &str,
-// 	commands: &Vec<Command>,
-// 	ticks_per_bar: i32,
-// 	tag_set: &TagSet,
-// 	stack: &mut Stack,
-// 	var_seq: &mut i32,
-// 	seq_seq: &mut i32,
-// 	sequences: &mut HashMap<String, Sequence>,
-// 	used_skip: &mut bool,
-// 	param_changes_in_macros: &mut HashMap<String, HashSet<ParamSignature>>,
-// 	param_prefix: &str,
-// 	param_default_keys: &HashMap<QualifiedLabel, String>,
-// 	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
-// ) -> ModdlResult<()> {
-// 	let mut seq = vec![];
-// 	for command in commands {
-// 		match command {
-// 			Command::Octave(val) => { stack.mml_state_mut().octave = evaluate(val, evaluate_expr) ?; }
-// 			Command::OctaveIncr => { stack.mml_state_mut().octave += 1f32; }
-// 			Command::OctaveDecr => { stack.mml_state_mut().octave -= 1f32; }
-// 			Command::Length(val) => { stack.mml_state_mut().length = *val; }
-// 			Command::GateRate(val) => { stack.mml_state_mut().gate_rate = evaluate(val, evaluate_expr)?.max(0f32).min(MAX_GATE_RATE); }
-// 			Command::Tone { tone_name, length, slur } => {
-// 				let step_ticks = calc_ticks_from_length(&length, ticks_per_bar, stack.mml_state().length) ?;
-// 				let gate_ticks = (step_ticks as f32 * stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
-
-
-// 				// TODO 本当は temperament を挟む
-// 				let freq = calc_freq_from_tone(stack.mml_state().octave, tone_name);
-				
-// 				// TODO ちゃんとエラー処理
-// 				let key = param_default_keys.get(&tag_set.freq).unwrap();
-// 				// TODO タグは intern したい
-// 				seq.push(Instruction::Value { tag: tag_set.freq.to_string(), key: key.clone(), value: freq });
-// 				if ! stack.mml_state().slur {
-// 					seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: true });
-// 				}
-// 				seq.push(Instruction::Wait(gate_ticks));
-// 				if ! *slur {
-// 					seq.push(Instruction::Note { tag: tag_set.note.clone(), note_on: false });
-// 				}
-// 				if step_ticks - gate_ticks > 0 {
-// 					seq.push(Instruction::Wait(step_ticks - gate_ticks));
-// 				}
-
-// 				stack.mml_state_mut().slur = *slur;
-// 			}
-// 			Command::Rest(val) => {
-// 				let ticks = calc_ticks_from_length(&val, ticks_per_bar, stack.mml_state().length) ?;
-// 				seq.push(Instruction::Wait(ticks));
-// 			}
-// 			Command::Parameter { name, key, value } => {
-// 				// TODO ここで track prefix をかますことで MML には書かないでいいように
-// 				// seq.push(Instruction::Value { tag: format!("{}{}", param_prefix, &name), value: *value });
-// 				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, &name, key, evaluate(value, evaluate_expr) ?);
-// 			}
-// 			Command::Volume(value) => {
-// 				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VOLUME, &None, evaluate(value, evaluate_expr) ? / MAX_VOLUME);
-// 			}
-// 			Command::Velocity(value) => {
-// 				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_VELOCITY, &None, evaluate(value, evaluate_expr) ? / MAX_VELOCITY);
-// 			}
-// 			Command::Detune(value) => {
-// 				push_param_instrc(&mut seq, stack, param_default_keys, param_prefix, PARAM_NAME_DETUNE, &None, evaluate(value, evaluate_expr) ?);
-// 			}
-// 			Command::Tempo(value) => {
-// 				push_param_instrc(&mut seq, stack, param_default_keys, "" /* global */, PARAM_NAME_TEMPO, &None, evaluate(value, evaluate_expr) ?);
-// 			}
-// 			Command::MacroCall { name } => {
-// 				// TODO 位置情報対応
-// 				let seq_name = stack.macro_names().get(name).ok_or_else(|| error(
-// 						ErrorType::MacroNotFound { name: name.clone() }, Location::dummy())) ?;
-
-// 				seq.push(Instruction::Call { seq_name: seq_name.clone() });
-
-// 				let names_to_restore = param_changes_in_macros.get(seq_name).ok_or_else(|| error(
-// 					ErrorType::UnknownError { message: format!("cannot resolve macro information: {} ({})", name, &seq_name) },
-// 					Location::dummy(),
-// 				)) ?;
-// 				let restore_instrcs = param_restoration_instrcs(names_to_restore.iter(), stack, 0);
-
-// 				for i in restore_instrcs { seq.push(i) }
-// 			}
-// 			Command::Loop { times, content1, content2 } => {
-// 				/*
-// 				content1, content2 をそれぞれ別個の sequence としてコンパイルする。
-// 				sequence には連番を含んだ一意な名前を振る（#seq0, #seq1 とする）
-// 				また一意な名前のループカウンタ（#var0 とする）を作り、n - 1 を初期値にする
-// 					#var0 = n - 1
-// 				loop_start:
-// 					call #seq0
-// 				i		if #var0 == 0 goto loop_end
-// 				i+1		call #seq2
-// 				i+2		if #var0 == 0 goto loop_end
-// 				i+3		dec #var0
-// 				i+4		goto loop_start
-// 					loop_end:
-// 				i+5		delete #var0
-// 				*/
-// 				let var_name = if let Some(times) = times {
-// 					assert!(*times > 0);
-// 					let var_name = make_name("var", var_seq);
-// 					seq.push(Instruction::NewVar { name: var_name.clone(), value: times - 1 });
-// 					Some(var_name)
-// 				} else {
-// 					None
-// 				};
-// 				let loop_start = seq.len();
-// 				push(stack);
-// 				let content1_name = make_name("seq", seq_seq);
-// 				generate_sequence(content1_name.as_str(), content1, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
-// 				seq.push(Instruction::Call { seq_name: content1_name });
-
-// 				if let Some(content2) = content2 {
-// 					if let Some(var_name) = &var_name {
-// 						seq.push(Instruction::If0 {
-// 							var: var_name.clone(),
-// 							then: Box::new(Instruction::JumpRel { offset: 5 }),
-// 						});
-// 					} else {
-// 						// TODO 無限ループに : が含まれている。エラーにする
-// 					}
-
-// 					// content1 をコンパイルした続きの状態でコンパイルする
-// 					let content2_name = make_name("seq", seq_seq);
-// 					generate_sequence(content2_name.as_str(), content2, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
-// 					seq.push(Instruction::Call { seq_name: content2_name });
-// 				}
-// 				if let Some(var_name) = &var_name {
-// 					seq.push(Instruction::If0 {
-// 						var: var_name.clone(),
-// 						then: Box::new(Instruction::JumpRel { offset: 3 }),
-// 					});
-// 					seq.push(Instruction::DecrVar { name: var_name.clone() });
-// 				}
-// 				let cur_idx = seq.len();
-// 				seq.push(Instruction::JumpRel { offset: -((cur_idx - loop_start) as i32) });
-// 				// TODO : で脱出したときは 5 つ前が Jump であることを assert する
-// 				if let Some(var_name) = &var_name {
-// 					seq.push(Instruction::DeleteVar { name: var_name.clone() });
-// 				}
-// 				pop_and_restore_params(stack, &mut seq);
-// 			}
-// 			Command::Stack { content } => {
-// 				push(stack);
-// 				// 別シーケンスに分ける必要はないかもだが、generate_sequence で再帰するとシーケンスが生成される
-// 				let content_name = make_name("seq", seq_seq);
-// 				generate_sequence(content_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
-// 				seq.push(Instruction::Call { seq_name: content_name });
-// 				pop_and_restore_params(stack, &mut seq)
-// 			}
-// 			Command::MacroDef { name, content } => {
-// 				push(stack);
-// 				let seq_name = make_name("seq", seq_seq);
-// 				generate_sequence(seq_name.as_str(), content, ticks_per_bar, tag_set, stack, var_seq, seq_seq, sequences, used_skip, param_changes_in_macros, param_prefix, param_default_keys, evaluate_expr) ?;
-// 				// コンパイルするだけなので params の復元は不要
-// 				// pop_and_restore_params(stack, param_prefix, &mut seq);
-// 				// その代わり、いじったレジスタを記録しておく（呼び出し後の復元に使うため）
-// 				param_changes_in_macros.insert(seq_name.clone(), stack.params().keys().map(|p| p.clone()).collect());
-// 				stack.pop();
-// 				stack.macro_names_mut().insert(name.clone(), seq_name);
-// 			}
-// 			Command::Skip => {
-// 				seq.push(Instruction::ExitSkipMode);
-// 				*used_skip = true;
-// 			}
-// 			Command::ExpandMacro { name: _ } => unimplemented!(),
-// 		}
-// 	}
-
-// 	// 始点と終点が一致すると問題になるケースがあるので、空のシーケンスは作らない
-// 	if seq.is_empty() {
-// 		seq.push(Instruction::Nop);
-// 	}
-// 	sequences.insert(seq_name.to_string(), seq);
-
-// 	Ok(())
-// }
-
-// fn push(stack: &mut Stack) {
-// 	let mml_state = stack.mml_state().clone();
-// 	let params = HashMap::new();
-// 	// TODO params と同様、新規にして参照時に検索するようにしたい
-// 	let macro_names = stack.macro_names().clone();
-
-// 	stack.push(StackFrame {
-// 		mml_state,
-// 		params,
-// 		macro_names,
-// 	});
-// }
-
-// /// スタックのトップで設定したパラメータについて以前の値を復元する instrc 列を生成しつつ、
-// /// スタックを pop する
-// fn pop_and_restore_params(stack: &mut Stack, seq: &mut Vec<Instruction>) {
-// 	let names_to_restore = stack.params().keys();
-// 	let restore_instrcs = param_restoration_instrcs(names_to_restore, stack, 1);
-
-// 	stack.pop();
-
-// 	for i in restore_instrcs { seq.push(i) }
-// }
-
-// fn param_restoration_instrcs<'a>(reg_sigs: impl Iterator<Item = &'a ParamSignature>, stack: &Stack, skip_frames: usize) -> Vec<Instruction> {
-// 	reg_sigs.map(|sig @ ParamSignature { label, key }| {
-// 		// 直前で設定された値を探す。先頭フレームを飛ばす場合と飛ばさない場合があるため skip_frames を受け取る
-// 		let prev_value = stack.iter_frames().skip(skip_frames).find_map(|frame| frame.params.get(sig));
-// 		if prev_value.is_none() {
-// 			warn(format!("Could not find the previous value of {}:{} (maybe a bug)", label, key));
-// 		}
-
-// 		prev_value.map(|value| Instruction::Value { tag: label.to_string(), key: key.clone(), value: *value })
-// 	}).filter(|i| i.is_some())
-// 			.map(|i| i.unwrap())
-// 			.collect()
-// }
 
 fn qualified_param_name(prefix: &str, name: &str) -> String {
 	// ここで prefix は トラック名 + '.' であり、name と直結することで QLabel の絶対表記となる
 	// TODO 最初から QLabel でここまで流すようにする
 	format!("{}{}", prefix, name)
 }
-
-// fn push_param_instrc(seq: &mut Vec<Instruction>, stack: &mut Stack, param_default_keys: &HashMap<QualifiedLabel, String>, param_prefix: &str, name: &str, key: &Option<String>, value: f32) {
-// 	// TODO name を最初から QLabel にする
-// 	let param_name = qualified_param_name(param_prefix, name);
-// 	let param_name_elems = param_name.split('.').collect::<Vec<_>>();
-// 	if param_name_elems.len() == 0 { unreachable!() }; // TODO そもそも QLabel で渡るようになれば不要なチェック
-// 	let param_name_qlabel = QualifiedLabel::new(
-// 		param_name_elems[0 .. param_name_elems.len() - 1].iter().map(|q| q.to_string()).collect(),
-// 		param_name_elems[param_name_elems.len() - 1],
-// 	);
-// 	let key = key.as_ref().or_else(|| param_default_keys.get(&param_name_qlabel));
-// 	match key {
-// 		Some(key) => {
-// 			seq.push(Instruction::Value { tag: param_name.clone(), key: key.clone(), value });
-// 			stack.params_mut().insert(ParamSignature { label: param_name_qlabel, key: key.clone() }, value);
-// 		},
-// 		None => {
-// 			warn(format!("default key for param {} not found (maybe due to wrong param name)", param_name));
-// 		},
-// 	}
-// }
 
 fn calc_ticks_from_length(length_spec: &Length, ticks_per_bar: i32, default: i32) -> ModdlResult<i32> {
 	if length_spec.is_empty() {
@@ -803,10 +481,3 @@ impl StackShortcut for Stack {
 	fn params_mut(&mut self) -> &mut HashMap<ParamSignature, f32> { &mut self.top_mut().params }
 	fn macro_names_mut(&mut self) -> &mut HashMap<String, String> { &mut self.top_mut().macro_names }
 }
-
-// fn evaluate(number_or_expr: &NumberOrExpr, evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>) -> ModdlResult<f32> {
-// 	match number_or_expr {
-// 		NumberOrExpr::Number(num) => Ok(*num),
-// 		NumberOrExpr::Expr(expr) => evaluate_expr(expr.as_str()),
-// 	}
-// }
