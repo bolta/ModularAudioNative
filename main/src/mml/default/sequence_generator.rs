@@ -66,6 +66,24 @@ fn scan_features_(commands: &Vec<Command>, result: &mut HashSet<Feature>) {
 	}
 }
 
+pub fn generate_sequences(
+	CompilationUnit { commands }: &CompilationUnit,
+	ticks_per_bar: i32,
+	tag_set: &TagSet,
+	param_prefix: &str,
+	param_initials: &HashMap<ParamSignature, f32>,
+	param_default_keys: &HashMap<QualifiedLabel, String>,
+	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
+) -> ModdlResult<HashMap<String, Sequence>> {
+	let settings = SequenceGeneratorSettings {
+		ticks_per_bar,
+		tag_set,
+		param_prefix,
+		param_default_keys,
+	};
+	SequenceGenerator::new(&settings, param_initials, evaluate_expr).generate_sequences(commands)
+}
+
 struct SequenceGeneratorSettings<'a> {
 	ticks_per_bar: i32,
 	tag_set: &'a TagSet,
@@ -84,7 +102,7 @@ struct SequenceGenerator<'a> {
 	evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
 }
 impl <'a> SequenceGenerator<'a> {
-	pub fn new(
+	fn new(
 		settings: &'a SequenceGeneratorSettings<'a>,
 		param_initials: &HashMap<ParamSignature, f32>,
 		evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
@@ -101,7 +119,7 @@ impl <'a> SequenceGenerator<'a> {
 		}
 	}
 
-	pub fn generate_sequences(mut self, commands: &[Command]) -> ModdlResult<HashMap<String, Sequence>> {
+	fn generate_sequences(mut self, commands: &[Command]) -> ModdlResult<HashMap<String, Sequence>> {
 		self.generate_sequence(SEQUENCE_NAME_MAIN, commands) ?;
 		if self.used_skip {
 			self.sequences.get_mut(SEQUENCE_NAME_MAIN).unwrap().insert(0usize, Instruction::EnterSkipMode);
@@ -361,24 +379,6 @@ impl <'a> SequenceGenerator<'a> {
 	fn make_seq_name(&mut self) -> String {
 		Self::make_name("seq", &mut self.seq_seq)
 	}
-}
-
-pub fn generate_sequences(
-	CompilationUnit { commands }: &CompilationUnit,
-	ticks_per_bar: i32,
-	tag_set: &TagSet,
-	param_prefix: &str,
-	param_initials: &HashMap<ParamSignature, f32>,
-	param_default_keys: &HashMap<QualifiedLabel, String>,
-	evaluate_expr: &mut dyn FnMut (&str) -> ModdlResult<f32>,
-) -> ModdlResult<HashMap<String, Sequence>> {
-	let settings = SequenceGeneratorSettings {
-		ticks_per_bar,
-		tag_set,
-		param_prefix,
-		param_default_keys,
-	};
-	SequenceGenerator::new(&settings, param_initials, evaluate_expr).generate_sequences(commands)
 }
 
 fn qualified_param_name(prefix: &str, name: &str) -> String {
