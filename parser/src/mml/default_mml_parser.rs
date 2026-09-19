@@ -142,18 +142,24 @@ parser![skip_command, Command, {
 	)
 }];
 
-parser![macro_def_command, Command, {
+parser![called_macro_def_command, Command, {
+	macro_def_command("@$", false)
+}];
+parser![inline_macro_def_command, Command, {
+	macro_def_command("@!", true)
+}];
+fn macro_def_command<'a>(chars: &'static str, inline: bool) -> impl FnMut (Span<'a>) -> IResult<Span<'a>, Command, nom::error::VerboseError<Span<'a>>> {
 	// 型の無限再帰を避けるため手続きで書く
-	|input| {
-		let (input, _) = ss!(tag("@$"))(input) ?;
+	move |input| {
+		let (input, _) = ss!(tag(chars))(input) ?;
 		let (input, name) = ss!(identifier())(input) ?;
 		let (input, _) = ss!(char('['))(input) ?;
 		let (input, content) = many0(command())(input) ?;
 		let (input, _) = ss!(char(']'))(input) ?;
 
-		Ok((input, Command::MacroDef { name: name.to_string(), content }))
+		Ok((input, Command::MacroDef { name: name.to_string(), content, inline }))
 	}
-}];
+}
 
 parser![number_or_expr, NumberOrExpr, {
 	alt((
@@ -177,10 +183,12 @@ parser![command, Command, {
 		unary_command!(char('r'), length(), Command::Rest),
 		parameter_command(),
 		unary_command!(char('t'), number_or_expr(), Command::Tempo),
-		unary_command!(char('$'), identifier(), |name: &str| Command::MacroCall { name: name.to_string() }),
+		unary_command!(char('$'), identifier(), |name: &str| Command::MacroCall { name: name.to_string(), inline: false }),
+		unary_command!(char('!'), identifier(), |name: &str| Command::MacroCall { name: name.to_string(), inline: true }),
 		loop_command(),
 		stack_command(),
-		macro_def_command(),
+		called_macro_def_command(),
+		inline_macro_def_command(),
 		skip_command(),
 	))
 }];

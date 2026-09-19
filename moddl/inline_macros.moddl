@@ -1,0 +1,9 @@
+@tempo 144
+
+@instrument ^a, Osc.Pulse.polyblep(0.5@duty) * adsrEnv
+
+a @! bass [ o2l4q7yduty,0.25 ]
+a @! tenor [ o3l8q4yduty,0.5 ]
+
+a !bass g !tenor babrgr !bass g !tenor gr !bass f+ !tenor f+ef+rdr !bass f+ !tenor f+r
+

@@ -1,5 +1,5 @@
 use crate::{
-	common::stack, mml::default::feature::*, moddl::{console::warn, error::{error, ErrorType, ModdlResult}}, seq::{
+	common::stack, mml::default::{feature::*}, moddl::{console::warn, error::{ErrorType, ModdlResult, error}}, seq::{
 		instruction::*,
 		sequence::*,
 	}
@@ -91,6 +91,14 @@ struct SequenceGeneratorSettings<'a> {
 	param_default_keys: &'a HashMap<QualifiedLabel, String>,
 }
 
+struct MacroAttrs {
+	inline: bool,
+	/// マクロの中で変更した MML 状態
+	mml_state_changes: MmlStateChanges,
+	/// マクロの中で変更したレジスタ（名前だけ）
+	param_changes: HashSet<ParamSignature>,
+}
+
 struct SequenceGenerator<'a> {
 	settings: &'a SequenceGeneratorSettings<'a>,
 	stack: Stack,
@@ -98,7 +106,7 @@ struct SequenceGenerator<'a> {
 	seq_seq: i32,
 	sequences: HashMap<String, Sequence>,
 	used_skip: bool,
-	param_changes_in_macros: HashMap<String, HashSet<ParamSignature>>,
+	macro_attrs: HashMap<String, MacroAttrs>,
 	evaluate_expr: &'a mut dyn FnMut (&str) -> ModdlResult<f32>,
 }
 impl <'a> SequenceGenerator<'a> {
@@ -114,7 +122,7 @@ impl <'a> SequenceGenerator<'a> {
 			seq_seq: 0,
 			sequences: HashMap::new(),
 			used_skip: false,
-			param_changes_in_macros: HashMap::new(),
+			macro_attrs: HashMap::new(),
 			evaluate_expr,
 		}
 	}
@@ -129,14 +137,41 @@ impl <'a> SequenceGenerator<'a> {
 	}
 
 	fn generate_sequence(&mut self, seq_name: &str, commands: &[Command]) -> ModdlResult<()> {
+		self.generate_sequence_full(seq_name, commands, None)
+	}
+	fn generate_sequence_full(&mut self, seq_name: &str, commands: &[Command], mut state_changes: Option<&mut MmlStateChanges>) -> ModdlResult<()> {
+		macro_rules! changed_state {
+			($field: ident, $value: expr) => {
+				if let Some(c) = state_changes.as_deref_mut() { c.$field = Some($value); }
+			}
+		}
+		macro_rules! changed_octave { ($value: expr) => { changed_state!(octave, $value) } }
+		macro_rules! changed_length { ($value: expr) => { changed_state!(length, $value) } }
+		macro_rules! changed_gate_rate { ($value: expr) => { changed_state!(gate_rate, $value) } }
+
 		let mut seq = vec![];
 		for command in commands {
 			match command {
-				Command::Octave(val) => { self.stack.mml_state_mut().octave = self.evaluate(val) ?; }
-				Command::OctaveIncr => { self.stack.mml_state_mut().octave += 1f32; }
-				Command::OctaveDecr => { self.stack.mml_state_mut().octave -= 1f32; }
-				Command::Length(val) => { self.stack.mml_state_mut().length = *val; }
-				Command::GateRate(val) => { self.stack.mml_state_mut().gate_rate = self.evaluate(val)?.max(0f32).min(MAX_GATE_RATE); }
+				Command::Octave(val) => {
+					self.stack.mml_state_mut().octave = self.evaluate(val) ?;
+					changed_octave!(self.stack.mml_state().octave);
+				}
+				Command::OctaveIncr => {
+					self.stack.mml_state_mut().octave += 1f32;
+					changed_octave!(self.stack.mml_state().octave);
+				}
+				Command::OctaveDecr => {
+					self.stack.mml_state_mut().octave -= 1f32;
+					changed_octave!(self.stack.mml_state().octave);
+				}
+				Command::Length(val) => {
+					self.stack.mml_state_mut().length = *val;
+					changed_length!(self.stack.mml_state().length);
+				}
+				Command::GateRate(val) => {
+					self.stack.mml_state_mut().gate_rate = self.evaluate(val)?.max(0f32).min(MAX_GATE_RATE);
+					changed_gate_rate!(self.stack.mml_state().gate_rate);
+				}
 				Command::Tone { tone_name, length, slur } => {
 					let step_ticks = calc_ticks_from_length(&length, self.settings.ticks_per_bar, self.stack.mml_state().length) ?;
 					let gate_ticks = (step_ticks as f32 * self.stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
@@ -188,20 +223,39 @@ impl <'a> SequenceGenerator<'a> {
 					let value = self.evaluate(value) ?;
 					self.push_param_instrc_with_prefix(&mut seq, "" /* global */, PARAM_NAME_TEMPO, &None, value);
 				}
-				Command::MacroCall { name } => {
+				Command::MacroCall { name, inline } => {
 					// TODO 位置情報対応
 					let seq_name = self.stack.macro_names().get(name).ok_or_else(|| error(
 							ErrorType::MacroNotFound { name: name.clone() }, Location::dummy())) ?;
 
-					seq.push(Instruction::Call { seq_name: seq_name.clone() });
-
-					let names_to_restore = self.param_changes_in_macros.get(seq_name).ok_or_else(|| error(
+					let attrs = self.macro_attrs.get(seq_name).ok_or_else(|| error(
 						ErrorType::UnknownError { message: format!("cannot resolve macro information: {} ({})", name, &seq_name) },
 						Location::dummy(),
 					)) ?;
-					let restore_instrcs = self.param_restoration_instrcs(names_to_restore.iter(), 0);
 
-					for i in restore_instrcs { seq.push(i) }
+					// TODO オプションでエラーにもできるように
+					if *inline && ! attrs.inline {
+						warn(format!("inline call of non-inline macro {}", name));
+					}
+					if ! *inline && attrs.inline {
+						warn(format!("non-inline call of inline macro {}", name));
+					}
+
+					seq.push(Instruction::Call { seq_name: seq_name.clone() });
+
+					if *inline {
+						// インラインマクロの場合、呼び出し先の MML 状態を引き継ぐ。レジスタの復元はしない
+						let state = self.stack.mml_state_mut();
+						let changes = & attrs.mml_state_changes;
+						if let Some(o) = changes.octave { state.octave = o; }
+						if let Some(l) = changes.length { state.length = l; }
+						if let Some(q) = changes.gate_rate { state.gate_rate = q; }
+					} else {
+						// 呼び出しマクロの場合、レジスタを復元する。呼び出し先の MML 状態は引き継がない
+						let names_to_restore = &attrs.param_changes;
+						let restore_instrcs = self.param_restoration_instrcs(names_to_restore.iter(), 0);
+						for i in restore_instrcs { seq.push(i) }
+					}
 				}
 				Command::Loop { times, content1, content2 } => {
 					/*
@@ -271,14 +325,19 @@ impl <'a> SequenceGenerator<'a> {
 					seq.push(Instruction::Call { seq_name: content_name });
 					self.pop_and_restore_params(&mut seq)
 				}
-				Command::MacroDef { name, content } => {
+				Command::MacroDef { name, content, inline } => {
 					self.push();
 					let seq_name = self.make_seq_name();
-					self.generate_sequence(seq_name.as_str(), content) ?;
+					let mut mml_state_changes = MmlStateChanges::default();
+					self.generate_sequence_full(seq_name.as_str(), content, Some(&mut mml_state_changes)) ?;
 					// コンパイルするだけなので params の復元は不要
 					// pop_and_restore_params(stack, param_prefix, &mut seq);
 					// その代わり、いじったレジスタを記録しておく（呼び出し後の復元に使うため）
-					self.param_changes_in_macros.insert(seq_name.clone(), self.stack.params().keys().map(|p| p.clone()).collect());
+					self.macro_attrs.insert(seq_name.clone(), MacroAttrs {
+						inline: *inline,
+						mml_state_changes,
+						param_changes: self.stack.params().keys().map(|p| p.clone()).collect(),
+					});
 					self.stack.pop();
 					self.stack.macro_names_mut().insert(name.clone(), seq_name);
 				}
@@ -429,6 +488,18 @@ fn calc_freq_from_tone(octave: f32,
 	freq_a4 * 2f32.powf((note_number - note_a4) as f32 / 12f32)
 }
 
+/// 現在のスタックフレームで変更した MmlState の各項目
+// TODO Changes といいつつ現在値と同じ値を設定しても記録されるので語弊かもしれない
+// TODO MmlState と併せてきれいに持てないか
+#[derive(Clone, Default)]
+struct MmlStateChanges {
+	octave: Option<f32>,
+	length: Option<i32>,
+	// slur は廃止（演奏時状態に移す）予定のため扱わない
+	// slur: bool,
+	gate_rate: Option<f32>,
+}
+
 #[derive(Clone)]
 struct MmlState {
 	octave: f32,
@@ -436,7 +507,6 @@ struct MmlState {
 	/// スラーの途中（前の音符にスラーがついていた）かどうか
 	slur: bool,
 	gate_rate: f32,
-	// detune
 }
 impl MmlState {
 	fn init() -> Self {
