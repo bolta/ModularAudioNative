@@ -14,10 +14,10 @@ ipc = { path = "../ipc" }
 
 itertools = "0.10.3"
 mopa = "*"
-portaudio = "*"
+portaudio = "=0.7.0"
 rand = "0.8"
 regex = "^1"
-ringbuf = "*"
+ringbuf = "0.2"
 wav = "*"
 
 graphviz-rust = "0.6.1"
