@@ -112,9 +112,15 @@ impl LazyValue {
 	}
 	/// 未初期化なら value で初期化する。get/set を一度でも呼んだ後なら Err(value) を返す
 	pub fn set(&self, value: Value) -> Result<(), Value> {
+		let new_type = value.0.type_id();
 		self.value.set(value) ?;
-		// デフォルト値はもう使わないので捨てる
-		self.default.take();
+
+		// デフォルト値はもう使わないので捨てる（型チェックにだけ使う）
+		let default = self.default.take().unwrap();
+		let default_type = default.0.type_id();
+
+		assert!(new_type == default_type);
+
 		Ok(())
 	}
 }
@@ -227,6 +233,24 @@ impl ValueBody {
 		match self {
 			Self::ModuleDef(strukt) => strukt.label(),
 			_ => None,
+		}
+	}
+
+	pub fn type_id(&self) -> &'static str {
+		match self {
+			ValueBody::Number(_) => "Number",
+			ValueBody::WaveformIndex(_) => "Waveform",
+			ValueBody::TrackSet(_) => "TrackSet",
+			ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",
+			ValueBody::String(_) => "String",
+			ValueBody::Array(_) => "Array",
+			ValueBody::Assoc(_) => "Assoc",
+			ValueBody::ModuleDef(_) => "ModuleDef",
+			ValueBody::NodeDef(_) => "NodeDef",
+			ValueBody::Function(_) => "Function",
+			ValueBody::Io(_) => "Io",
+			ValueBody::Null => "Null",
+			ValueBody::Lazy(l) => l.get().type_id(),
 		}
 	}
 
