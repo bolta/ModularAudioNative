@@ -20,7 +20,7 @@ pub enum Command {
 	Volume(NumberOrExpr),
 	Velocity(NumberOrExpr),
 	Detune(NumberOrExpr),
-	Tone { tone_name: ToneName, length: Length, slur: bool },
+	Tone { tone_name: Option<ToneName>, length: Length, slur: bool },
 	Rest(Length),
 	Parameter { name: String, key: Option<String>, value: NumberOrExpr },
 	Tempo(NumberOrExpr),

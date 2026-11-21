@@ -176,14 +176,15 @@ impl <'a> SequenceGenerator<'a> {
 					let step_ticks = calc_ticks_from_length(&length, self.settings.ticks_per_bar, self.stack.mml_state().length) ?;
 					let gate_ticks = (step_ticks as f32 * self.stack.mml_state().gate_rate / MAX_GATE_RATE) as i32;
 
-
-					// TODO 本当は temperament を挟む
-					let freq = calc_freq_from_tone(self.stack.mml_state().octave, tone_name);
-					
-					// TODO ちゃんとエラー処理
-					let key = self.settings.param_default_keys.get(&self.settings.tag_set.freq).unwrap();
-					// TODO タグは intern したい
-					seq.push(Instruction::Value { tag: self.settings.tag_set.freq.to_string(), key: key.clone(), value: freq });
+					if let Some(tone_name) = tone_name {
+						// TODO 本当は temperament を挟む
+						let freq = calc_freq_from_tone(self.stack.mml_state().octave, tone_name);
+						
+						// TODO ちゃんとエラー処理
+						let key = self.settings.param_default_keys.get(&self.settings.tag_set.freq).unwrap();
+						// TODO タグは intern したい
+						seq.push(Instruction::Value { tag: self.settings.tag_set.freq.to_string(), key: key.clone(), value: freq });
+					}
 					if ! self.stack.mml_state().slur {
 						seq.push(Instruction::Note { tag: self.settings.tag_set.note.clone(), note_on: true });
 					}

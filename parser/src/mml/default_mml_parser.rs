@@ -67,7 +67,7 @@ parser![tone_command, Command, {
 			ss!(opt(char('&'))),
 		)),
 		|(base_name, accidentals, length, slur)| ok(Command::Tone {
-			tone_name: ToneName {
+			tone_name: Some(ToneName {
 				base_name: match base_name {
 					"c" => ToneBaseName::C,
 					"d" => ToneBaseName::D,
@@ -79,7 +79,22 @@ parser![tone_command, Command, {
 					_ => unreachable!(),
 				},
 				accidental: accidentals.unwrap_or(0),
-			},
+			}),
+			length,
+			slur: slur.is_some(),
+		})
+	)
+}];
+
+parser![note_command, Command, {
+	map_res(
+		tuple((
+			ss!(char('x')),
+			ss!(length()),
+			ss!(opt(char('&'))),
+		)),
+		|(_, length, slur)| ok(Command::Tone {
+			tone_name: None,
 			length,
 			slur: slur.is_some(),
 		})
@@ -180,6 +195,7 @@ parser![command, Command, {
 		unary_command!(char('v'), number_or_expr(), Command::Velocity),
 		unary_command!(re_find(re(r"@d")), number_or_expr(), Command::Detune),
 		tone_command(),
+		note_command(),
 		unary_command!(char('r'), length(), Command::Rest),
 		parameter_command(),
 		unary_command!(char('t'), number_or_expr(), Command::Tempo),

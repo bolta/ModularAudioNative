@@ -33,4 +33,6 @@ impl <T: Clone> Stack<T> {
 	pub fn iter_frames(&self) -> impl Iterator<Item = &T> + '_ {
 		self.stack.iter().rev()
 	}
+	/// デバッグ用
+	pub fn len(&self) -> usize { self.stack.len() }
 }

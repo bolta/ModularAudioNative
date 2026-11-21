@@ -1,0 +1,12 @@
+@tempo 125
+
+@instrument ^a, Osc.Pulse.polyblep(0.5) * adsrEnv { decay: 0.1, sustain: 0 }
+@instrument ^b, uniformNoise | lpf { freq: 1000@freq, q: 10 } * adsrEnv { decay: 0.1, sustain: 0 }
+
+a o5l8q3v12
+
+a @$m [ x.x.c.xx ]
+a [4 c.$m e.$m <a.>$m g.$m]
+
+b l8q4v12
+b [16 x4yfreq,2000x4yfreq,500xxyfreq,2000xx]
