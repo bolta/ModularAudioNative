@@ -8,7 +8,7 @@ use super::function::*;
 use crate::moddl::module_def::{ModuleDef, NodeDef};
 use crate::wave::waveform_host::WaveformIndex;
 use enum_display::EnumDisplay;
-use std::cell::RefCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::{
 	collections::HashMap,
 	rc::Rc,
@@ -30,6 +30,7 @@ pub trait ValueExtraction {
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)>;
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)>;
 	fn as_null(&self) -> ModdlResult<((), Location)>;
+	fn as_lazy(&self) -> ModdlResult<(Rc<LazyValue>, Location)>;
 }
 fn extract<T>(val: Option<T>, loc: &Location, expected: ValueType) -> ModdlResult<(T, Location)> {
 	match val {
@@ -58,6 +59,7 @@ impl ValueExtraction for Value {
 	fn as_function(&self) -> ModdlResult<(Rc<dyn Function>, Location)> { extract(self.0.as_function() , &self.1, ValueType::Function) }
 	fn as_io(&self) -> ModdlResult<(Rc<RefCell<dyn Io>>, Location)> { extract(self.0.as_io() , &self.1, ValueType::Io) }
 	fn as_null(&self) -> ModdlResult<((), Location)> { extract(self.0.as_null() , &self.1, ValueType::Null) }
+	fn as_lazy(&self) -> ModdlResult<(Rc<LazyValue>, Location)> { extract(self.0.as_lazy() , &self.1, ValueType::Lazy) }
 }
 
 #[derive(Clone)]
@@ -76,11 +78,56 @@ pub enum ValueBody {
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
 	Null,
+	/// 値を一度だけ設定できる（設定せずに評価するとデフォルト値となる）。
+	/// Lazy は実装上は「型」のように扱うが、ModDL の型システム上の型ではない。
+	/// 型システム上の型は、設定される可能性のある全ての値（デフォルト値を含む）を含む型とする。
+	/// たとえば Settings.tempo は内部的には Lazy だが、型は Number とする。
+	/// Lazy 型の存在は ModDL から一切見えない（値の設定は ModDL から行えない）
+	Lazy(Rc<LazyValue>),
+}
+
+// ↑ Lazy は型ではないので、筋としては以下のような構成をとるべきだが：
+//   enum ValueBody { Regular(ValueContent), Lazy(LazyValue) }
+//   enum ValueContent { /* 現行の ValueBody の内容 */ }
+// レアケースのために ValueBody の扱いがいちいち煩雑になることを避けるため、現行の妥協した構成とする。
+// ValueBody に対するパターンマッチングでは、ValueBody::Lazy(lazy) に対しては lazy.get() を使って再帰すればよい
+
+pub struct LazyValue {
+	// ValueBody でないのは設定個所を記録するため
+	value: OnceCell<Value>,
+	/// value が未確定の間だけ Some（value と default のどちらか一方だけが値を持つ）
+	default: Cell<Option<Value>>,
+
+	// value と default はどちらかしか存在しないが、二択の enum を RefCell で持つ構成にはしない
+	// （get() で普通の参照を返したいが、Ref しか返せなくなってしまう）
+}
+impl LazyValue {
+	pub fn new(default: ValueBody) -> Self {
+		Self { value: OnceCell::new(), default: Cell::new(Some((default, Location::dummy()))) }
+	}
+	pub fn get(&self) -> &ValueBody {
+		& self.value
+			.get_or_init(|| self.default.take().expect("LazyValue: default already consumed"))
+			.0
+	}
+	/// 未初期化なら value で初期化する。get/set を一度でも呼んだ後なら Err(value) を返す
+	pub fn set(&self, value: Value) -> Result<(), Value> {
+		let new_type = value.0.type_id();
+		self.value.set(value) ?;
+
+		// デフォルト値はもう使わないので捨てる（型チェックにだけ使う）
+		let default = self.default.take().unwrap();
+		let default_type = default.0.type_id();
+
+		assert!(new_type == default_type);
+
+		Ok(())
+	}
 }
 
 impl ValueBody {
 	pub fn as_number(&self) -> Option<f32> {
-		match self {
+		match self.fix_lazy() {
 			Self::Number(value) => Some(*value),
 			_ => None,
 		}
@@ -89,40 +136,40 @@ impl ValueBody {
 		self.as_number().map(|v| v > 0f32)
 	}
 	pub fn as_waveform_index(&self) -> Option<WaveformIndex> {
-		match self {
+		match self.fix_lazy() {
 			Self::WaveformIndex(value) => Some(*value),
 			_ => None,
 		}
 	}
 	pub fn as_track_set(&self) -> Option<Vec<String>> {
-		match self {
+		match self.fix_lazy() {
 			Self::TrackSet(tracks) => Some(tracks.clone()),
 			_ => None,
 		}
 	}
 	pub fn as_quoted_identifier(&self) -> Option<String> {
-		match self {
+		match self.fix_lazy() {
 			Self::QuotedIdentifier(id) => Some(id.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_string(&self) -> Option<String> {
-		match self {
+		match self.fix_lazy() {
 			Self::String(content) => Some(content.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_array(&self) -> Option<&Vec<Value>> {
-		match self {
+		match self.fix_lazy() {
 			Self::Array(content) => Some(content),
 			_ => None,
 		}
 	}
 
 	pub fn as_assoc(&self) -> Option<&HashMap<String, Value>> {
-		match self {
+		match self.fix_lazy() {
 			Self::Assoc(content) => Some(content),
 			_ => None,
 		}
@@ -135,7 +182,7 @@ impl ValueBody {
 		// 代わりに、Node の一歩手前というか、ノードグラフの設計図となる ModuleDef を提供し、
 		// そこから Node を生成するのは然るべき場所（Player）でいいようにやってもらうこととする。
 		// 数値や変数参照から Node への暗黙の変換もここで提供する
-		match self {
+		match self.fix_lazy() {
 			Self::ModuleDef(str) => Some(str.clone()),
 			Self::Number(value) => Some(ModuleDef::Constant { value: *value, label: None }),
 			Self::NodeDef(fact) => Some(ModuleDef::NodeCreation {
@@ -147,29 +194,37 @@ impl ValueBody {
 		}
 	}
 	pub fn as_node_factory(&self) -> Option<NodeDef> {
-		match self {
+		match self.fix_lazy() {
 			Self::NodeDef(fact) => Some(fact.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_function(&self) -> Option<Rc<dyn Function>> {
-		match self {
+		match self.fix_lazy() {
 			Self::Function(func) => Some(func.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_io(&self) -> Option<Rc<RefCell<dyn Io>>> {
-		match self {
+		match self.fix_lazy() {
 			Self::Io(io) => Some(io.clone()),
 			_ => None,
 		}
 	}
 
 	pub fn as_null(&self) -> Option<()> {
-		match self {
+		match self.fix_lazy() {
 			Self::Null => Some(()),
+			_ => None,
+		}
+	}
+
+	pub fn as_lazy(&self) -> Option<Rc<LazyValue>> {
+		// LazyValue の値を確定させずに取り出せる唯一の手段
+		match self {
+			Self::Lazy(lazy) => Some(lazy.clone()),
 			_ => None,
 		}
 	}
@@ -178,6 +233,24 @@ impl ValueBody {
 		match self {
 			Self::ModuleDef(strukt) => strukt.label(),
 			_ => None,
+		}
+	}
+
+	pub fn type_id(&self) -> &'static str {
+		match self {
+			ValueBody::Number(_) => "Number",
+			ValueBody::WaveformIndex(_) => "Waveform",
+			ValueBody::TrackSet(_) => "TrackSet",
+			ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",
+			ValueBody::String(_) => "String",
+			ValueBody::Array(_) => "Array",
+			ValueBody::Assoc(_) => "Assoc",
+			ValueBody::ModuleDef(_) => "ModuleDef",
+			ValueBody::NodeDef(_) => "NodeDef",
+			ValueBody::Function(_) => "Function",
+			ValueBody::Io(_) => "Io",
+			ValueBody::Null => "Null",
+			ValueBody::Lazy(l) => l.get().type_id(),
 		}
 	}
 
@@ -212,6 +285,8 @@ impl ValueBody {
 				format!("{{ {} }}", content)
 			},
 			Self::ModuleDef(strukt) => format!("ModuleDef({})", strukt.to_string()),
+			// 文字列表現を得た場合（も）値は確定する
+			Self::Lazy(lazy) => lazy.get().force_to_string(),
 
 			// TODO 以下、もうちょっと何か出せるか？
 			Self::NodeDef(_fact) => "(NodeDef)".to_string(),
@@ -221,6 +296,16 @@ impl ValueBody {
 		}
 	}
 
+	fn fix_lazy(&self) -> &Self {
+		// lazy が多重になっている状況は想定しないが、その場合は全部確定させる
+		let result = match self {
+			Self::Lazy(lazy) => lazy.get().fix_lazy(),
+			_ => self,
+		};
+		assert!(! matches!(&result, Self::Lazy(_)));
+
+		result
+	}
 }
 
 #[derive(Copy, Clone, Debug, EnumDisplay)]
@@ -237,6 +322,7 @@ pub enum ValueType {
 	Function,
 	Io,
 	Null,
+	Lazy,
 }
 
 // 当面 boolean 型は設けず、正を truthy、0 と負を falsy として扱う。
