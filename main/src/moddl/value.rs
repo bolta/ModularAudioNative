@@ -78,8 +78,19 @@ pub enum ValueBody {
 	Function(Rc<dyn Function>),
 	Io(Rc<RefCell<dyn Io>>),
 	Null,
+	/// 値を一度だけ設定できる（設定せずに評価するとデフォルト値となる）。
+	/// Lazy は実装上は「型」のように扱うが、ModDL の型システム上の型ではない。
+	/// 型システム上の型は、設定される可能性のある全ての値（デフォルト値を含む）を含む型とする。
+	/// たとえば Settings.tempo は内部的には Lazy だが、型は Number とする。
+	/// Lazy 型の存在は ModDL から一切見えない（値の設定は ModDL から行えない）
 	Lazy(Rc<LazyValue>),
 }
+
+// ↑ Lazy は型ではないので、筋としては以下のような構成をとるべきだが：
+//   enum ValueBody { Regular(ValueContent), Lazy(LazyValue) }
+//   enum ValueContent { /* 現行の ValueBody の内容 */ }
+// レアケースのために ValueBody の扱いがいちいち煩雑になることを避けるため、現行の妥協した構成とする。
+// ValueBody に対するパターンマッチングでは、ValueBody::Lazy(lazy) に対しては lazy.get() を使って再帰すればよい
 
 pub struct LazyValue {
 	// ValueBody でないのは設定個所を記録するため
