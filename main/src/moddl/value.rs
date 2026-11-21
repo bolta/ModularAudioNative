@@ -8,7 +8,7 @@ use super::function::*;
 use crate::moddl::module_def::{ModuleDef, NodeDef};
 use crate::wave::waveform_host::WaveformIndex;
 use enum_display::EnumDisplay;
-use std::cell::{Cell, LazyCell, OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::{
 	collections::HashMap,
 	rc::Rc,
@@ -95,25 +95,26 @@ pub enum ValueBody {
 pub struct LazyValue {
 	// ValueBody でないのは設定個所を記録するため
 	value: OnceCell<Value>,
-	make_default: Cell<Option<Box<dyn FnOnce() -> Value>>>,
+	/// value が未確定の間だけ Some（value と default のどちらか一方だけが値を持つ）
+	default: Cell<Option<Value>>,
+
+	// value と default はどちらかしか存在しないが、二択の enum を RefCell で持つ構成にはしない
+	// （get() で普通の参照を返したいが、Ref しか返せなくなってしまう）
 }
 impl LazyValue {
-	pub fn new_fn(make_default: Box<dyn FnOnce() -> Value>) -> Self {
-		Self { value: OnceCell::new(), make_default: Cell::new(Some(make_default)) }
-	}
 	pub fn new(default: ValueBody) -> Self {
-		Self::new_fn(Box::new(|| (default, Location::dummy())))
+		Self { value: OnceCell::new(), default: Cell::new(Some((default, Location::dummy()))) }
 	}
 	pub fn get(&self) -> &ValueBody {
 		& self.value
-			.get_or_init(|| (self.make_default.take().expect("LazyValue: default already consumed"))())
+			.get_or_init(|| self.default.take().expect("LazyValue: default already consumed"))
 			.0
 	}
 	/// 未初期化なら value で初期化する。get/set を一度でも呼んだ後なら Err(value) を返す
 	pub fn set(&self, value: Value) -> Result<(), Value> {
 		self.value.set(value) ?;
-		// 初期化関数はもう使わないので捨てる（キャプチャしているものを早めに解放する）
-		self.make_default.take();
+		// デフォルト値はもう使わないので捨てる
+		self.default.take();
 		Ok(())
 	}
 }
