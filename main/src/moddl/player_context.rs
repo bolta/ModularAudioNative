@@ -123,7 +123,7 @@ impl PlayerContext {
 		let settings = self.vars.borrow().lookup(&SETTINGS_ASSOC_NAME.into()).unwrap().0;
 		let settings_assoc = settings.as_assoc().unwrap();
 
-		let (setting_value, setting_loc) = settings_assoc.get(&key.to_string()).unwrap().as_lazy() ?;
+		let (setting_value, setting_loc) = settings_assoc.get(&key.to_string()).unwrap().as_lazy().unwrap();
 		setting_value.set(value.clone()).map_err(|(_prev_val, prev_loc)| {
 			error(ErrorType::SettingDuplicate {
 				name: key.into(),
