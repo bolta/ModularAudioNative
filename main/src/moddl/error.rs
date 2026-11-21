@@ -49,6 +49,8 @@ pub enum ErrorType {
 	ExportNotFound,
 	LabelTransformerInconsistent,
 	BadWaveform, // こういうの一つ一つ専用エラーにするのってどうなんだろう…
+	SettingDuplicate { name: String, set_loc: Location },
+	BadSetting { name: String, detail: String },
 
 	MacroNotFound { name: String },
 
@@ -97,6 +99,8 @@ impl Display for ErrorType {
 		}
 	}
 }
+
+pub const ERROR_DETAIL_MUST_BE_POSITIVE: &str = "must be positive";
 
 pub type ModdlResult<T> = Result<T, Error>;
 

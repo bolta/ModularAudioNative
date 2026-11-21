@@ -65,7 +65,7 @@ fn process_statement<'a>((stmt, stmt_loc): &'a (Statement, Location), pctx: &mut
 fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Location, pctx: &mut PlayerContext, imports: &mut ImportCache) -> ModdlResult<()> {
 	match typ {
 		ConstructionType::Tempo => {
-			(*pctx).tempo = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
+			pctx.set_tempo(& evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?) ?;
 		},
 		ConstructionType::Instrument => {
 			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, None)?.0;
@@ -98,7 +98,7 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			}
 		}
 		ConstructionType::GrooveCycle => {
-			(*pctx).groove_cycle = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0 as i32;
+			pctx.set_groove_cycle(& evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?) ?;
 		},
 		ConstructionType::Groove => {
 			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, None)?.0;
@@ -155,14 +155,12 @@ fn process_construction(typ: ConstructionType, args: &Vec<Expr>, stmt_loc: &Loca
 			pctx.vars.borrow_mut().set(&name, (ValueBody::WaveformIndex(index), value_loc)) ?;
 		}
 		ConstructionType::TicksPerBar => {
-			let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
-			// TODO さらに、正の整数であることを検証
-			(*pctx).ticks_per_bar = value as i32;
+			pctx.set_ticks_per_bar(& evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?) ?;
 		}
 		ConstructionType::TicksPerBeat => {
-			let value = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports)?.as_number()?.0;
-			// TODO さらに、正の整数であることを検証
-			(*pctx).ticks_per_bar = 4 * value as i32;
+			let arg = evaluate_and_perform_arg(&args, 0, &pctx.vars, stmt_loc, imports) ?;
+			let (ticks_per_beat, value_loc) = arg.as_number() ?;
+			pctx.set_ticks_per_bar(& (ValueBody::Number(4f32 * ticks_per_beat), value_loc)) ?;
 		}
 		ConstructionType::Mute => {
 			let tracks = evaluate_and_perform_arg_as_track_set(&args, 0, &pctx.vars, stmt_loc, imports, Some(pctx))?.0;

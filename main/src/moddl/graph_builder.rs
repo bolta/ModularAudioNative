@@ -64,15 +64,15 @@ impl <'a> GraphBuilder<'a> {
 
 	pub fn build(mut self, no_play: bool, output_mode: &PlayerOutput) -> ModdlResult<(Vec<MachineSpec>, RegisterSettingsTree)> {
 		// TODO タグ名を sequence_generator と共通化
-		let tempo = self.add_register(MACHINE_MAIN, QualifiedLabel::local("#tempo"), VAR_DEFAULT_KEY, self.pctx.tempo,
+		let tempo = self.add_register(MACHINE_MAIN, QualifiedLabel::local("#tempo"), VAR_DEFAULT_KEY, self.pctx.tempo(),
 				Some(DomainHint::range_including_both_ends(20f32, 300f32)));
 		let timer = self.nodes.add_node(MACHINE_MAIN, Box::new(TickTimer::new(
-				tempo.node(MACHINE_MAIN).as_mono(), self.pctx.ticks_per_bar, self.pctx.groove_cycle)))/* .as_mono() */;
+				tempo.node(MACHINE_MAIN).as_mono(), self.pctx.ticks_per_bar(), self.pctx.groove_cycle())))/* .as_mono() */;
 
 		// TODO even groove を誰も使わない場合は省略
 		let even_tag = make_seq_tag(None, None/* &mut self.pctx.seq_tags */);
 		self.nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(
-				timer.node(MACHINE_MAIN).as_mono(), self.pctx.groove_cycle, even_tag.clone())));
+				timer.node(MACHINE_MAIN).as_mono(), self.pctx.groove_cycle(), even_tag.clone())));
 
 		self.nodes.add_node(MACHINE_MAIN, Box::new(MessageReceiver::new(channel_name_c2p())));
 
@@ -107,7 +107,7 @@ impl <'a> GraphBuilder<'a> {
 							let groovy_timer = self.build_nodes_by_mml(track.as_str(), structure, mml, &seq_tag, MACHINE_MAIN,
 									&mut PlaceholderStack::init(HashMap::new()), Some(timer))
 									?.node(MACHINE_MAIN).as_mono();
-							self.nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(groovy_timer, self.pctx.groove_cycle, seq_tag.clone())));
+							self.nodes.add_node(MACHINE_MAIN, Box::new(Tick::new(groovy_timer, self.pctx.groove_cycle(), seq_tag.clone())));
 
 							None
 						}
@@ -276,7 +276,7 @@ impl <'a> GraphBuilder<'a> {
 			freq: freq_qual_tag,
 			note: track.to_string(),
 		};
-		let ticks_per_bar = self.pctx.ticks_per_bar;
+		let ticks_per_bar = self.pctx.ticks_per_bar();
 		let inits = make_param_inits_for_seq_gen(&self.reg_inits);
 
 		let mut evaluate_expr = |expr_str: &str| {

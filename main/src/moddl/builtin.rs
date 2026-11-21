@@ -481,6 +481,8 @@ impl Function for Type {
 			ValueBody::Function(_) => "Function",
 			ValueBody::Io(_) => "Io",
 			ValueBody::Null => "Null",
+			// TODO 仮（Lazy はここに並ぶべき「型」ではないように思われる…扱い要検討）
+			ValueBody::Lazy(_) => "?",
 		};
 
 		Ok((ValueBody::String(type_id.to_string()), call_loc))
