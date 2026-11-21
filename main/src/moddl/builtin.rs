@@ -468,24 +468,25 @@ impl Function for Type {
 	fn call(&self, args: &HashMap<String, Value>, _vars: &Rc<RefCell<Scope>>, call_loc: Location, _imports: &mut ImportCache) -> ModdlResult<Value> {
 		let (arg, _) = get_required_arg(args, "arg", &call_loc)?;
 
-		let type_id = match arg {
-			ValueBody::Number(_) => "Number",
-			ValueBody::WaveformIndex(_) => "Waveform",
-			ValueBody::TrackSet(_) => "TrackSet",
-			ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",
-			ValueBody::String(_) => "String",
-			ValueBody::Array(_) => "Array",
-			ValueBody::Assoc(_) => "Assoc",
-			ValueBody::ModuleDef(_) => "ModuleDef",
-			ValueBody::NodeDef(_) => "NodeDef",
-			ValueBody::Function(_) => "Function",
-			ValueBody::Io(_) => "Io",
-			ValueBody::Null => "Null",
-			// TODO 仮（Lazy はここに並ぶべき「型」ではないように思われる…扱い要検討）
-			ValueBody::Lazy(_) => "?",
-		};
+		Ok((ValueBody::String(type_id(arg).to_string()), call_loc))
+	}
+}
 
-		Ok((ValueBody::String(type_id.to_string()), call_loc))
+fn type_id(v: &ValueBody) -> &str {
+	match v {
+		ValueBody::Number(_) => "Number",
+		ValueBody::WaveformIndex(_) => "Waveform",
+		ValueBody::TrackSet(_) => "TrackSet",
+		ValueBody::QuotedIdentifier(_) => "QuotedIdentifier",
+		ValueBody::String(_) => "String",
+		ValueBody::Array(_) => "Array",
+		ValueBody::Assoc(_) => "Assoc",
+		ValueBody::ModuleDef(_) => "ModuleDef",
+		ValueBody::NodeDef(_) => "NodeDef",
+		ValueBody::Function(_) => "Function",
+		ValueBody::Io(_) => "Io",
+		ValueBody::Null => "Null",
+		ValueBody::Lazy(l) => type_id(l.get()),
 	}
 }
 
